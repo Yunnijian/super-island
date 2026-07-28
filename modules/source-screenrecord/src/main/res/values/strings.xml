@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="screen_recording_tile_label">超级岛录屏</string>
+    <string name="screen_recording_notification_channel">超级岛录屏</string>
+    <string name="screen_recording_notification_title">正在录制屏幕</string>
+    <string name="screen_recording_notification_stop">停止</string>
+</resources>

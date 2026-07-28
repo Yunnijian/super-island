@@ -1,0 +1,37 @@
+HyperIsland source notice
+=========================
+
+This module generates a restricted subset of source files from HyperIsland at build time.
+
+Project: HyperIsland
+Upstream: https://github.com/1812z/HyperIsland
+Pinned commit: 286bc4ce69b0924cd0ca623eb525b3b0e37afd9d
+Copyright: Copyright (c) 2026 1812z
+License: MIT
+
+The generated subset is modified deterministically during the build. The build removes
+templates and integration points that this project does not use, including the AI and
+download templates, notification filters, dispatcher fallback, and status-bar icon hook.
+
+MIT License
+-----------
+
+Copyright (c) 2026 1812z
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.

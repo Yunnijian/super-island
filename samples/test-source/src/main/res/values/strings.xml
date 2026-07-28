@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">超级岛测试源</string>
+    <string name="channel_name">M2 进度测试</string>
+    <string name="ordinary_channel_name">超级岛普通通知测试</string>
+</resources>

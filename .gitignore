@@ -1,0 +1,29 @@
+# Operating-system and editor state
+.DS_Store
+/.claude/
+/.idea/
+/.vscode/
+*.iml
+
+# Local Android/Gradle state
+/.gradle/
+/.kotlin/
+/.build/
+/.toolchains/
+/.cxx/
+/.externalNativeBuild/
+**/build/
+/captures/
+/local.properties
+
+# Local signing material and packaged outputs
+*.jks
+*.keystore
+/keystore.properties
+*.apk
+*.aab
+
+# Extracted ROMs, decompiled sources, evidence, and local toolchains stay in the
+# external lab/cache. See docs/development/setup.md.
+/device_research/
+/artifacts/

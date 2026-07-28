@@ -1,0 +1,3 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources xmlns:tools="http://schemas.android.com/tools"
+    tools:keep="@layout/focus_resident_expanded,@layout/focus_resident_expanded_with_actions,@drawable/focus_resident_action_background,@drawable/ic_resident_battery,@drawable/ic_resident_charging,@drawable/ic_resident_current,@drawable/ic_resident_fan,@drawable/ic_resident_power,@drawable/ic_resident_temperature" />

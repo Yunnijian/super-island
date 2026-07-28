@@ -1,0 +1,52 @@
+[versions]
+agp = "9.2.1"
+kotlin = "2.4.0"
+activity = "1.13.0"
+core = "1.19.0"
+lifecycle = "2.11.0"
+compose = "1.11.1"
+androidx-compose-bom = "2026.06.01"
+material3 = "1.5.0-alpha23"
+material-kolor = "5.0.0-alpha07"
+miuix = "0.9.3"
+navigation3 = "1.1.4"
+libxposed = "102.0.0"
+hyperisland-kit = "0.4.4"
+dexkit = "2.2.0"
+hiddenapibypass = "6.1"
+appiconloader = "1.5.0"
+navigationevent = "1.1.2"
+junit4 = "4.13.2"
+
+[libraries]
+androidx-activity-compose = { module = "androidx.activity:activity-compose", version.ref = "activity" }
+androidx-core = { module = "androidx.core:core", version.ref = "core" }
+androidx-core-ktx = { module = "androidx.core:core-ktx", version.ref = "core" }
+androidx-lifecycle-runtime-compose = { module = "androidx.lifecycle:lifecycle-runtime-compose", version.ref = "lifecycle" }
+androidx-lifecycle-viewmodel-compose = { module = "androidx.lifecycle:lifecycle-viewmodel-compose", version.ref = "lifecycle" }
+androidx-lifecycle-viewmodel-navigation3 = { module = "androidx.lifecycle:lifecycle-viewmodel-navigation3", version.ref = "lifecycle" }
+compose-foundation = { module = "org.jetbrains.compose.foundation:foundation", version.ref = "compose" }
+androidx-compose-bom = { module = "androidx.compose:compose-bom", version.ref = "androidx-compose-bom" }
+androidx-compose-material-icons-extended = { module = "androidx.compose.material:material-icons-extended" }
+androidx-compose-material3 = { module = "androidx.compose.material3:material3", version.ref = "material3" }
+material-kolor = { module = "com.materialkolor:material-kolor", version.ref = "material-kolor" }
+miuix-ui = { module = "top.yukonga.miuix.kmp:miuix-ui-android", version.ref = "miuix" }
+miuix-preference = { module = "top.yukonga.miuix.kmp:miuix-preference-android", version.ref = "miuix" }
+miuix-icons = { module = "top.yukonga.miuix.kmp:miuix-icons-android", version.ref = "miuix" }
+miuix-blur = { module = "top.yukonga.miuix.kmp:miuix-blur-android", version.ref = "miuix" }
+miuix-navigation3-ui = { module = "top.yukonga.miuix.kmp:miuix-navigation3-ui-android", version.ref = "miuix" }
+androidx-navigation3-runtime = { module = "androidx.navigation3:navigation3-runtime", version.ref = "navigation3" }
+libxposed-api = { module = "io.github.libxposed:api", version.ref = "libxposed" }
+libxposed-service = { module = "io.github.libxposed:service", version.ref = "libxposed" }
+hyperisland-kit = { module = "io.github.d4viddf:hyperisland_kit", version.ref = "hyperisland-kit" }
+dexkit = { module = "org.luckypray:dexkit", version.ref = "dexkit" }
+hiddenapibypass = { module = "org.lsposed.hiddenapibypass:hiddenapibypass", version.ref = "hiddenapibypass" }
+appiconloader = { module = "me.zhanghai.android.appiconloader:appiconloader", version.ref = "appiconloader" }
+androidx-navigationevent-compose = { module = "androidx.navigationevent:navigationevent-compose", version.ref = "navigationevent" }
+junit4 = { module = "junit:junit", version.ref = "junit4" }
+
+[plugins]
+android-application = { id = "com.android.application", version.ref = "agp" }
+android-library = { id = "com.android.library", version.ref = "agp" }
+compose-compiler = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
+kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }

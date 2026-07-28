@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <application
+        android:allowBackup="false"
+        android:label="@string/app_name">
+        <receiver
+            android:name=".TestSourceReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="io.github.superisland.testsource.POST_10" />
+                <action android:name="io.github.superisland.testsource.UPDATE_50" />
+                <action android:name="io.github.superisland.testsource.POST_AVATAR_BURST" />
+                <action android:name="io.github.superisland.testsource.CANCEL" />
+                <action android:name="io.github.superisland.testsource.NOTIFICATION_ACTION_UPDATE_ORDINARY" />
+                <action android:name="io.github.superisland.testsource.NOTIFICATION_ACTION_CANCEL_ORDINARY" />
+                <action android:name="io.github.superisland.testsource.STRESS_200" />
+                <action android:name="io.github.superisland.testsource.NOTIFICATION_ACTION_UPDATE_50" />
+                <action android:name="io.github.superisland.testsource.NOTIFICATION_ACTION_CANCEL" />
+            </intent-filter>
+        </receiver>
+
+        <activity
+            android:name=".TestSourceActivity"
+            android:exported="true"
+            android:theme="@style/Theme.SuperIslandTest.Transient">
+            <intent-filter>
+                <action android:name="io.github.superisland.testsource.POST_10" />
+                <action android:name="io.github.superisland.testsource.UPDATE_50" />
+                <action android:name="io.github.superisland.testsource.POST_AVATAR_BURST" />
+                <action android:name="io.github.superisland.testsource.CANCEL" />
+                <action android:name="io.github.superisland.testsource.POST_ORDINARY" />
+                <action android:name="io.github.superisland.testsource.UPDATE_ORDINARY" />
+                <action android:name="io.github.superisland.testsource.CANCEL_ORDINARY" />
+                <action android:name="io.github.superisland.testsource.STRESS_200" />
+                <action android:name="io.github.superisland.testsource.POST_FOUR" />
+                <action android:name="io.github.superisland.testsource.UPDATE_FOUR" />
+                <action android:name="io.github.superisland.testsource.CANCEL_MULTI_INDEX" />
+                <action android:name="io.github.superisland.testsource.CANCEL_FOUR" />
+                <action android:name="io.github.superisland.testsource.DISPATCH_NOTIFICATION_ACTION_UPDATE_50" />
+                <action android:name="io.github.superisland.testsource.DISPATCH_NOTIFICATION_ACTION_CANCEL" />
+                <action android:name="io.github.superisland.testsource.START_MEDIA" />
+                <action android:name="io.github.superisland.testsource.UPDATE_MEDIA" />
+                <action android:name="io.github.superisland.testsource.PAUSE_MEDIA" />
+                <action android:name="io.github.superisland.testsource.STOP_MEDIA" />
+            </intent-filter>
+        </activity>
+        <service
+            android:name=".TestMediaSessionService"
+            android:exported="false" />
+    </application>
+</manifest>

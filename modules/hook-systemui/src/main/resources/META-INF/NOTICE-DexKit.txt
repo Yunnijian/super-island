@@ -1,0 +1,12 @@
+DexKit 2.2.0
+Copyright (C) 2022-2023 LuckyPray
+
+Upstream source: https://github.com/LuckyPray/DexKit
+Pinned release: 2.2.0
+Maven artifact: org.luckypray:dexkit:2.2.0
+AAR SHA-256: cf4488da9f721750ce5ff4311e88356cbfcb1d4444c2b519b12d8bdb5f33f2c6
+
+The upstream repository root is distributed under Apache License 2.0. DexKit Core
+source and shipped native implementation carry GNU Lesser General Public License
+version 3 or later notices. Both upstream license texts are included alongside this
+notice as LICENSE-DexKit-Apache-2.0.txt and LICENSE-DexKit-LGPL-3.0.txt.

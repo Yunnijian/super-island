@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="media_island_listener_service_label">超级岛媒体会话服务</string>
+    <string name="media_island_channel_name">超级岛音乐</string>
+</resources>

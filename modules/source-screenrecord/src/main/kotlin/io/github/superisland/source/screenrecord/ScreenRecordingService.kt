@@ -1,0 +1,524 @@
+package io.github.superisland.source.screenrecord
+
+import android.Manifest
+import android.app.Notification
+import android.app.PendingIntent
+import android.app.Service
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
+import android.content.pm.PackageManager
+import android.content.pm.ServiceInfo
+import android.hardware.display.DisplayManager
+import android.media.projection.MediaProjectionManager
+import android.os.Handler
+import android.os.IBinder
+import android.os.Looper
+import android.os.SystemClock
+import android.util.Log
+import android.view.Display
+import androidx.core.app.NotificationManagerCompat
+import androidx.core.content.ContextCompat
+import io.github.superisland.model.ScreenRecordingAudioSource
+import io.github.superisland.model.ScreenRecordingConfig
+import java.util.concurrent.ExecutorService
+import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicBoolean
+import kotlin.math.roundToInt
+
+/**
+ * User-started foreground recording service. It accepts only the one-time MediaProjection result
+ * supplied by [ScreenRecordingCaptureActivity]; there is no background capture or token reuse.
+ */
+class ScreenRecordingService : Service() {
+    private val workExecutor: ExecutorService = Executors.newSingleThreadExecutor { runnable ->
+        Thread(runnable, "SuperIslandScreenRecording").apply { priority = Thread.NORM_PRIORITY - 1 }
+    }
+    private val runtimeStore by lazy { ScreenRecordingRuntimeStore(this) }
+    private val configStore by lazy { ScreenRecordingConfigStore(this) }
+    private val storage by lazy { ScreenRecordingStorage(this) }
+    private val rootSettings by lazy { ScreenRecordingRootSettings(this) }
+    private val lifecycleLock = Any()
+    private val started = AtomicBoolean(false)
+    private val stopRequested = AtomicBoolean(false)
+
+    private var cleanupFinished = false
+    private var encoder: ScreenRecordingEncoder? = null
+    private var output: ScreenRecordingOutput? = null
+    private var rootSession: ScreenRecordingRootSession? = null
+    private var screenOffReceiverRegistered = false
+    private val focusNotification by lazy { ScreenRecordingFocusNotification(this) }
+    private val mainHandler = Handler(Looper.getMainLooper())
+    private var recordingStartedAtElapsed = 0L
+    private val islandTicker =
+        object : Runnable {
+            override fun run() {
+                if (!started.get() || stopRequested.get() || recordingStartedAtElapsed == 0L) return
+                val notification =
+                    focusNotification.build(
+                        elapsedMillis =
+                            ScreenRecordingFocusNotification.elapsedSince(recordingStartedAtElapsed),
+                        stopIntent = stopPendingIntent(),
+                    )
+                runCatching {
+                    NotificationManagerCompat.from(this@ScreenRecordingService)
+                        .notify(ScreenRecordingFocusNotification.NOTIFICATION_ID, notification)
+                }
+                mainHandler.postDelayed(this, ISLAND_TICK_MILLIS)
+            }
+        }
+
+    private val screenOffReceiver =
+        object : BroadcastReceiver() {
+            override fun onReceive(context: Context, intent: Intent) {
+                if (intent.action == Intent.ACTION_SCREEN_OFF) {
+                    handleStopRequest("屏幕已熄灭，录屏已停止")
+                }
+            }
+        }
+
+    override fun onCreate() {
+        super.onCreate()
+        liveInstance = this
+        sessionActive.set(true)
+        Log.i(TAG, "onCreate sessionActive=true")
+    }
+
+    override fun onStartCommand(
+        intent: Intent?,
+        flags: Int,
+        startId: Int,
+    ): Int {
+        val action = intent?.action
+        Log.i(
+            TAG,
+            "onStartCommand action=$action started=${started.get()} stopRequested=${stopRequested.get()} " +
+                "phase=${runtimeStore.load().phase}",
+        )
+        when (action) {
+            ACTION_STOP -> handleStopRequest("录屏已停止")
+            ACTION_START -> startRecording(intent)
+            else -> {
+                Log.w(TAG, "onStartCommand unknown action=$action → stopSelf")
+                stopSelf(startId)
+            }
+        }
+        return START_NOT_STICKY
+    }
+
+    override fun onBind(intent: Intent?): IBinder? = null
+
+    override fun onDestroy() {
+        // A normal stop completes cleanup on the worker before stopSelf(). This fallback is for an
+        // unexpected service teardown, where restoring the user's two SystemUI settings matters
+        // more than retaining an unfinished MP4.
+        Log.i(
+            TAG,
+            "onDestroy cleanupFinished=$cleanupFinished started=${started.get()} " +
+                "phase=${runCatching { runtimeStore.load().phase }.getOrNull()}",
+        )
+        mainHandler.removeCallbacks(islandTicker)
+        val mustCleanUp = synchronized(lifecycleLock) { !cleanupFinished }
+        if (mustCleanUp) {
+            runCatching { encoder?.close() }
+            runCatching { output?.let(storage::discard) }
+            runCatching { rootSession?.restore() }
+            unregisterScreenOffReceiver()
+            // Process/service death left phase at preparing/recording; clear so UI is not stuck on
+            // "停止录制" with no live session.
+            if (runtimeStore.load().phase.isActive) {
+                runtimeStore.save(
+                    ScreenRecordingRuntimeState(
+                        phase = ScreenRecordingPhase.IDLE,
+                        message = "上一次录制已中断",
+                    ),
+                )
+            }
+        }
+        if (liveInstance === this) {
+            liveInstance = null
+        }
+        sessionActive.set(false)
+        workExecutor.shutdownNow()
+        super.onDestroy()
+    }
+
+    private fun startRecording(startIntent: Intent) {
+        if (!started.compareAndSet(false, true)) return
+        val projectionResultCode = startIntent.getIntExtra(EXTRA_PROJECTION_RESULT_CODE, Int.MIN_VALUE)
+        val projectionData = startIntent.getParcelableExtra(EXTRA_PROJECTION_DATA, Intent::class.java)
+        if (projectionResultCode == Int.MIN_VALUE || projectionData == null) {
+            finishFailedStart(IllegalArgumentException("缺少系统屏幕录制授权"))
+            return
+        }
+
+        val config = configStore.load()
+        try {
+            startForeground(
+                ScreenRecordingFocusNotification.NOTIFICATION_ID,
+                focusNotification.build(
+                    elapsedMillis = 0L,
+                    stopIntent = stopPendingIntent(),
+                ),
+                foregroundServiceType(config),
+            )
+        } catch (failure: Throwable) {
+            finishFailedStart(failure)
+            return
+        }
+        runtimeStore.save(
+            ScreenRecordingRuntimeState(
+                phase = ScreenRecordingPhase.PREPARING,
+                message = "正在准备录屏",
+            ),
+        )
+        workExecutor.execute {
+            startOnWorker(
+                config = config,
+                projectionResultCode = projectionResultCode,
+                projectionData = projectionData,
+            )
+        }
+    }
+
+    private fun startOnWorker(
+        config: ScreenRecordingConfig,
+        projectionResultCode: Int,
+        projectionData: Intent,
+    ) {
+        try {
+            check(!stopRequested.get()) { "录屏已在启动前取消" }
+            if (config.audioSource != ScreenRecordingAudioSource.NONE) {
+                check(
+                    checkSelfPermission(Manifest.permission.RECORD_AUDIO) ==
+                        PackageManager.PERMISSION_GRANTED,
+                ) { "录音权限已被撤销" }
+            }
+            val session = rootSettings.begin(config).getOrElse { throw it }
+            rootSession = session
+            check(!stopRequested.get()) { "录屏已在 Root 设置准备后取消" }
+
+            val projectionManager = getSystemService(MediaProjectionManager::class.java)
+            val projection = projectionManager.getMediaProjection(projectionResultCode, projectionData)
+            checkNotNull(projection) { "系统未返回可用的屏幕录制会话" }
+
+            val createdOutput = storage.createOutput(config.storageTreeUri)
+            output = createdOutput
+            check(!stopRequested.get()) { "录屏已在创建文件后取消" }
+
+            val createdEncoder =
+                ScreenRecordingEncoder(
+                    mediaProjection = projection,
+                    config = config,
+                    output = createdOutput,
+                    display = currentDisplay(),
+                    onProjectionStopped = { handleStopRequest("系统已结束屏幕录制") },
+                )
+            encoder = createdEncoder
+            createdEncoder.start()
+            check(!stopRequested.get()) { "录屏已在启动后取消" }
+            if (config.stopOnLockScreen) registerScreenOffReceiver()
+            recordingStartedAtElapsed = SystemClock.elapsedRealtime()
+            mainHandler.post(islandTicker)
+            runtimeStore.save(
+                ScreenRecordingRuntimeState(
+                    phase = ScreenRecordingPhase.RECORDING,
+                    message = "正在录制屏幕",
+                    startedAtElapsedRealtime = recordingStartedAtElapsed,
+                ),
+            )
+        } catch (failure: Throwable) {
+            finishRecording(failure)
+        }
+    }
+
+    /**
+     * Instance stop path. Prefer calling this directly from [requestStop] when the service lives in
+     * the same process — do not rely solely on [Context.startService], which can be denied for
+     * typed mediaProjection services on modern HyperOS/Android even when a session is active.
+     */
+    private fun handleStopRequest(message: String) {
+        Log.i(
+            TAG,
+            "handleStopRequest message=$message started=${started.get()} " +
+                "stopRequested=${stopRequested.get()} cleanupFinished=$cleanupFinished",
+        )
+        if (!started.get()) {
+            // Stale STOP after process death or double-tap: never leave phase=recording on disk.
+            // Do not call startForeground here — stop must not be started via startForegroundService.
+            runtimeStore.save(
+                ScreenRecordingRuntimeState(
+                    phase = ScreenRecordingPhase.IDLE,
+                    message = message,
+                ),
+            )
+            stopSelf()
+            return
+        }
+        if (!stopRequested.compareAndSet(false, true)) {
+            Log.w(TAG, "handleStopRequest ignored: stop already requested")
+            return
+        }
+        runtimeStore.save(
+            ScreenRecordingRuntimeState(
+                phase = ScreenRecordingPhase.FINALIZING,
+                message = "正在完成录屏",
+                startedAtElapsedRealtime = recordingStartedAtElapsed,
+            ),
+        )
+        Log.i(TAG, "handleStopRequest → FINALIZING, scheduling finishRecording")
+        runCatching {
+            workExecutor.execute {
+                Log.i(TAG, "finishRecording worker begin")
+                finishRecording(null, message)
+                Log.i(TAG, "finishRecording worker end phase=${runtimeStore.load().phase}")
+            }
+        }.onFailure { failure ->
+            Log.e(TAG, "workExecutor rejected finishRecording", failure)
+            finishRecording(failure, message)
+        }
+    }
+
+    private fun finishFailedStart(failure: Throwable) {
+        started.set(true)
+        stopRequested.set(true)
+        finishRecording(failure)
+    }
+
+    private fun finishRecording(
+        initialFailure: Throwable?,
+        successMessage: String = "录屏已保存",
+    ) {
+        synchronized(lifecycleLock) {
+            if (cleanupFinished) return
+            cleanupFinished = true
+        }
+
+        var failure = initialFailure
+        var savedOutput: ScreenRecordingOutput? = null
+        val activeEncoder = encoder
+        if (activeEncoder != null && initialFailure == null) {
+            val result = runCatching { activeEncoder.stop() }
+            result.onSuccess { encoding ->
+                if (encoding.muxerStarted && encoding.videoSampleCount > 0) {
+                    savedOutput = output
+                } else {
+                    failure = IllegalStateException("录屏未产生有效视频数据")
+                }
+            }.onFailure { encoderFailure ->
+                failure = encoderFailure
+            }
+        }
+        runCatching { activeEncoder?.close() }.onFailure { closeFailure ->
+            if (failure == null) failure = closeFailure
+        }
+
+        val activeOutput = output
+        if (savedOutput != null && failure == null) {
+            runCatching { storage.finalize(savedOutput!!) }.onFailure { finalizeFailure ->
+                failure = finalizeFailure
+            }
+        }
+        if (failure != null && activeOutput != null) {
+            runCatching { storage.discard(activeOutput) }
+        }
+
+        val restoreFailure = rootSession?.restore()?.exceptionOrNull()
+        unregisterScreenOffReceiver()
+        encoder = null
+        output = null
+        rootSession = null
+
+        if (failure == null && restoreFailure == null) {
+            runtimeStore.save(
+                ScreenRecordingRuntimeState(
+                    phase = ScreenRecordingPhase.IDLE,
+                    message = successMessage,
+                    outputUri = savedOutput?.uri?.toString(),
+                ),
+            )
+        } else if (failure == null) {
+            Log.w(TAG, "Recording was saved, but Root settings could not be restored", restoreFailure)
+            runtimeStore.save(
+                ScreenRecordingRuntimeState(
+                    phase = ScreenRecordingPhase.ERROR,
+                    message = "录屏已保存，但系统设置恢复失败",
+                    outputUri = savedOutput?.uri?.toString(),
+                ),
+            )
+        } else {
+            Log.w(TAG, "Screen recording ended without a completed output", failure)
+            val detail =
+                failure
+                    ?.let { error ->
+                        error.message?.trim()?.takeIf { it.isNotEmpty() }
+                            ?: error.javaClass.simpleName
+                    }
+                    ?.take(160)
+            runtimeStore.save(
+                ScreenRecordingRuntimeState(
+                    phase = ScreenRecordingPhase.ERROR,
+                    message =
+                        if (detail != null) {
+                            "录屏失败：$detail"
+                        } else {
+                            "录屏失败，未保留不完整文件"
+                        },
+                ),
+            )
+        }
+        mainHandler.removeCallbacks(islandTicker)
+        recordingStartedAtElapsed = 0L
+        sessionActive.set(false)
+        stopForeground(STOP_FOREGROUND_REMOVE)
+        stopSelf()
+    }
+
+    private fun currentDisplay(): ScreenRecordingDisplay {
+        val displayManager = checkNotNull(getSystemService(DisplayManager::class.java))
+        val display = checkNotNull(displayManager.getDisplay(Display.DEFAULT_DISPLAY))
+        val mode = display.mode
+        val maximumRefreshRate =
+            display.supportedModes.maxOfOrNull { candidate -> candidate.refreshRate }
+                ?: display.refreshRate
+        return ScreenRecordingDisplay(
+            width = mode.physicalWidth,
+            height = mode.physicalHeight,
+            densityDpi = resources.configuration.densityDpi,
+            maximumFramesPerSecond = maximumRefreshRate.roundToInt().coerceAtLeast(1),
+        )
+    }
+
+    private fun foregroundServiceType(config: ScreenRecordingConfig): Int =
+        ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION or
+            if (config.audioSource == ScreenRecordingAudioSource.NONE) {
+                0
+            } else {
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
+            }
+
+    private fun stopPendingIntent(): PendingIntent =
+        PendingIntent.getService(
+            this,
+            STOP_PENDING_INTENT_REQUEST_CODE,
+            stopIntent(this),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+        )
+
+    private fun registerScreenOffReceiver() {
+        if (screenOffReceiverRegistered) return
+        ContextCompat.registerReceiver(
+            this,
+            screenOffReceiver,
+            IntentFilter(Intent.ACTION_SCREEN_OFF),
+            ContextCompat.RECEIVER_NOT_EXPORTED,
+        )
+        screenOffReceiverRegistered = true
+    }
+
+    private fun unregisterScreenOffReceiver() {
+        if (!screenOffReceiverRegistered) return
+        runCatching { unregisterReceiver(screenOffReceiver) }
+        screenOffReceiverRegistered = false
+    }
+
+    companion object {
+        private const val TAG = "SuperIslandScreenRecord"
+        private const val ACTION_START = "io.github.superisland.action.START_SCREEN_RECORDING"
+        private const val ACTION_STOP = "io.github.superisland.action.STOP_SCREEN_RECORDING"
+        private const val EXTRA_PROJECTION_RESULT_CODE = "projection-result-code"
+        private const val EXTRA_PROJECTION_DATA = "projection-data"
+        private const val STOP_PENDING_INTENT_REQUEST_CODE = 28_372
+        private const val ISLAND_TICK_MILLIS = 1_000L
+
+        /**
+         * True only while this process hosts a live [ScreenRecordingService] instance.
+         * Process death clears it; UI/tile must reconcile disk phase against this flag.
+         */
+        private val sessionActive = AtomicBoolean(false)
+
+        /** Same-process service pointer for reliable stop without typed-service start restrictions. */
+        @Volatile
+        private var liveInstance: ScreenRecordingService? = null
+
+        fun hasActiveSession(): Boolean = sessionActive.get() || liveInstance != null
+
+        fun startIntent(
+            context: Context,
+            projectionResultCode: Int,
+            projectionData: Intent,
+        ): Intent =
+            Intent(context, ScreenRecordingService::class.java)
+                .setAction(ACTION_START)
+                .putExtra(EXTRA_PROJECTION_RESULT_CODE, projectionResultCode)
+                .putExtra(EXTRA_PROJECTION_DATA, projectionData)
+
+        fun stopIntent(context: Context): Intent =
+            Intent(context, ScreenRecordingService::class.java).setAction(ACTION_STOP)
+
+        /**
+         * Safe stop for UI/tile.
+         *
+         * Order:
+         * 1. Call the live service instance in-process (reliable).
+         * 2. Else clear a stale active phase on disk (no live session).
+         * Never uses [ContextCompat.startForegroundService] for stop: a cold mediaProjection FGS
+         * start without a token crashes and can kick the user to the launcher.
+         */
+        fun requestStop(context: Context, message: String = "录屏已停止") {
+            val app = context.applicationContext
+            val store = ScreenRecordingRuntimeStore(app)
+            val before = store.load()
+            val instance = liveInstance
+            Log.i(
+                TAG,
+                "requestStop(ui) phase=${before.phase} message=${before.message} " +
+                    "sessionActive=${sessionActive.get()} liveInstance=${instance != null}",
+            )
+            if (instance != null) {
+                instance.handleStopRequest(message)
+                val after = store.load()
+                Log.i(TAG, "requestStop(ui) after direct handle phase=${after.phase}")
+                return
+            }
+            if (before.phase.isActive) {
+                store.save(
+                    ScreenRecordingRuntimeState(
+                        phase = ScreenRecordingPhase.IDLE,
+                        message = message,
+                    ),
+                )
+                Log.w(TAG, "requestStop(ui) no live instance → forced IDLE (was ${before.phase})")
+            } else {
+                Log.i(TAG, "requestStop(ui) no-op: already ${before.phase}")
+            }
+            sessionActive.set(false)
+        }
+
+        /**
+         * If SharedPreferences still says preparing/recording/finalizing but this process has no
+         * live service, clear to IDLE so the detail page shows「开始录制」again.
+         */
+        fun reconcileRuntime(context: Context): ScreenRecordingRuntimeState {
+            val store = ScreenRecordingRuntimeStore(context.applicationContext)
+            val current = store.load()
+            val active = hasActiveSession()
+            if (current.phase.isActive && !active) {
+                val cleared =
+                    ScreenRecordingRuntimeState(
+                        phase = ScreenRecordingPhase.IDLE,
+                        message = "上一次录制已中断",
+                    )
+                store.save(cleared)
+                Log.w(
+                    TAG,
+                    "reconcileRuntime cleared stale phase=${current.phase} " +
+                        "sessionActive=${sessionActive.get()} liveInstance=${liveInstance != null}",
+                )
+                return cleared
+            }
+            return current
+        }
+    }
+}

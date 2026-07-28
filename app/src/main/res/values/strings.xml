@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="settings_theme">主题设置</string>
+    <string name="settings_theme_mode_system">跟随系统</string>
+    <string name="settings_theme_mode_light">浅色</string>
+    <string name="settings_theme_mode_dark">深色</string>
+    <string name="settings_color_style">色彩风格</string>
+    <string name="settings_color_spec">色彩标准</string>
+    <string name="settings_enable_predictive_back">预测性返回手势</string>
+    <string name="settings_enable_predictive_back_summary">启用对预测性返回手势的支持</string>
+    <string name="settings_page_scale">界面缩放</string>
+    <string name="settings_page_scale_summary">调整所有页面的显示比例</string>
+    <string name="settings_monet">启用 Monet 颜色</string>
+    <string name="settings_key_color">强调色</string>
+    <string name="settings_key_color_default">默认</string>
+    <string name="color_blue">蓝色</string>
+    <string name="color_red">红色</string>
+    <string name="color_green">绿色</string>
+    <string name="color_purple">紫色</string>
+    <string name="color_orange">橙色</string>
+    <string name="color_teal">青绿</string>
+    <string name="color_pink">粉色</string>
+    <string name="color_brown">棕色</string>
+    <string name="color_sakura">樱花</string>
+    <string name="color_deep_purple">深紫</string>
+    <string name="color_indigo">靛青</string>
+    <string name="color_cyan">青色</string>
+    <string name="color_yellow">黄色</string>
+    <string name="color_amber">琥珀</string>
+    <string name="color_blue_grey">灰蓝</string>
+    <string name="settings_enable_blur">模糊</string>
+    <string name="settings_enable_blur_summary">启用顶栏和底栏的模糊效果</string>
+    <string name="settings_floating_bottom_bar">悬浮底栏</string>
+    <string name="settings_floating_bottom_bar_summary">使用 Apple 风格的悬浮底栏</string>
+    <string name="settings_enable_glass">液态玻璃</string>
+    <string name="settings_enable_glass_summary">启用悬浮底栏的液态玻璃效果</string>
+    <string name="app_name">超级岛</string>
+    <string name="focus_notification_channel_name">超级岛焦点通知</string>
+    <string name="resident_monitor_channel_name">常驻状态数据服务</string>
+    <string name="resident_monitor_channel_description">为常驻超级岛提供后台数据更新</string>
+    <string name="xposed_module_description">超级岛 LSPosed 模块。仅为本应用放行 HyperOS 焦点通知，不影响其他应用。</string>
+</resources>
