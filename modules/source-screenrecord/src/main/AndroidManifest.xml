@@ -6,29 +6,29 @@
 
     <application>
         <!--
-          In-module capture: same task as MainActivity (no singleInstance / no separate affinity).
-          PROJECT_MEDIA auto-grant was still flashing the status bar because the previous
-          singleInstance + taskAffinity forced a full task switch on every start.
+          In-module capture stays in MainActivity's task. Both capture entries use the same
+          transparent, edge-to-edge window so a consent handoff never paints a default black bar.
         -->
         <activity
             android:name=".ScreenRecordingCaptureActivity"
             android:excludeFromRecents="true"
             android:exported="false"
             android:noHistory="true"
-            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
+            android:theme="@style/Theme.SuperIsland.ScreenRecording.Capture" />
 
         <!--
-          QS tile capture: isolated task so startActivityAndCollapse does not raise MainActivity.
+          QS launches a no-affinity one-shot task. Do not use singleInstance: on warsaw it creates
+          a separate SystemUI bar container and briefly paints the status bar black. The empty
+          affinity keeps MainActivity out of this task, so finishing still returns to the caller.
           Do NOT set finishOnCloseSystemDialogs (QS collapse can kill consent mid-flight).
         -->
         <activity
             android:name=".ScreenRecordingTileCaptureActivity"
             android:excludeFromRecents="true"
             android:exported="false"
-            android:launchMode="singleInstance"
             android:noHistory="true"
-            android:taskAffinity="io.github.superisland.screenrecord.capture"
-            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
+            android:taskAffinity=""
+            android:theme="@style/Theme.SuperIsland.ScreenRecording.Capture" />
 
         <service
             android:name=".ScreenRecordingService"
@@ -41,6 +41,9 @@
             android:icon="@drawable/ic_screen_recording"
             android:label="@string/screen_recording_tile_label"
             android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
+            <meta-data
+                android:name="android.service.quicksettings.ACTIVE_TILE"
+                android:value="true" />
             <intent-filter>
                 <action android:name="android.service.quicksettings.action.QS_TILE" />
             </intent-filter>

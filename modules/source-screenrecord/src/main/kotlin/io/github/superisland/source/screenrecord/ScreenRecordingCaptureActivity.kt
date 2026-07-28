@@ -5,10 +5,13 @@ import android.app.Activity
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.graphics.Color
+import android.graphics.drawable.ColorDrawable
 import android.media.projection.MediaProjectionConfig
 import android.media.projection.MediaProjectionManager
 import android.os.Build
 import android.os.Bundle
+import android.view.WindowManager
 import android.widget.Toast
 import androidx.core.content.ContextCompat
 import io.github.superisland.model.ScreenRecordingAudioSource
@@ -24,17 +27,18 @@ import io.github.superisland.model.ScreenRecordingAudioSource
  * complete the system consent path; callers still must pass through this Activity so the
  * one-shot projection token is obtained legally.
  *
- * In-module launches stay in the caller's task with zero window animation to avoid status-bar
- * flash from task switches. Tile launches use [ScreenRecordingTileCaptureActivity].
+ * In-module launches stay in the caller's task. Tile launches use a no-affinity one-shot task;
+ * both paths share an edge-to-edge transparent broker window and zero system transition so HyperOS
+ * does not briefly repaint the status bar black between the caller and projection consent.
  */
 open class ScreenRecordingCaptureActivity : Activity() {
     private var projectionRequested = false
     private var keepCallerInFront = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        // Kill enter animation before super draws a frame (reduces status-bar blink on warsaw).
-        overridePendingTransition(0, 0)
         super.onCreate(savedInstanceState)
+        configureBrokerWindow()
+        suppressTransitions()
         keepCallerInFront =
             intent.getBooleanExtra(EXTRA_KEEP_CALLER_IN_FRONT, false) ||
                 savedInstanceState?.getBoolean(EXTRA_KEEP_CALLER_IN_FRONT) == true ||
@@ -53,8 +57,8 @@ open class ScreenRecordingCaptureActivity : Activity() {
     }
 
     override fun finish() {
+        suppressTransitions()
         super.finish()
-        overridePendingTransition(0, 0)
     }
 
     @Deprecated("The framework MediaProjection consent flow still returns through this callback.")
@@ -122,7 +126,7 @@ open class ScreenRecordingCaptureActivity : Activity() {
             }
         // Avoid transition animation into the system consent activity when it is shown.
         startActivityForResult(intent, REQUEST_MEDIA_PROJECTION)
-        overridePendingTransition(0, 0)
+        suppressTransitions()
     }
 
     private fun reportAndFinish(message: String) {
@@ -137,13 +141,39 @@ open class ScreenRecordingCaptureActivity : Activity() {
     }
 
     private fun finishQuietly() {
-        if (keepCallerInFront) {
-            // Remove the isolated capture task so MainActivity is not brought forward when the
-            // user started recording from the QS tile while another app was visible.
-            finishAndRemoveTask()
-            return
-        }
+        // The tile activity has an empty task affinity, so an ordinary finish tears down only its
+        // one-shot task and restores the pre-QS caller without a task-removal transition.
         finish()
+    }
+
+    private fun configureBrokerWindow() {
+        window.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
+        window.clearFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND)
+        window.addFlags(WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS)
+        window.setDimAmount(0f)
+        window.statusBarColor = Color.TRANSPARENT
+        window.navigationBarColor = Color.TRANSPARENT
+        window.setStatusBarContrastEnforced(false)
+        window.setNavigationBarContrastEnforced(false)
+        window.setDecorFitsSystemWindows(false)
+    }
+
+    private fun suppressTransitions() {
+        // API 36 is the minimum supported level. The modern override covers shell task
+        // transitions; the legacy override still covers the consent result callback path.
+        overrideActivityTransition(
+            Activity.OVERRIDE_TRANSITION_OPEN,
+            0,
+            0,
+            Color.TRANSPARENT,
+        )
+        overrideActivityTransition(
+            Activity.OVERRIDE_TRANSITION_CLOSE,
+            0,
+            0,
+            Color.TRANSPARENT,
+        )
+        overridePendingTransition(0, 0, Color.TRANSPARENT)
     }
 
     companion object {
@@ -168,12 +198,11 @@ open class ScreenRecordingCaptureActivity : Activity() {
                 }
             }
 
-        /** QS tile path: isolated task component. */
+        /** QS tile path: no-affinity one-shot component that never reuses MainActivity's task. */
         fun tileCaptureIntent(context: Context): Intent =
             Intent(context, ScreenRecordingTileCaptureActivity::class.java).apply {
                 addFlags(
                     Intent.FLAG_ACTIVITY_NEW_TASK or
-                        Intent.FLAG_ACTIVITY_NO_HISTORY or
                         Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS or
                         Intent.FLAG_ACTIVITY_NO_ANIMATION,
                 )

@@ -10,8 +10,9 @@ import android.net.Uri
  * user-consent grant.
  */
 class ScreenRecordingRuntimeStore(context: Context) {
+    private val appContext = context.applicationContext
     private val preferences =
-        context.applicationContext.getSharedPreferences(PREFERENCES_NAME, Context.MODE_PRIVATE)
+        appContext.getSharedPreferences(PREFERENCES_NAME, Context.MODE_PRIVATE)
 
     fun load(): ScreenRecordingRuntimeState =
         ScreenRecordingRuntimeState(
@@ -36,6 +37,7 @@ class ScreenRecordingRuntimeStore(context: Context) {
         if (ok) {
             // Always mirror to the in-process hub so Compose does not depend only on prefs listeners.
             ScreenRecordingRuntimeHub.publish(state)
+            ScreenRecordingTileService.requestRefresh(appContext)
         }
         return ok
     }

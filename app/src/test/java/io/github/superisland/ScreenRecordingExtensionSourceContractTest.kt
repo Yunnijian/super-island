@@ -42,6 +42,7 @@ class ScreenRecordingExtensionSourceContractTest {
         assertTrue(libraryManifest.contains(".ScreenRecordingTileCaptureActivity"))
         assertTrue(libraryManifest.contains(".ScreenRecordingService"))
         assertTrue(libraryManifest.contains(".ScreenRecordingTileService"))
+        assertTrue(libraryManifest.contains("android.service.quicksettings.ACTIVE_TILE"))
         val inModuleCaptureBlock =
             libraryManifest
                 .substringAfter("""android:name=".ScreenRecordingCaptureActivity"""")
@@ -50,11 +51,19 @@ class ScreenRecordingExtensionSourceContractTest {
             libraryManifest
                 .substringAfter("""android:name=".ScreenRecordingTileCaptureActivity"""")
                 .substringBefore("/>")
-        // In-module capture must NOT use singleInstance (causes status-bar task flash).
+        // In-module capture stays in MainActivity's task. QS uses an empty-affinity disposable
+        // task: singleInstance creates a separate HyperOS status-bar container.
         assertFalse(inModuleCaptureBlock.contains("singleInstance"))
         assertFalse(inModuleCaptureBlock.contains("taskAffinity"))
-        assertTrue(tileCaptureBlock.contains("singleInstance"))
-        assertTrue(tileCaptureBlock.contains("taskAffinity"))
+        assertFalse(tileCaptureBlock.contains("android:launchMode"))
+        assertTrue(tileCaptureBlock.contains("android:taskAffinity=\"\""))
+        assertTrue(libraryManifest.contains("Theme.SuperIsland.ScreenRecording.Capture"))
+        val captureStyles =
+            sourceFile("modules/source-screenrecord/src/main/res/values/styles.xml").readText()
+        assertTrue(captureStyles.contains("windowBackground"))
+        assertTrue(captureStyles.contains("windowIsTranslucent"))
+        assertTrue(captureStyles.contains("statusBarColor"))
+        assertTrue(captureStyles.contains("navigationBarColor"))
         assertTrue(libraryManifest.contains("FOREGROUND_SERVICE_MEDIA_PROJECTION"))
         assertTrue(libraryManifest.contains("FOREGROUND_SERVICE_MICROPHONE"))
         assertTrue(libraryManifest.contains("RECORD_AUDIO"))
@@ -120,6 +129,40 @@ class ScreenRecordingExtensionSourceContractTest {
             )""",
             ),
         )
+    }
+
+    @Test
+    fun stoppedModuleTileCannotBeRevivedByWarsawSystemUi() {
+        val module =
+            sourceFile(
+                "modules/hook-systemui/src/main/java/io/github/superisland/hook/systemui/SuperIslandXposedModule.java",
+            ).readText()
+        val guard =
+            sourceFile(
+                "modules/hook-systemui/src/main/java/io/github/superisland/hook/systemui/SystemUiScreenRecordingTileForceStopGuard.java",
+            ).readText()
+
+        assertTrue(module.contains("installScreenRecordingTileForceStopGuard"))
+        assertTrue(module.contains("Screen-recording QS stopped-package guard unavailable"))
+        assertTrue(guard.contains("TileServiceManager"))
+        assertTrue(guard.contains("ScreenRecordingTileService"))
+        assertTrue(guard.contains("ApplicationInfo.FLAG_STOPPED"))
+        assertTrue(guard.contains("ScreenRecordingRootControlContract.INSTANCE.isVerifiedDevice"))
+        assertTrue(guard.contains("WeakReference"))
+        assertTrue(guard.contains("getTileWrapper"))
+        assertTrue(guard.contains("setBindRequested"))
+        assertTrue(guard.contains("setBindService"))
+        assertTrue(guard.contains("mUnbindImmediate"))
+        assertTrue(guard.contains("mQueuedMessages"))
+        assertTrue(guard.contains("mClickBinder"))
+        assertTrue(guard.contains("onClick"))
+        assertTrue(guard.contains("queued and replayed"))
+        assertTrue(module.contains("blockForceStoppedLifecycleBind"))
+        assertTrue(module.contains("proceed(new Object[]{false})"))
+        assertTrue(guard.contains("clearForceStoppedManager"))
+        assertTrue(guard.contains("resetUnbindImmediateBestEffort"))
+        assertTrue(guard.contains("discardPendingClickBestEffort"))
+        assertTrue(guard.contains("return false"))
     }
 
     @Test
@@ -196,14 +239,21 @@ class ScreenRecordingExtensionSourceContractTest {
         assertTrue(tile.contains("tileCaptureIntent") || tile.contains("ScreenRecordingTileCaptureActivity"))
         assertTrue(tile.contains("observe(runtimeListener)"))
         assertTrue(tile.contains("ScreenRecordingService.requestStop") || tile.contains("reconcileRuntime"))
+        assertTrue(tile.contains("TileService.requestListeningState"))
         assertFalse(tile.contains("startForegroundService"))
+        assertTrue(runtimeStore.contains("ScreenRecordingTileService.requestRefresh"))
+        val configStore =
+            sourceFile(
+                "modules/source-screenrecord/src/main/kotlin/io/github/superisland/source/screenrecord/ScreenRecordingConfigStore.kt",
+            ).readText()
+        assertTrue(configStore.contains("ScreenRecordingTileService.requestRefresh"))
         assertTrue(captureSource.contains("EXTRA_KEEP_CALLER_IN_FRONT") || captureSource.contains("keepCallerInFront"))
         assertTrue(captureSource.contains("tileCaptureIntent"))
-        assertTrue(captureSource.contains("overridePendingTransition"))
-        assertTrue(
-            captureSource.contains("finishAndRemoveTask") ||
-                captureSource.contains("moveTaskToBack"),
-        )
+        assertTrue(captureSource.contains("Intent.FLAG_ACTIVITY_NEW_TASK"))
+        assertTrue(captureSource.contains("overrideActivityTransition"))
+        assertTrue(captureSource.contains("setDecorFitsSystemWindows(false)"))
+        assertTrue(captureSource.contains("Color.TRANSPARENT"))
+        assertFalse(captureSource.contains("finishAndRemoveTask"))
         val focusNotif =
             sourceFile(
                 "modules/source-screenrecord/src/main/kotlin/io/github/superisland/source/screenrecord/ScreenRecordingFocusNotification.kt",

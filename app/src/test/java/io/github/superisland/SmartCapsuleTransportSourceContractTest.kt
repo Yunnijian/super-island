@@ -280,6 +280,14 @@ class SmartCapsuleTransportSourceContractTest {
             sourceFile(
                 "modules/hook-systemui/src/main/java/io/github/superisland/hook/systemui/SystemUiSmartCapsuleConfigBridge.java",
             ).readText()
+        val reportPolicy =
+            sourceFile(
+                "modules/hook-systemui/src/main/java/io/github/superisland/hook/systemui/ModuleReportDeliveryPolicy.java",
+            ).readText()
+        val screenRecordingBridge =
+            sourceFile(
+                "modules/hook-systemui/src/main/java/io/github/superisland/hook/systemui/SystemUiScreenRecordingRootBridge.java",
+            ).readText()
 
         listOf(
             ".SmartCapsuleReportProvider",
@@ -328,6 +336,14 @@ class SmartCapsuleTransportSourceContractTest {
         assertTrue("Capability must reflect mapper installation", "HyperIslandLocalNotificationAdapter.isInstalled()" in configBridge)
         assertTrue("Provider IPC must use the plugin's host SystemUI Context", "getSysuiContext" in module)
         assertTrue("Host Context must match the SystemUI process uid", "context.getApplicationInfo().uid" in module)
+        assertTrue(
+            "Host reports must not revive a force-stopped module app",
+            "ApplicationInfo.FLAG_STOPPED" in reportPolicy &&
+                "ModuleReportDeliveryPolicy.canDeliver(context)" in configBridge &&
+                "ModuleReportDeliveryPolicy.canDeliver(runtimeContext)" in bridge &&
+                "ModuleReportDeliveryPolicy.canDeliver(context)" in screenRecordingBridge &&
+                "ModuleReportDeliveryPolicy.canDeliver(context)" in module,
+        )
     }
 
     @Test

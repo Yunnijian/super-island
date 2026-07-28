@@ -181,6 +181,7 @@ final class SystemUiSmartCapsuleConfigBridge {
             String method,
             Bundle report,
             String label) {
+        if (!ModuleReportDeliveryPolicy.canDeliver(context)) return;
         for (int attempt = 0; attempt < 2; attempt++) {
             try {
                 Bundle result = context.getContentResolver().call(

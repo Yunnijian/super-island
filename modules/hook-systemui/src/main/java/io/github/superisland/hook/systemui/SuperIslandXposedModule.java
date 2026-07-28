@@ -66,6 +66,7 @@ public final class SuperIslandXposedModule extends XposedModule {
     private volatile HookHandle xmsfFocusAuthHook;
     private volatile HookHandle xmsfRuntimeAttachHook;
     private volatile HookHandle miShareRuntimeAttachHook;
+    private volatile List<HookHandle> screenRecordingTileForceStopHooks;
     private volatile BroadcastReceiver xmsfReloadReceiver;
     private volatile Context xmsfRuntimeContext;
     private volatile XmsfSmartCapsuleSelection xmsfSelection;
@@ -326,6 +327,7 @@ public final class SuperIslandXposedModule extends XposedModule {
                 + " applications=" + snapshot.getApplications().size());
         Context context = xmsfRuntimeContext;
         if (context == null) return;
+        if (!ModuleReportDeliveryPolicy.canDeliver(context)) return;
         try {
             Intent report = new Intent(SystemUiSmartCapsuleContract.ACTION_REPORT_XMSF_ACCEPTANCE)
                     .setPackage(MODULE_PACKAGE)
@@ -388,9 +390,80 @@ public final class SuperIslandXposedModule extends XposedModule {
                             log(Log.WARN, TAG,
                                     "Screen-recording Root settings bridge unavailable", error);
                         }
+                        try {
+                            installScreenRecordingTileForceStopGuard(
+                                    (android.content.Context) context,
+                                    classLoader
+                            );
+                        } catch (Throwable error) {
+                            // Exact ROM signatures are required. Any drift leaves QS unchanged.
+                            log(Log.WARN, TAG,
+                                    "Screen-recording QS stopped-package guard unavailable", error);
+                        }
                     }
                     return result;
                 });
+    }
+
+    private synchronized void installScreenRecordingTileForceStopGuard(
+            Context context,
+            ClassLoader classLoader) throws ReflectiveOperationException {
+        if (screenRecordingTileForceStopHooks != null) return;
+        SystemUiScreenRecordingTileForceStopGuard guard =
+                SystemUiScreenRecordingTileForceStopGuard.resolve(context, classLoader);
+        if (guard == null) return;
+        List<HookHandle> handles = new ArrayList<>();
+        try {
+            Method getTileWrapper = guard.getTileWrapperMethod();
+            deoptimize(getTileWrapper);
+            handles.add(hook(getTileWrapper)
+                    .setExceptionMode(io.github.libxposed.api.XposedInterface.ExceptionMode.PROTECTIVE)
+                    .intercept(chain -> {
+                        Object tileServiceManager = chain.proceed();
+                        guard.rememberTileServiceManager(tileServiceManager);
+                        return tileServiceManager;
+                    }));
+            Method setBindRequested = guard.setBindRequestedMethod();
+            deoptimize(setBindRequested);
+            handles.add(hook(setBindRequested)
+                    .setExceptionMode(io.github.libxposed.api.XposedInterface.ExceptionMode.PROTECTIVE)
+                    .intercept(chain -> {
+                        Object requested = chain.getArg(0);
+                        if (requested instanceof Boolean
+                                && (Boolean) requested
+                                && guard.blockForceStoppedBindingRequest(chain.getThisObject())) {
+                            return null;
+                        }
+                        return chain.proceed();
+                    }));
+            Method setBindService = guard.setBindServiceMethod();
+            deoptimize(setBindService);
+            handles.add(hook(setBindService)
+                    .setExceptionMode(io.github.libxposed.api.XposedInterface.ExceptionMode.PROTECTIVE)
+                    .intercept(chain -> {
+                        Object requested = chain.getArg(0);
+                        if (requested instanceof Boolean
+                                && (Boolean) requested
+                                && guard.blockForceStoppedLifecycleBind(
+                                        chain.getThisObject())) {
+                            return chain.proceed(new Object[]{false});
+                        }
+                        return chain.proceed();
+                    }));
+            Method onClick = guard.onClickMethod();
+            deoptimize(onClick);
+            handles.add(hook(onClick)
+                    .setExceptionMode(io.github.libxposed.api.XposedInterface.ExceptionMode.PROTECTIVE)
+                    .intercept(chain -> {
+                        if (guard.blockForceStoppedClick(chain.getThisObject())) return null;
+                        return chain.proceed();
+                    }));
+            screenRecordingTileForceStopHooks = List.copyOf(handles);
+        } catch (Throwable error) {
+            unhookAll(handles, "screen-recording QS stopped-package guard installation");
+            throw error;
+        }
+        log(Log.INFO, TAG, "Installed screen-recording QS stopped-package guard");
     }
 
     private void installPluginLoadHook(ClassLoader classLoader) throws ReflectiveOperationException {

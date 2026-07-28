@@ -392,6 +392,7 @@ final class SystemUiScreenRecordingRootBridge {
     }
 
     private static void reportResult(Context context, String requestId, RootControlResult result) {
+        if (!ModuleReportDeliveryPolicy.canDeliver(context)) return;
         try {
             Bundle extras = new Bundle();
             extras.putString(ScreenRecordingRootControlContract.EXTRA_REQUEST_ID, requestId);

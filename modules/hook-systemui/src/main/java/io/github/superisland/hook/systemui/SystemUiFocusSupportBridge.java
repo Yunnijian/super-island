@@ -319,6 +319,7 @@ final class SystemUiFocusSupportBridge {
     }
 
     private void callReportProvider(String method, Bundle extras) {
+        if (!ModuleReportDeliveryPolicy.canDeliver(runtimeContext)) return;
         for (int attempt = 0; attempt < 2; attempt++) {
             try {
                 Bundle result = runtimeContext.getContentResolver().call(

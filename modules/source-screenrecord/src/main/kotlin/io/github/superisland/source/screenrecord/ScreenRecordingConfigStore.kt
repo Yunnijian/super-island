@@ -17,8 +17,9 @@ import io.github.superisland.model.ScreenRecordingVideoCodec
  * closed enum wire values; malformed or obsolete values reset only this extension to defaults.
  */
 class ScreenRecordingConfigStore(context: Context) {
+    private val appContext = context.applicationContext
     private val preferences =
-        context.applicationContext.getSharedPreferences(PREFERENCES_NAME, Context.MODE_PRIVATE)
+        appContext.getSharedPreferences(PREFERENCES_NAME, Context.MODE_PRIVATE)
 
     fun load(): ScreenRecordingConfig {
         val schema = preferences.getInt(KEY_SCHEMA, 0)
@@ -78,7 +79,8 @@ class ScreenRecordingConfigStore(context: Context) {
     /** Uses commit so a failed persistence is observable by the UI owner and can be rolled back. */
     fun save(config: ScreenRecordingConfig): Boolean {
         val normalized = config.normalized()
-        return preferences
+        val saved =
+            preferences
             .edit()
             .putInt(KEY_SCHEMA, normalized.schemaVersion)
             .putString(KEY_RESOLUTION, normalized.resolution.wireValue)
@@ -95,6 +97,10 @@ class ScreenRecordingConfigStore(context: Context) {
             .putString(KEY_TILE_STYLE, normalized.tileStyle.wireValue)
             .putString(KEY_STORAGE_TREE_URI, normalized.storageTreeUri)
             .commit()
+        if (saved) {
+            ScreenRecordingTileService.requestRefresh(appContext)
+        }
+        return saved
     }
 
     fun registerListener(listener: SharedPreferences.OnSharedPreferenceChangeListener) {
