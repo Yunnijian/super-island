@@ -4,4 +4,12 @@
     <string name="screen_recording_notification_channel">超级岛录屏</string>
     <string name="screen_recording_notification_title">正在录制屏幕</string>
     <string name="screen_recording_notification_stop">停止</string>
+    <string name="screen_recording_notification_pause">暂停</string>
+    <string name="screen_recording_notification_resume">继续</string>
+    <string name="screen_recording_notification_share">分享</string>
+    <string name="screen_recording_focus_pause">暂停录屏</string>
+    <string name="screen_recording_focus_resume">继续录屏</string>
+    <string name="screen_recording_focus_stop">停止录屏</string>
+    <string name="screen_recording_focus_saved">录屏已保存</string>
+    <string name="screen_recording_focus_share">分享录屏</string>
 </resources>

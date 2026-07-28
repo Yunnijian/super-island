@@ -12,12 +12,14 @@ import android.media.MediaFormat
 import android.media.MediaMuxer
 import android.media.MediaRecorder
 import android.media.projection.MediaProjection
+import android.os.Bundle
 import android.view.Surface
 import io.github.superisland.model.ScreenRecordingAudioSource
 import io.github.superisland.model.ScreenRecordingConfig
 import java.io.Closeable
 import java.nio.ByteBuffer
 import java.util.concurrent.CompletableFuture
+import java.util.concurrent.CountDownLatch
 import java.util.concurrent.ExecutionException
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
@@ -92,29 +94,34 @@ class ScreenRecordingEncoder(
         NEW,
         STARTING,
         RECORDING,
+        PAUSED,
         STOPPING,
         STOPPED,
         FAILED,
     }
 
     private val lifecycleLock = Any()
+    private val audioQueueLock = Any()
     private val stopRequested = AtomicBoolean(false)
+    private val pauseRequested = AtomicBoolean(false)
+    private val resumeKeyFrameGate = ResumeKeyFrameGate()
+    private val pausedVideoDrain = AtomicReference<CountDownLatch?>()
     private val projectionStopRequested = AtomicBoolean(false)
     private val outputDescriptorClosed = AtomicBoolean(false)
     private val firstFailure = AtomicReference<Throwable?>(null)
     private val videoSamples = AtomicLong(0)
     private val audioSamples = AtomicLong(0)
+    private val videoCodecOutputs = AtomicLong(0)
     private val workerExecutor: ExecutorService = Executors.newFixedThreadPool(2)
     private val controlExecutor: ExecutorService = Executors.newSingleThreadExecutor()
     private val startupCompletion = CompletableFuture<Unit>()
+    private val recordingClock = PausableRecordingClock(System::nanoTime)
 
     private var stateValue = State.NEW
     private var startCancellationRequested = false
     private var projectionStoppedDuringStart = false
     private var callbackRegistered = false
     private var termination: CompletableFuture<ScreenRecordingEncodingResult>? = null
-    private var startedAtNanos = 0L
-
     private var videoPipeline: VideoPipeline? = null
     private var audioPipeline: AudioPipeline? = null
     private var virtualDisplay: VirtualDisplay? = null
@@ -136,7 +143,9 @@ class ScreenRecordingEncoder(
                                 false
                             }
 
-                            State.RECORDING -> true
+                            State.RECORDING,
+                            State.PAUSED,
+                            -> true
                             else -> false
                         }
                     }
@@ -170,8 +179,7 @@ class ScreenRecordingEncoder(
             val resolvedDisplay = display.resolve(config)
             // Anchor the muxer clock before any codec output so Surface PTS (often absolute /
             // boot-time based) never leaks into the MP4 duration when an audio track is present.
-            startedAtNanos = System.nanoTime()
-            val recordingEpochNanos = startedAtNanos
+            recordingClock.start()
             val coordinator =
                 MuxerCoordinator(
                     MediaMuxer(
@@ -180,7 +188,7 @@ class ScreenRecordingEncoder(
                     ),
                     expectsAudio = config.audioSource != ScreenRecordingAudioSource.NONE,
                     presentationClockUs = {
-                        ((System.nanoTime() - recordingEpochNanos) / 1_000L).coerceAtLeast(0L)
+                        (recordingClock.elapsed() / 1_000L).coerceAtLeast(0L)
                     },
                     onVideoSample = { videoSamples.incrementAndGet() },
                     onAudioSample = { audioSamples.incrementAndGet() },
@@ -234,6 +242,62 @@ class ScreenRecordingEncoder(
         return awaitCompletion(plan.completion)
     }
 
+    /** Pauses recorded output while keeping codec workers drained and the projection session alive. */
+    fun pause() {
+        synchronized(lifecycleLock) {
+            check(stateValue == State.RECORDING) { "Screen recording encoder is not recording" }
+            val display = checkNotNull(virtualDisplay) { "Screen recording display is not available" }
+            synchronized(audioQueueLock) {
+                pauseRequested.set(true)
+                recordingClock.pause()
+            }
+            try {
+                display.setSurface(null)
+                pausedVideoDrain.set(CountDownLatch(1))
+            } catch (failure: Throwable) {
+                synchronized(audioQueueLock) {
+                    recordingClock.resume()
+                    pauseRequested.set(false)
+                }
+                throw failure
+            }
+            stateValue = State.PAUSED
+        }
+    }
+
+    /** Resumes output on the same tracks and requests a fresh video sync frame. */
+    fun resume() {
+        synchronized(lifecycleLock) {
+            check(stateValue == State.PAUSED) { "Screen recording encoder is not paused" }
+            val drain = checkNotNull(pausedVideoDrain.get()) { "Paused video drain is not armed" }
+            check(drain.await(VIDEO_PAUSE_DRAIN_TIMEOUT_MILLIS, TimeUnit.MILLISECONDS)) {
+                "Timed out while draining video before resume"
+            }
+            // VirtualDisplay Surface frames use the same monotonic time base. A late pre-resume
+            // key frame can therefore be distinguished from frames produced after reattachment.
+            resumeKeyFrameGate.awaitNextKeyFrameAtOrAfter(System.nanoTime() / NANOS_PER_MICROSECOND)
+            try {
+                checkNotNull(virtualDisplay) { "Screen recording display is not available" }
+                    .setSurface(checkNotNull(videoPipeline).inputSurface)
+                requestVideoSyncFrame()
+                synchronized(audioQueueLock) {
+                    recordingClock.resume()
+                    pauseRequested.set(false)
+                }
+                requestVideoSyncFrame()
+            } catch (failure: Throwable) {
+                runCatching { virtualDisplay?.setSurface(null) }
+                synchronized(audioQueueLock) {
+                    pauseRequested.set(true)
+                    recordingClock.pause()
+                }
+                throw failure
+            }
+            pausedVideoDrain.compareAndSet(drain, null)
+            stateValue = State.RECORDING
+        }
+    }
+
     override fun close() {
         while (true) {
             when (state) {
@@ -256,6 +320,7 @@ class ScreenRecordingEncoder(
                 }
 
                 State.RECORDING,
+                State.PAUSED,
                 State.STOPPING,
                 -> {
                     runCatching { stop() }
@@ -395,7 +460,9 @@ class ScreenRecordingEncoder(
     private fun runVideoWorker() {
         try {
             val video = requireNotNull(videoPipeline)
+            var pausedQuietPolls = 0
             while (true) {
+                val outputCountBeforeDrain = videoCodecOutputs.get()
                 val reachedEndOfStream =
                     drainCodec(
                         codec = video.codec,
@@ -407,6 +474,19 @@ class ScreenRecordingEncoder(
                         throw IllegalStateException("Video encoder ended before recording was stopped")
                     }
                     return
+                }
+                if (pauseRequested.get()) {
+                    pausedQuietPolls =
+                        if (videoCodecOutputs.get() == outputCountBeforeDrain) {
+                            minOf(pausedQuietPolls + 1, VIDEO_PAUSE_DRAIN_QUIET_POLLS)
+                        } else {
+                            0
+                        }
+                    if (pausedQuietPolls >= VIDEO_PAUSE_DRAIN_QUIET_POLLS) {
+                        pausedVideoDrain.get()?.countDown()
+                    }
+                } else {
+                    pausedQuietPolls = 0
                 }
                 // Yield so the audio worker can progress without starving surface input.
                 if (!stopRequested.get()) {
@@ -435,9 +515,21 @@ class ScreenRecordingEncoder(
                         waitForAudioInput()
                         continue
                     }
+                    if (pauseRequested.get()) {
+                        drainCodec(
+                            codec = audio.codec,
+                            kind = MuxerTrack.AUDIO,
+                            waitForEndOfStream = false,
+                        )
+                        continue
+                    }
 
                     var offset = 0
-                    while (offset < alignedByteCount && !stopRequested.get()) {
+                    while (
+                        offset < alignedByteCount &&
+                            !stopRequested.get() &&
+                            !pauseRequested.get()
+                    ) {
                         val queuedByteCount =
                             queueAudioInput(
                                 codec = audio.codec,
@@ -492,14 +584,20 @@ class ScreenRecordingEncoder(
             }
 
             val inputBuffer = requireNotNull(codec.getInputBuffer(inputIndex))
-            inputBuffer.clear()
-            val queuedByteCount =
-                minOf(byteCount, inputBuffer.remaining()) -
-                    (minOf(byteCount, inputBuffer.remaining()) % AUDIO_BYTES_PER_FRAME)
-            check(queuedByteCount > 0) { "AAC encoder input buffer is too small for PCM16" }
-            inputBuffer.put(pcm, offset, queuedByteCount)
-            codec.queueInputBuffer(inputIndex, 0, queuedByteCount, presentationTimeUs, 0)
-            return queuedByteCount
+            synchronized(audioQueueLock) {
+                if (pauseRequested.get()) {
+                    codec.queueInputBuffer(inputIndex, 0, 0, presentationTimeUs, 0)
+                    return 0
+                }
+                inputBuffer.clear()
+                val queuedByteCount =
+                    minOf(byteCount, inputBuffer.remaining()) -
+                        (minOf(byteCount, inputBuffer.remaining()) % AUDIO_BYTES_PER_FRAME)
+                check(queuedByteCount > 0) { "AAC encoder input buffer is too small for PCM16" }
+                inputBuffer.put(pcm, offset, queuedByteCount)
+                codec.queueInputBuffer(inputIndex, 0, queuedByteCount, presentationTimeUs, 0)
+                return queuedByteCount
+            }
         }
         return 0
     }
@@ -569,6 +667,13 @@ class ScreenRecordingEncoder(
                     if (outputIndex < 0) {
                         throw IllegalStateException("Unexpected MediaCodec output status: $outputIndex")
                     }
+                    if (kind == MuxerTrack.VIDEO) videoCodecOutputs.incrementAndGet()
+                    val dropVideoSample =
+                        kind == MuxerTrack.VIDEO &&
+                            shouldDropVideoSample(
+                                flags = bufferInfo.flags,
+                                presentationTimeUs = bufferInfo.presentationTimeUs,
+                            )
                     // Copy + release the codec buffer BEFORE muxer.writeSample. Holding the buffer
                     // across a contended muxer lock backs up the Surface input and freezes video
                     // while audio still advances (common when any audio track is enabled).
@@ -576,6 +681,7 @@ class ScreenRecordingEncoder(
                     val sampleInfo: MediaCodec.BufferInfo?
                     try {
                         if (
+                            !dropVideoSample &&
                             bufferInfo.size > 0 &&
                                 bufferInfo.flags and MediaCodec.BUFFER_FLAG_CODEC_CONFIG == 0
                         ) {
@@ -597,13 +703,29 @@ class ScreenRecordingEncoder(
                     } finally {
                         codec.releaseOutputBuffer(outputIndex, false)
                     }
-                    if (sampleCopy != null && sampleInfo != null) {
+                    if (
+                        sampleCopy != null &&
+                            sampleInfo != null &&
+                            !(kind == MuxerTrack.VIDEO && pauseRequested.get())
+                    ) {
                         requireNotNull(muxer).writeSample(kind, ByteBuffer.wrap(sampleCopy), sampleInfo)
                     }
                     if (bufferInfo.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0) return true
                 }
             }
         }
+    }
+
+    private fun shouldDropVideoSample(
+        flags: Int,
+        presentationTimeUs: Long,
+    ): Boolean {
+        val keyFrame = flags and MediaCodec.BUFFER_FLAG_KEY_FRAME != 0
+        return resumeKeyFrameGate.shouldDrop(
+            paused = pauseRequested.get(),
+            keyFrame = keyFrame,
+            presentationTimeUs = presentationTimeUs,
+        )
     }
 
     private fun scheduleTermination(stopProjection: Boolean) {
@@ -621,7 +743,9 @@ class ScreenRecordingEncoder(
         synchronized(lifecycleLock) {
             val existing = termination
             if (existing != null) return TerminationPlan(existing, leader = false)
-            check(stateValue == State.RECORDING) { "Screen recording encoder is not recording" }
+            check(stateValue == State.RECORDING || stateValue == State.PAUSED) {
+                "Screen recording encoder is not recording"
+            }
             val completion = CompletableFuture<ScreenRecordingEncodingResult>()
             termination = completion
             stateValue = State.STOPPING
@@ -661,7 +785,7 @@ class ScreenRecordingEncoder(
         val result =
             ScreenRecordingEncodingResult(
                 durationMillis =
-                    ((System.nanoTime() - startedAtNanos) / NANOS_PER_MILLISECOND).coerceAtLeast(0L),
+                    (recordingClock.elapsed() / NANOS_PER_MILLISECOND).coerceAtLeast(0L),
                 videoSampleCount = videoSamples.get(),
                 audioSampleCount = audioSamples.get(),
                 muxerStarted = muxerStartedAtTermination,
@@ -685,6 +809,15 @@ class ScreenRecordingEncoder(
         virtualDisplay = null
         runCatching { audioPipeline?.capture?.stop() }
         runCatching { videoPipeline?.codec?.signalEndOfInputStream() }
+    }
+
+    private fun requestVideoSyncFrame() {
+        val codec = videoPipeline?.codec ?: return
+        runCatching {
+            codec.setParameters(
+                Bundle().apply { putInt(MediaCodec.PARAMETER_KEY_REQUEST_SYNC_FRAME, 0) },
+            )
+        }
     }
 
     private fun awaitWorker(worker: Future<*>?) {
@@ -1153,6 +1286,8 @@ class ScreenRecordingEncoder(
         private const val AUDIO_READ_BUFFER_BYTES = 16 * 1024
         private const val MAX_PENDING_MUXER_BYTES = 16L * 1024L * 1024L
         private const val CODEC_DEQUEUE_TIMEOUT_US = 10_000L
+        private const val VIDEO_PAUSE_DRAIN_QUIET_POLLS = 10
+        private const val VIDEO_PAUSE_DRAIN_TIMEOUT_MILLIS = 2_000L
         private const val AUDIO_EOS_TIMEOUT_MILLIS = 2_000L
         private const val AUDIO_IDLE_BACKOFF_MILLIS = 2L
         private const val CODEC_EOS_TIMEOUT_MILLIS = 5_000L
@@ -1160,6 +1295,7 @@ class ScreenRecordingEncoder(
         private const val WORKER_EXECUTOR_TIMEOUT_MILLIS = 2_000L
         private const val COMPLETION_TIMEOUT_MILLIS = 10_000L
         private const val NANOS_PER_MILLISECOND = 1_000_000L
+        private const val NANOS_PER_MICROSECOND = 1_000L
         private const val MICROS_PER_SECOND = 1_000_000L
 
         private fun releaseCodec(codec: MediaCodec) {

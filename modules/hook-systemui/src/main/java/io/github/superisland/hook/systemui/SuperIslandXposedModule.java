@@ -2,6 +2,7 @@ package io.github.superisland.hook.systemui;
 
 import android.app.Application;
 import android.app.BroadcastOptions;
+import android.content.ComponentName;
 import android.content.Context;
 import android.content.BroadcastReceiver;
 import android.content.Intent;
@@ -10,6 +11,7 @@ import android.content.SharedPreferences;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
+import android.os.IBinder;
 import android.os.Looper;
 import android.service.notification.StatusBarNotification;
 import android.util.Log;
@@ -450,13 +452,112 @@ public final class SuperIslandXposedModule extends XposedModule {
                         }
                         return chain.proceed();
                     }));
+            Method customTileHandleClick = guard.customTileHandleClickMethod();
+            if (customTileHandleClick != null) {
+                deoptimize(customTileHandleClick);
+                handles.add(hook(customTileHandleClick)
+                        .setExceptionMode(io.github.libxposed.api.XposedInterface.ExceptionMode.PROTECTIVE)
+                        .intercept(chain -> {
+                            SystemUiScreenRecordingTileForceStopGuard.ExplicitClickPermit permit =
+                                    guard.beginExplicitClick(chain.getThisObject());
+                            try {
+                                return chain.proceed();
+                            } finally {
+                                guard.endExplicitClick(permit);
+                            }
+                        }));
+            }
+            Method onServiceConnected = guard.onServiceConnectedMethod();
+            if (onServiceConnected != null) {
+                deoptimize(onServiceConnected);
+                handles.add(hook(onServiceConnected)
+                        .setExceptionMode(io.github.libxposed.api.XposedInterface.ExceptionMode.PROTECTIVE)
+                        .intercept(chain -> {
+                            Object componentArg = chain.getArg(0);
+                            ComponentName componentName = componentArg instanceof ComponentName
+                                    ? (ComponentName) componentArg
+                                    : null;
+                            SystemUiScreenRecordingTileForceStopGuard.RecoveryConnection connection =
+                                    guard.beginRecoveredServiceConnection(
+                                            chain.getThisObject(),
+                                            componentName);
+                            boolean callbackCompleted = false;
+                            try {
+                                Object result = chain.proceed();
+                                callbackCompleted = true;
+                                return result;
+                            } finally {
+                                guard.finishRecoveredServiceConnection(
+                                        connection,
+                                        callbackCompleted);
+                            }
+                        }));
+            }
+            Method[] failedConnectionCallbacks = new Method[]{
+                    guard.onNullBindingMethod(),
+                    guard.onBindingDiedMethod(),
+                    guard.onServiceDisconnectedMethod(),
+            };
+            for (Method failedConnectionCallback : failedConnectionCallbacks) {
+                if (failedConnectionCallback == null) continue;
+                deoptimize(failedConnectionCallback);
+                handles.add(hook(failedConnectionCallback)
+                        .setExceptionMode(io.github.libxposed.api.XposedInterface.ExceptionMode.PROTECTIVE)
+                        .intercept(chain -> {
+                            try {
+                                return chain.proceed();
+                            } finally {
+                                guard.failRecoveredBinding(chain.getThisObject());
+                            }
+                        }));
+            }
             Method onClick = guard.onClickMethod();
             deoptimize(onClick);
             handles.add(hook(onClick)
                     .setExceptionMode(io.github.libxposed.api.XposedInterface.ExceptionMode.PROTECTIVE)
                     .intercept(chain -> {
-                        if (guard.blockForceStoppedClick(chain.getThisObject())) return null;
-                        return chain.proceed();
+                        Object clickArg = chain.getArg(0);
+                        IBinder clickBinder = clickArg instanceof IBinder ? (IBinder) clickArg : null;
+                        SystemUiScreenRecordingTileForceStopGuard.ClickRecoveryDecision decision =
+                                guard.prepareExplicitClickRecovery(
+                                        chain.getThisObject(),
+                                        clickBinder);
+                        if (decision
+                                == SystemUiScreenRecordingTileForceStopGuard.ClickRecoveryDecision.BLOCKED) {
+                            log(Log.WARN, TAG,
+                                    "Blocked stopped screen-recording tile click recovery");
+                            return null;
+                        }
+                        Object result;
+                        try {
+                            // Queue the current binder before binding so a fast service connection
+                            // cannot observe an empty OEM click queue.
+                            result = chain.proceed();
+                        } catch (Throwable error) {
+                            if (decision
+                                    == SystemUiScreenRecordingTileForceStopGuard.ClickRecoveryDecision.RECOVERED) {
+                                guard.abortRecoveredClick(chain.getThisObject());
+                            }
+                            throw error;
+                        }
+                        guard.noteRecoveredClickDispatch(
+                                chain.getThisObject(),
+                                clickBinder);
+                        if (decision
+                                == SystemUiScreenRecordingTileForceStopGuard.ClickRecoveryDecision.RECOVERED) {
+                            if (!guard.requestBindingAfterRecoveredClick(
+                                    chain.getThisObject(),
+                                    clickBinder,
+                                    () -> log(Log.INFO, TAG,
+                                            "Recovered stopped screen-recording tile after explicit QS click"),
+                                    () -> log(Log.WARN, TAG,
+                                            "Recovered screen-recording tile service bind failed"))) {
+                                guard.abortRecoveredClick(chain.getThisObject());
+                                log(Log.WARN, TAG,
+                                        "Could not bind recovered screen-recording tile click");
+                            }
+                        }
+                        return result;
                     }));
             screenRecordingTileForceStopHooks = List.copyOf(handles);
         } catch (Throwable error) {

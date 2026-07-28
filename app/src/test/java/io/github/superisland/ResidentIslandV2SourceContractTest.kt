@@ -28,13 +28,12 @@ class ResidentIslandV2SourceContractTest {
         val residentIslandParam = functionDeclaration(residentSource, "islandParam")
 
         assertTrue(
-            "HyperOS priority 1 is the medium island priority and must remain explicit",
-            Regex("""const\s+val\s+ISLAND_PRIORITY_MEDIUM\s*=\s*1\b""")
-                .containsMatchIn(residentSource),
+            "The publisher must default resident callers to the domain medium priority",
+            "islandPriority: IslandPriority = IslandPriority.MEDIUM" in residentSource,
         )
         assertTrue(
             "The resident island must outrank low-priority background islands",
-            Regex("""put\(\s*"islandPriority"\s*,\s*ISLAND_PRIORITY_MEDIUM\s*\)""")
+            Regex("""put\(\s*"islandPriority"\s*,\s*islandPriority\.wireValue\s*\)""")
                 .containsMatchIn(residentIslandParam),
         )
         assertTrue(

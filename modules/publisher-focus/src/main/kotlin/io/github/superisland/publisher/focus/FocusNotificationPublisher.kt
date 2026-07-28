@@ -15,6 +15,7 @@ import android.provider.Settings
 import androidx.core.app.NotificationCompat
 import androidx.core.graphics.drawable.IconCompat
 import io.github.superisland.model.FocusNotificationRequest
+import io.github.superisland.model.IslandPriority
 import org.json.JSONObject
 
 data class FocusNotificationCapability(
@@ -97,7 +98,14 @@ class FocusNotificationPublisher(
         targetPackage: String? = null,
         /** When true, suppress heads-up/sound and lower priority (recording FGS island path). */
         silent: Boolean = false,
+        /** Completion events can detach from an FGS and expire without leaving an ongoing row. */
+        ongoing: Boolean = true,
+        timeoutAfterMillis: Long? = null,
+        islandPriority: IslandPriority = IslandPriority.MEDIUM,
     ): Notification {
+        require(timeoutAfterMillis == null || timeoutAfterMillis > 0L) {
+            "timeoutAfterMillis must be positive"
+        }
         ensureChannel()
         val smallIcon = sourceSmallIcon ?: IconCompat.createWithResource(appContext, smallIconResId)
         val effectiveLeftIslandIcon = leftIslandIcon ?: smallIcon
@@ -110,7 +118,7 @@ class FocusNotificationPublisher(
                 .setColor(FOCUS_BLUE)
                 .setContentIntent(contentIntent)
                 .setOnlyAlertOnce(true)
-                .setOngoing(true)
+                .setOngoing(ongoing)
                 .setShowWhen(false)
                 .setVisibility(visibility)
                 .setSmallIcon(smallIcon)
@@ -122,6 +130,8 @@ class FocusNotificationPublisher(
                         NotificationCompat.PRIORITY_DEFAULT
                     },
                 )
+
+        timeoutAfterMillis?.let(builder::setTimeoutAfter)
 
         actions.take(MAX_ACTIONS).forEach { action ->
             builder.addAction(0, action.title, action.intent)
@@ -138,6 +148,7 @@ class FocusNotificationPublisher(
                         showInNotificationShade = showInNotificationShade,
                         showLeftIslandIcon = showLeftIslandIcon,
                         showRightIslandIcon = showRightIslandIcon,
+                        islandPriority = islandPriority,
                     ),
                 )
             } else {
@@ -148,6 +159,7 @@ class FocusNotificationPublisher(
                         showInNotificationShade = showInNotificationShade,
                         showLeftIslandIcon = showLeftIslandIcon,
                         showRightIslandIcon = showRightIslandIcon,
+                        islandPriority = islandPriority,
                     ),
                 )
                 putParcelable(EXTRA_FOCUS_REMOTE_VIEW, customRemoteViews.day)
@@ -247,12 +259,14 @@ class FocusNotificationPublisher(
         showInNotificationShade: Boolean,
         showLeftIslandIcon: Boolean,
         showRightIslandIcon: Boolean,
+        islandPriority: IslandPriority,
     ): String {
         val paramIsland =
             islandParam(
                 request = request,
                 showLeftIslandIcon = showLeftIslandIcon,
                 showRightIslandIcon = showRightIslandIcon,
+                islandPriority = islandPriority,
             )
         val paramV2 =
             JSONObject()
@@ -276,6 +290,7 @@ class FocusNotificationPublisher(
         showInNotificationShade: Boolean,
         showLeftIslandIcon: Boolean,
         showRightIslandIcon: Boolean,
+        islandPriority: IslandPriority,
     ): String {
         val payload =
             JSONObject()
@@ -294,6 +309,7 @@ class FocusNotificationPublisher(
                         request = request,
                         showLeftIslandIcon = showLeftIslandIcon,
                         showRightIslandIcon = showRightIslandIcon,
+                        islandPriority = islandPriority,
                     ),
                 ).toString()
         checkFocusPayloadSize(payload)
@@ -304,10 +320,11 @@ class FocusNotificationPublisher(
         request: FocusNotificationRequest,
         showLeftIslandIcon: Boolean,
         showRightIslandIcon: Boolean,
+        islandPriority: IslandPriority,
     ): JSONObject =
         JSONObject()
             .put("islandProperty", ISLAND_PROPERTY_PERSISTENT)
-            .put("islandPriority", ISLAND_PRIORITY_MEDIUM)
+            .put("islandPriority", islandPriority.wireValue)
             .put("islandOrder", false)
             .put(
                 "bigIslandArea",
@@ -428,7 +445,6 @@ class FocusNotificationPublisher(
         // Keep the resident surface above low-priority background islands while leaving high
         // priority events free to preempt it. islandOrder=false prevents periodic refreshes from
         // changing the OEM time-based order among equal-priority islands.
-        const val ISLAND_PRIORITY_MEDIUM = 1
         const val BUSINESS_SUPER_ISLAND = "super_island_status"
         const val FOCUS_REOPEN_CLOSE = "close"
         const val CUSTOM_FOCUS_TIMEOUT_MINUTES = 720

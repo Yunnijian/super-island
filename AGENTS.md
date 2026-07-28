@@ -15,7 +15,9 @@
 - 静态 scope 仅包含 SystemUI、XMSF 和隔离的 MiShare scope。
 - 第三方通知必须原地增强同一源 SBN；不得 clone、代发、取消或隐藏源通知。
 - 常驻岛由 SystemUI 宿主持有；卡片 `contentIntent` 保持为空。
-- ColorOS 流体云运行时保持冻结，除非用户重新批准产品方向。
+- ColorOS 流体云运行时保持冻结，除非用户重新批准产品方向。PMB110 录屏岛可直接
+  复用经审计的 ColorOS 标准 Android 静态资源与视觉参数，但不等于解冻
+  LightLiveAlert、Seedling/Pantanal、Oplus Provider 或旧流体云 Hook。
 - Miuix 与 Material 共享状态但同屏不混用视觉组件。
 
 ## 工作方式

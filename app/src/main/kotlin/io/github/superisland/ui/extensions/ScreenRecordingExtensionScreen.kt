@@ -185,6 +185,16 @@ fun ScreenRecordingExtensionScreen(onBack: () -> Unit) {
                 ScreenRecordingService.requestStop(context)
                 ScreenRecordingExtensionUiStateOwner.refreshRuntime(applicationContext)
             },
+            onPauseResume = {
+                when (state.runtime.phase) {
+                    ScreenRecordingPhase.RECORDING ->
+                        ScreenRecordingService.requestPauseResume(context, targetPaused = true)
+                    ScreenRecordingPhase.PAUSED ->
+                        ScreenRecordingService.requestPauseResume(context, targetPaused = false)
+                    else -> Unit
+                }
+                ScreenRecordingExtensionUiStateOwner.refreshRuntime(applicationContext)
+            },
             onOpenStorage = { treePicker.launch(null) },
             onUseDefaultStorage = {
                 ScreenRecordingExtensionUiStateOwner.update(applicationContext) { config ->
@@ -199,13 +209,17 @@ fun ScreenRecordingExtensionScreen(onBack: () -> Unit) {
             },
         )
     val elapsedMillis =
-        if (
-            state.runtime.phase == ScreenRecordingPhase.RECORDING &&
-                state.runtime.startedAtElapsedRealtime > 0L
-        ) {
-            (nowElapsedRealtime - state.runtime.startedAtElapsedRealtime).coerceAtLeast(0L)
-        } else {
-            0L
+        when (state.runtime.phase) {
+            ScreenRecordingPhase.RECORDING ->
+                if (state.runtime.startedAtElapsedRealtime > 0L) {
+                    (nowElapsedRealtime - state.runtime.startedAtElapsedRealtime).coerceAtLeast(0L)
+                } else {
+                    state.runtime.elapsedDurationMillis
+                }
+            ScreenRecordingPhase.PAUSED,
+            ScreenRecordingPhase.FINALIZING,
+            -> state.runtime.elapsedDurationMillis
+            else -> 0L
         }
     val detail = state.toDetailUi(actions, elapsedMillis)
     when (LocalUiMode.current) {
@@ -254,6 +268,7 @@ fun ScreenRecordingExtensionScreen(onBack: () -> Unit) {
 
 private data class ScreenRecordingScreenActions(
     val onStart: () -> Unit,
+    val onPauseResume: () -> Unit,
     val onStop: () -> Unit,
     val onOpenStorage: () -> Unit,
     val onUseDefaultStorage: () -> Unit,
@@ -290,7 +305,14 @@ private fun ScreenRecordingExtensionUiState.toDetailUi(
         canStart = contentLoaded && !runtime.phase.isActive,
         showStopAction =
             runtime.phase == ScreenRecordingPhase.RECORDING ||
+                runtime.phase == ScreenRecordingPhase.PAUSED ||
                 runtime.phase == ScreenRecordingPhase.PREPARING,
+        showPauseAction =
+            runtime.phase == ScreenRecordingPhase.RECORDING ||
+                runtime.phase == ScreenRecordingPhase.PAUSED,
+        isPaused = runtime.phase == ScreenRecordingPhase.PAUSED,
+        pauseActionLabel =
+            if (runtime.phase == ScreenRecordingPhase.PAUSED) "继续录制" else "暂停录制",
         showFinalizingAction = runtime.phase == ScreenRecordingPhase.FINALIZING,
         videoPreferences =
             listOf(
@@ -368,6 +390,7 @@ private fun ScreenRecordingExtensionUiState.toDetailUi(
         storageEnabled = canEdit,
         showDefaultStorageAction = config.storageTreeUri.isNotBlank(),
         onStart = actions.onStart,
+        onPauseResume = actions.onPauseResume,
         onStop = actions.onStop,
         onOpenStorage = actions.onOpenStorage,
         onUseDefaultStorage = actions.onUseDefaultStorage,
@@ -381,6 +404,12 @@ private fun ScreenRecordingExtensionUiState.statusSummary(durationLabel: String)
                 "已录制 $durationLabel"
             } else {
                 runtime.message.ifBlank { "正在录制屏幕" }
+            }
+        ScreenRecordingPhase.PAUSED ->
+            if (durationLabel.isNotBlank()) {
+                "已录制 $durationLabel"
+            } else {
+                runtime.message.ifBlank { "录屏已暂停" }
             }
         ScreenRecordingPhase.PREPARING -> runtime.message.ifBlank { "正在准备录制" }
         ScreenRecordingPhase.FINALIZING -> runtime.message.ifBlank { "正在完成文件" }
@@ -397,6 +426,8 @@ private fun recordingStatusTitle(
         ScreenRecordingPhase.PREPARING -> "正在准备"
         ScreenRecordingPhase.RECORDING ->
             if (durationLabel.isNotBlank()) "正在录制 · $durationLabel" else "正在录制"
+        ScreenRecordingPhase.PAUSED ->
+            if (durationLabel.isNotBlank()) "录屏暂停 · $durationLabel" else "录屏暂停"
         ScreenRecordingPhase.FINALIZING -> "正在完成"
         ScreenRecordingPhase.ERROR -> "录制失败"
     }

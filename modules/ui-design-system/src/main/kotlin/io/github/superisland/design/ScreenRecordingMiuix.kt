@@ -45,6 +45,9 @@ data class ScreenRecordingDetailUi(
     val canStart: Boolean,
     /** When true, primary control is a red stop button rather than start. */
     val showStopAction: Boolean,
+    val showPauseAction: Boolean = false,
+    val isPaused: Boolean = false,
+    val pauseActionLabel: String = "暂停录制",
     /** When true, primary control is a disabled completing label (stop already accepted). */
     val showFinalizingAction: Boolean = false,
     val videoPreferences: List<ScreenRecordingDropdownUi>,
@@ -55,6 +58,7 @@ data class ScreenRecordingDetailUi(
     val storageEnabled: Boolean,
     val showDefaultStorageAction: Boolean,
     val onStart: () -> Unit,
+    val onPauseResume: () -> Unit = {},
     val onStop: () -> Unit,
     val onOpenStorage: () -> Unit,
     val onUseDefaultStorage: () -> Unit,
@@ -118,7 +122,15 @@ fun ScreenRecordingMiuixScreen(
                 state.showFinalizingAction ->
                     AppSecondaryButton(text = "正在完成…", enabled = false, onClick = {})
                 state.showStopAction ->
-                    AppDangerButton(text = "停止录制", onClick = state.onStop)
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        if (state.showPauseAction) {
+                            AppSecondaryButton(
+                                text = state.pauseActionLabel,
+                                onClick = state.onPauseResume,
+                            )
+                        }
+                        AppDangerButton(text = "停止录制", onClick = state.onStop)
+                    }
                 else ->
                     AppPrimaryButton(
                         text = "开始录制",

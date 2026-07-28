@@ -51,10 +51,15 @@ class ScreenRecordingTileService : TileService() {
         qsTile?.apply {
             state = if (runtime.phase.isActive) Tile.STATE_ACTIVE else Tile.STATE_INACTIVE
             label =
-                if (runtime.phase.isActive) {
-                    "正在录制"
-                } else {
-                    getString(R.string.screen_recording_tile_label)
+                when (runtime.phase) {
+                    ScreenRecordingPhase.PAUSED -> "录屏暂停"
+                    ScreenRecordingPhase.PREPARING,
+                    ScreenRecordingPhase.RECORDING,
+                    ScreenRecordingPhase.FINALIZING,
+                    -> "正在录制"
+                    ScreenRecordingPhase.IDLE,
+                    ScreenRecordingPhase.ERROR,
+                    -> getString(R.string.screen_recording_tile_label)
                 }
             icon =
                 when (config.tileStyle) {

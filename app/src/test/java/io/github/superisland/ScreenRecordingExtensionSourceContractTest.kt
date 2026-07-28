@@ -132,7 +132,7 @@ class ScreenRecordingExtensionSourceContractTest {
     }
 
     @Test
-    fun stoppedModuleTileCannotBeRevivedByWarsawSystemUi() {
+    fun stoppedModuleTileRecoversOnlyFromAnExplicitWarsawQsClick() {
         val module =
             sourceFile(
                 "modules/hook-systemui/src/main/java/io/github/superisland/hook/systemui/SuperIslandXposedModule.java",
@@ -156,9 +156,51 @@ class ScreenRecordingExtensionSourceContractTest {
         assertTrue(guard.contains("mQueuedMessages"))
         assertTrue(guard.contains("mClickBinder"))
         assertTrue(guard.contains("onClick"))
-        assertTrue(guard.contains("queued and replayed"))
+        assertTrue(guard.contains("mPackageManagerAdapter"))
+        assertTrue(guard.contains("mIPackageManager"))
+        assertTrue(guard.contains("setPackageStoppedState"))
+        assertTrue(guard.contains("CustomTile"))
+        assertTrue(guard.contains("handleClick"))
+        assertTrue(guard.contains("ExplicitClickProvenance"))
+        assertTrue(guard.contains("explicitClickProvenance.consume"))
+        assertTrue(guard.contains("prepareExplicitClickRecovery"))
+        assertTrue(guard.contains("canRecoverExplicitClick"))
+        assertTrue(guard.contains("isRecoveredApplication"))
+        assertTrue(guard.contains("recoveryBindingsAvailable"))
+        assertTrue(guard.contains("requestBindingAfterRecoveredClick"))
+        assertTrue(guard.contains("mExecutor"))
+        assertTrue(guard.contains("RecoveryAttemptRegistry"))
+        assertTrue(guard.contains("beginRecoveredServiceConnection"))
+        assertTrue(guard.contains("noteRecoveredClickDispatch"))
+        assertTrue(guard.contains("finishRecoveredServiceConnection"))
+        assertTrue(guard.contains("executeDelayedMethod.invoke"))
+        assertTrue(guard.contains("failRecoveredBinding"))
+        assertTrue(guard.contains("abortRecoveredClick"))
+        assertFalse(guard.contains("hasEstablishedLifecycleBinding"))
+        assertFalse(guard.contains("\"mIsBound\""))
+        assertFalse(guard.contains("FLAG_INCLUDE_STOPPED_PACKAGES"))
+        assertFalse(guard.contains("setApplicationEnabledSetting"))
         assertTrue(module.contains("blockForceStoppedLifecycleBind"))
         assertTrue(module.contains("proceed(new Object[]{false})"))
+        assertTrue(module.contains("Recovered stopped screen-recording tile after explicit QS click"))
+        val clickHookStart = module.indexOf("ClickRecoveryDecision decision")
+        val queueCurrentClick = module.indexOf("result = chain.proceed()", clickHookStart)
+        val requestRecoveredBind = module.indexOf("requestBindingAfterRecoveredClick", clickHookStart)
+        val registerRecoveryAttempt = guard.indexOf("recoveryAttempts.begin(")
+        val requestOwnerBind = guard.indexOf(
+            "setBindRequestedMethod.invoke(owner, true)",
+            registerRecoveryAttempt,
+        )
+        val scheduleConnectionTimeout = guard.indexOf(
+            "executeDelayedMethod.invoke(",
+            requestOwnerBind,
+        )
+        assertTrue(clickHookStart >= 0)
+        assertTrue(queueCurrentClick > clickHookStart)
+        assertTrue(requestRecoveredBind > queueCurrentClick)
+        assertTrue(registerRecoveryAttempt > 0)
+        assertTrue(requestOwnerBind > registerRecoveryAttempt)
+        assertTrue(scheduleConnectionTimeout > requestOwnerBind)
         assertTrue(guard.contains("clearForceStoppedManager"))
         assertTrue(guard.contains("resetUnbindImmediateBestEffort"))
         assertTrue(guard.contains("discardPendingClickBestEffort"))
@@ -190,9 +232,12 @@ class ScreenRecordingExtensionSourceContractTest {
         assertTrue(extension.contains("ScreenRecordingMiuixConfirmDialog"))
         assertTrue(extension.contains("ScreenRecordingMaterialConfirmDialog"))
         assertTrue(focus.contains("FocusNotificationPublisher"))
-        assertTrue(focus.contains("正在录制"))
+        assertTrue(focus.contains("正在录屏"))
         assertTrue(service.contains("ScreenRecordingFocusNotification"))
         assertTrue(service.contains("islandTicker"))
+        assertTrue(service.contains("requestPauseResume"))
+        assertTrue(service.contains("ScreenRecordingPhase.PAUSED"))
+        assertTrue(service.contains("STOP_FOREGROUND_DETACH"))
         assertTrue(captureSource.contains("createConfigForDefaultDisplay"))
         val encoder =
             sourceFile(
@@ -201,11 +246,13 @@ class ScreenRecordingExtensionSourceContractTest {
         assertTrue(encoder.contains("releaseOutputBuffer(outputIndex, false)"))
         assertTrue(encoder.contains("Copy + release the codec buffer BEFORE muxer.writeSample") || encoder.contains("sampleCopy"))
         assertTrue(encoder.contains("presentationClockUs") || encoder.contains("normalizePresentationTimeUs"))
-        assertTrue(encoder.contains("recordingEpochNanos") || encoder.contains("Ignore Surface/codec PTS"))
+        assertTrue(encoder.contains("recordingClock.elapsed() / 1_000L"))
         assertTrue(extension.contains("commitNow"))
         assertTrue(extension.contains("showStopAction") || extension.contains("停止录制"))
         assertTrue(extension.contains("elapsedMillis"))
         assertTrue(extension.contains("ScreenRecordingService.requestStop"))
+        assertTrue(extension.contains("ScreenRecordingService.requestPauseResume"))
+        assertTrue(extension.contains("继续录制"))
         // Stop path must not promote a dead session into an FGS start.
         assertFalse(extension.contains("ContextCompat.startForegroundService"))
         assertTrue(service.contains("fun reconcileRuntime"))
@@ -260,6 +307,9 @@ class ScreenRecordingExtensionSourceContractTest {
             ).readText()
         assertTrue(focusNotif.contains("showInNotificationShade = false"))
         assertTrue(focusNotif.contains("silent = true") || focusNotif.contains("silent=true"))
+        assertTrue(focusNotif.contains("FocusCustomRemoteViews"))
+        assertTrue(focusNotif.contains("buildCompleted"))
+        assertTrue(focusNotif.contains("IslandPriority.HIGH"))
         val captureManifest =
             sourceFile("modules/source-screenrecord/src/main/AndroidManifest.xml").readText()
         assertTrue(captureManifest.contains("ScreenRecordingTileCaptureActivity"))
@@ -275,6 +325,7 @@ class ScreenRecordingExtensionSourceContractTest {
         assertTrue(miuixConfirm.contains("WindowSpinnerPreference"))
         assertTrue(miuixConfirm.contains("DropdownItem"))
         assertTrue(miuixConfirm.contains("AppDangerButton"))
+        assertTrue(miuixConfirm.contains("pauseActionLabel"))
         val materialConfirm =
             sourceFile(
                 "app/src/main/kotlin/io/github/superisland/ui/material/ScreenRecordingMaterialScreen.kt",
@@ -282,6 +333,8 @@ class ScreenRecordingExtensionSourceContractTest {
         assertTrue(materialConfirm.contains("SegmentedDropdownItem"))
         assertTrue(materialConfirm.contains("SegmentedSwitchItem"))
         assertTrue(materialConfirm.contains("colorScheme.error") || materialConfirm.contains("error"))
+        assertTrue(materialConfirm.contains("PauseCircle"))
+        assertTrue(materialConfirm.contains("PlayCircle"))
         assertFalse(materialConfirm.contains("top.yukonga.miuix"))
     }
 

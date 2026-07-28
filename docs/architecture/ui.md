@@ -99,6 +99,11 @@ ColorOS 流体云入口保留为不可开启的 fail-closed 占位；不要添�
 StateHandler 或额外 show/hide Hook。历史审计见
 `../archive/audits/COLOROS_FLUID_CLOUD_AUDIT.md`。
 
+PMB110 录屏岛是独立例外：允许把 OplusScreenRecorder 中自包含的标准
+VectorDrawable 及已测量颜色、字号、尺寸直接编译进 `source-screenrecord`，由 Xiaomi
+Focus `RemoteViews` 承载。该例外不包含 Oplus 私有 JSON/UPK 宿主、Lottie、签名权限、
+Provider 或 SystemUI 流体云 Hook；也不允许在没有真实后端时补齐假音频开关。
+
 ## 8. UI 验收
 
 每个控件都要验证：点击后的真实功能、即时选中状态、重新进入/重启后的持久化、两套

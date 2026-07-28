@@ -1,0 +1,86 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/screen_recording_focus_expanded_root"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="@drawable/screen_recording_focus_card_background"
+    android:orientation="vertical"
+    android:paddingHorizontal="14dp"
+    android:paddingVertical="14dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
+
+        <ImageView
+            android:layout_width="24dp"
+            android:layout_height="24dp"
+            android:contentDescription="@null"
+            android:src="@drawable/ic_screen_recording_dot_expanded" />
+
+        <TextView
+            android:id="@+id/screen_recording_focus_expanded_title"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="10dp"
+            android:layout_weight="1"
+            android:ellipsize="end"
+            android:fontFamily="sans-serif-medium"
+            android:maxLines="1"
+            android:textColor="#FFFFFFFF"
+            android:textSize="14sp" />
+
+        <TextView
+            android:id="@+id/screen_recording_focus_expanded_timer"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:fontFamily="monospace"
+            android:maxLines="1"
+            android:textColor="#FFFFFFFF"
+            android:textSize="15sp" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="14dp"
+        android:gravity="end"
+        android:orientation="horizontal">
+
+        <FrameLayout
+            android:id="@+id/screen_recording_focus_pause"
+            android:layout_width="52dp"
+            android:layout_height="52dp"
+            android:contentDescription="@string/screen_recording_focus_pause">
+
+            <ImageView
+                android:id="@+id/screen_recording_focus_pause_icon"
+                android:layout_width="42dp"
+                android:layout_height="42dp"
+                android:layout_gravity="center"
+                android:background="@drawable/screen_recording_focus_control_background"
+                android:contentDescription="@null"
+                android:padding="9dp"
+                android:src="@drawable/ic_screen_recording_pause" />
+        </FrameLayout>
+
+        <FrameLayout
+            android:id="@+id/screen_recording_focus_stop"
+            android:layout_width="52dp"
+            android:layout_height="52dp"
+            android:layout_marginStart="2dp"
+            android:contentDescription="@string/screen_recording_focus_stop">
+
+            <ImageView
+                android:layout_width="42dp"
+                android:layout_height="42dp"
+                android:layout_gravity="center"
+                android:background="@drawable/screen_recording_focus_stop_background"
+                android:contentDescription="@null"
+                android:padding="9dp"
+                android:src="@drawable/ic_screen_recording_stop" />
+        </FrameLayout>
+    </LinearLayout>
+</LinearLayout>

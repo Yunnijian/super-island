@@ -18,6 +18,8 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.FiberManualRecord
+import androidx.compose.material.icons.filled.PauseCircle
+import androidx.compose.material.icons.filled.PlayCircle
 import androidx.compose.material.icons.filled.StopCircle
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Button
@@ -107,17 +109,37 @@ fun ScreenRecordingMaterialScreen(
                         Text("正在完成…")
                     }
                 state.showStopAction ->
-                    Button(
-                        modifier = Modifier.fillMaxWidth(),
-                        onClick = state.onStop,
-                        colors =
-                            ButtonDefaults.buttonColors(
-                                containerColor = MaterialTheme.colorScheme.error,
-                                contentColor = MaterialTheme.colorScheme.onError,
-                            ),
-                    ) {
-                        Icon(Icons.Filled.StopCircle, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Text("停止录制", modifier = Modifier.padding(start = 8.dp))
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        if (state.showPauseAction) {
+                            OutlinedButton(
+                                modifier = Modifier.fillMaxWidth(),
+                                onClick = state.onPauseResume,
+                            ) {
+                                Icon(
+                                    imageVector =
+                                        if (state.isPaused) {
+                                            Icons.Filled.PlayCircle
+                                        } else {
+                                            Icons.Filled.PauseCircle
+                                        },
+                                    contentDescription = null,
+                                    modifier = Modifier.size(18.dp),
+                                )
+                                Text(state.pauseActionLabel, modifier = Modifier.padding(start = 8.dp))
+                            }
+                        }
+                        Button(
+                            modifier = Modifier.fillMaxWidth(),
+                            onClick = state.onStop,
+                            colors =
+                                ButtonDefaults.buttonColors(
+                                    containerColor = MaterialTheme.colorScheme.error,
+                                    contentColor = MaterialTheme.colorScheme.onError,
+                                ),
+                        ) {
+                            Icon(Icons.Filled.StopCircle, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Text("停止录制", modifier = Modifier.padding(start = 8.dp))
+                        }
                     }
                 else ->
                     Button(
