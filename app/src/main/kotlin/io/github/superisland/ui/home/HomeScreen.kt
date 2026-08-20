@@ -1,5 +1,6 @@
 package io.github.superisland.ui.home
 
+import android.content.Context
 import android.os.Build
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
@@ -108,6 +109,17 @@ fun HomeScreen(
                             IslandAppearanceConfigSync.syncStoredAndReload()
                             SmartCapsuleConfigStore(context).reset().getOrThrow()
                             notificationController.resetAllSettings()
+                            // One-time migration for removed FocusLab: clear stale lab prefs and orphan notification.
+                            runCatching {
+                                context.getSharedPreferences("super-island-features", Context.MODE_PRIVATE)
+                                    .edit()
+                                    .clear()
+                                    .apply()
+                            }
+                            runCatching {
+                                val nm = context.getSystemService(android.app.NotificationManager::class.java)
+                                nm?.cancel(0x464F)
+                            }
                         }
                     }.start()
                 },

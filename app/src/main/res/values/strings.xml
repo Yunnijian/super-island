@@ -35,7 +35,6 @@
     <string name="settings_enable_glass">液态玻璃</string>
     <string name="settings_enable_glass_summary">启用悬浮底栏的液态玻璃效果</string>
     <string name="app_name">超级岛</string>
-    <string name="focus_notification_channel_name">超级岛焦点通知</string>
     <string name="resident_monitor_channel_name">常驻状态数据服务</string>
     <string name="resident_monitor_channel_description">为常驻超级岛提供后台数据更新</string>
     <string name="xposed_module_description">超级岛 LSPosed 模块。仅为本应用放行 HyperOS 焦点通知，不影响其他应用。</string>

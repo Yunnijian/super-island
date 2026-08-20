@@ -8,6 +8,13 @@ import android.app.Application
 class SuperIslandApplication : Application() {
     override fun onCreate() {
         super.onCreate()
+        // One-time migration for removed FocusLab lab.
+        runCatching {
+            getSharedPreferences("super-island-features", MODE_PRIVATE).edit().clear().apply()
+        }
+        runCatching {
+            getSystemService(android.app.NotificationManager::class.java)?.cancel(0x464F)
+        }
         ResidentIslandHostConfigSync.start(this)
         IslandAppearanceConfigSync.start(this)
         MiShareFolderExtensionConfigSync.start(this)
