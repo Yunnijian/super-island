@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/screen_recording_focus_notification_root"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:paddingHorizontal="20dp"
+    android:paddingVertical="14dp">
+
+    <TextView
+        android:id="@+id/screen_recording_focus_notification_timer"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:ellipsize="end"
+        android:maxLines="1"
+        android:textColor="#E6FFFFFF"
+        android:textFontWeight="500"
+        android:textSize="14sp" />
+
+    <TextView
+        android:id="@+id/screen_recording_focus_notification_status"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:ellipsize="end"
+        android:maxLines="1"
+        android:textColor="#8AFFFFFF"
+        android:textFontWeight="400"
+        android:textSize="14sp" />
+
+    <LinearLayout
+        android:id="@+id/screen_recording_focus_notification_actions"
+        android:layout_width="match_parent"
+        android:layout_height="28dp"
+        android:layout_marginTop="16dp"
+        android:gravity="start"
+        android:orientation="horizontal">
+
+        <TextView
+            android:id="@+id/screen_recording_focus_notification_pause"
+            android:layout_width="wrap_content"
+            android:layout_height="28dp"
+            android:background="@drawable/screen_recording_focus_notification_action_background_night"
+            android:ellipsize="end"
+            android:gravity="center"
+            android:maxWidth="146dp"
+            android:minWidth="69dp"
+            android:paddingHorizontal="12dp"
+            android:singleLine="true"
+            android:textColor="#E6FFFFFF"
+            android:textFontWeight="500"
+            android:textSize="14sp" />
+
+        <TextView
+            android:id="@+id/screen_recording_focus_notification_stop"
+            android:layout_width="wrap_content"
+            android:layout_height="28dp"
+            android:layout_marginStart="8dp"
+            android:background="@drawable/screen_recording_focus_notification_action_background_night"
+            android:ellipsize="end"
+            android:gravity="center"
+            android:maxWidth="146dp"
+            android:minWidth="69dp"
+            android:paddingHorizontal="12dp"
+            android:singleLine="true"
+            android:textColor="#E6FFFFFF"
+            android:textFontWeight="500"
+            android:textSize="14sp" />
+    </LinearLayout>
+</LinearLayout>

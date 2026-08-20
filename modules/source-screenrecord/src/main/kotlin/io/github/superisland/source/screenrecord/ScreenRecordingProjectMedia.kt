@@ -2,18 +2,17 @@ package io.github.superisland.source.screenrecord
 
 import android.app.AppOpsManager
 import android.content.Context
-import android.os.Build
 import android.os.Process
 import android.util.Log
 import io.github.superisland.model.ScreenRecordingRootControlContract
 import java.util.concurrent.TimeUnit
 
 /**
- * Local probe + warsaw-gated Root grant for [OPSTR_PROJECT_MEDIA].
+ * Local probe + Root grant for [OPSTR_PROJECT_MEDIA].
  *
  * SystemUI AppOps [setMode] is not reliable for a non-system caller identity on HyperOS. The
  * closed Root path mirrors [io.github.superisland.source.root.RootThermalMetricSource]: fixed
- * `su -c` commands only, fingerprint gate, timeout, no caller-provided package/op strings.
+ * `su -c` commands only, timeout, no caller-provided package/op strings.
  */
 object ScreenRecordingProjectMedia {
     const val OPSTR_PROJECT_MEDIA = "android:project_media"
@@ -34,13 +33,6 @@ object ScreenRecordingProjectMedia {
 
     fun setAllowed(context: Context, allowed: Boolean): Result<Unit> =
         runCatching {
-            check(
-                ScreenRecordingRootControlContract.isVerifiedDevice(
-                    Build.DEVICE,
-                    Build.FINGERPRINT,
-                ),
-            ) { "当前设备未通过投影媒体 Root 验证" }
-
             val command = if (allowed) FIXED_CMD_ALLOW else FIXED_CMD_IGNORE
             val process =
                 ProcessBuilder("su", "-c", command)

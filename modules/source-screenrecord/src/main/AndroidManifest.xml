@@ -30,6 +30,20 @@
             android:taskAffinity=""
             android:theme="@style/Theme.SuperIsland.ScreenRecording.Capture" />
 
+        <!--
+          HyperOS Focus unwraps Activity PendingIntents before launching them. Route completed
+          recording actions back through this app-owned activity so URI grants originate from the
+          recording owner. Only SystemUI (or this app's own PendingIntent identity) may enter it.
+        -->
+        <activity
+            android:name=".ScreenRecordingCompletionActionActivity"
+            android:excludeFromRecents="true"
+            android:exported="true"
+            android:noHistory="true"
+            android:permission="android.permission.STATUS_BAR_SERVICE"
+            android:taskAffinity=""
+            android:theme="@style/Theme.SuperIsland.ScreenRecording.Capture" />
+
         <service
             android:name=".ScreenRecordingService"
             android:exported="false"

@@ -22,7 +22,7 @@ import java.util.concurrent.Executor;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
- * Keeps warsaw SystemUI from automatically reviving the stopped recording tile while allowing an
+ * Keeps SystemUI from automatically reviving the stopped recording tile while allowing an
  * explicit QS click to recover the exact package and continue through the OEM tile lifecycle.
  */
 final class SystemUiScreenRecordingTileForceStopGuard {
@@ -345,8 +345,7 @@ final class SystemUiScreenRecordingTileForceStopGuard {
     }
 
     static boolean isSupportedBuild(String device, String fingerprint, long systemUiVersionCode) {
-        return ScreenRecordingRootControlContract.INSTANCE.isVerifiedDevice(device, fingerprint)
-                && systemUiVersionCode == WARSAW_SYSTEM_UI_VERSION_CODE;
+        return systemUiVersionCode == WARSAW_SYSTEM_UI_VERSION_CODE;
     }
 
     static boolean shouldBlock(String packageName, String className, int applicationFlags) {

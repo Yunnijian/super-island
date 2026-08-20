@@ -40,6 +40,7 @@ class ScreenRecordingExtensionSourceContractTest {
 
         assertTrue(libraryManifest.contains(".ScreenRecordingCaptureActivity"))
         assertTrue(libraryManifest.contains(".ScreenRecordingTileCaptureActivity"))
+        assertTrue(libraryManifest.contains(".ScreenRecordingCompletionActionActivity"))
         assertTrue(libraryManifest.contains(".ScreenRecordingService"))
         assertTrue(libraryManifest.contains(".ScreenRecordingTileService"))
         assertTrue(libraryManifest.contains("android.service.quicksettings.ACTIVE_TILE"))
@@ -51,12 +52,22 @@ class ScreenRecordingExtensionSourceContractTest {
             libraryManifest
                 .substringAfter("""android:name=".ScreenRecordingTileCaptureActivity"""")
                 .substringBefore("/>")
+        val completionActionBlock =
+            libraryManifest
+                .substringAfter("""android:name=".ScreenRecordingCompletionActionActivity"""")
+                .substringBefore("/>")
         // In-module capture stays in MainActivity's task. QS uses an empty-affinity disposable
         // task: singleInstance creates a separate HyperOS status-bar container.
         assertFalse(inModuleCaptureBlock.contains("singleInstance"))
         assertFalse(inModuleCaptureBlock.contains("taskAffinity"))
         assertFalse(tileCaptureBlock.contains("android:launchMode"))
         assertTrue(tileCaptureBlock.contains("android:taskAffinity=\"\""))
+        assertTrue(completionActionBlock.contains("android:exported=\"true\""))
+        assertTrue(
+            completionActionBlock.contains(
+                "android:permission=\"android.permission.STATUS_BAR_SERVICE\"",
+            ),
+        )
         assertTrue(libraryManifest.contains("Theme.SuperIsland.ScreenRecording.Capture"))
         val captureStyles =
             sourceFile("modules/source-screenrecord/src/main/res/values/styles.xml").readText()
@@ -72,6 +83,7 @@ class ScreenRecordingExtensionSourceContractTest {
         assertTrue(appManifest.contains("SEND_SCREEN_RECORDING_CONTROL"))
         assertTrue(appBuild.contains("""project(":source-screenrecord")"""))
         assertTrue(proguard.contains("ScreenRecordingCaptureActivity"))
+        assertTrue(proguard.contains("ScreenRecordingCompletionActionActivity"))
         assertTrue(proguard.contains("ScreenRecordingService"))
         assertTrue(proguard.contains("ScreenRecordingTileService"))
     }
@@ -101,7 +113,6 @@ class ScreenRecordingExtensionSourceContractTest {
         assertTrue(bridge.contains("isAuthorizedModuleSender"))
         assertTrue(contract.contains("VERIFIED_DEVICE = \"warsaw\""))
         assertTrue(contract.contains("OS3.0.306.0.WHPCNXM"))
-        assertTrue(rootSettings.contains("isVerifiedDevice"))
         assertTrue(rootSettings.contains("recording continues without Root settings"))
         assertTrue(bridge.contains("isAuthorizedModuleSender"))
         assertTrue(rootSettings.contains("setProjectMediaAllowed"))
@@ -147,7 +158,6 @@ class ScreenRecordingExtensionSourceContractTest {
         assertTrue(guard.contains("TileServiceManager"))
         assertTrue(guard.contains("ScreenRecordingTileService"))
         assertTrue(guard.contains("ApplicationInfo.FLAG_STOPPED"))
-        assertTrue(guard.contains("ScreenRecordingRootControlContract.INSTANCE.isVerifiedDevice"))
         assertTrue(guard.contains("WeakReference"))
         assertTrue(guard.contains("getTileWrapper"))
         assertTrue(guard.contains("setBindRequested"))
@@ -305,16 +315,40 @@ class ScreenRecordingExtensionSourceContractTest {
             sourceFile(
                 "modules/source-screenrecord/src/main/kotlin/io/github/superisland/source/screenrecord/ScreenRecordingFocusNotification.kt",
             ).readText()
-        assertTrue(focusNotif.contains("showInNotificationShade = false"))
+        val initialForeground =
+            service.substringAfter("startForeground(").substringBefore("foregroundServiceType(config)")
+        val stableFocus =
+            service.substringAfter("private fun activeFocusNotification")
+                .substringBefore("private fun postActiveFocusNotification")
+        assertTrue(initialForeground.contains("showInNotificationShade = false"))
+        assertTrue(stableFocus.contains("showInNotificationShade = focusRowVisible.get()"))
+        assertTrue(service.contains("postDelayed(focusRowReveal, ISLAND_TICK_MILLIS)"))
+        assertTrue(service.split("focusRowVisible.set(true)").size == 2)
+        assertTrue(focusNotif.substringAfter("fun buildCompleted").contains("showInNotificationShade = true"))
         assertTrue(focusNotif.contains("silent = true") || focusNotif.contains("silent=true"))
         assertTrue(focusNotif.contains("FocusCustomRemoteViews"))
+        assertTrue(focusNotif.contains("screen_recording_focus_notification_night"))
+        assertTrue(focusNotif.contains("screen_recording_focus_notification_complete_night"))
         assertTrue(focusNotif.contains("buildCompleted"))
         assertTrue(focusNotif.contains("IslandPriority.HIGH"))
+        assertTrue(focusNotif.contains("ScreenRecordingCompletionActionActivity.viewPendingIntent"))
+        assertTrue(focusNotif.contains("ScreenRecordingCompletionActionActivity.sharePendingIntent"))
         val captureManifest =
             sourceFile("modules/source-screenrecord/src/main/AndroidManifest.xml").readText()
         assertTrue(captureManifest.contains("ScreenRecordingTileCaptureActivity"))
         assertTrue(captureManifest.contains("taskAffinity"))
         assertTrue(captureManifest.contains("noHistory"))
+        val completionActionBlock =
+            captureManifest
+                .substringAfter("""android:name=".ScreenRecordingCompletionActionActivity"""")
+                .substringBefore("/>")
+        assertTrue(completionActionBlock.contains("android:exported=\"true\""))
+        assertTrue(
+            completionActionBlock.contains(
+                "android:permission=\"android.permission.STATUS_BAR_SERVICE\"",
+            ),
+        )
+        assertTrue(completionActionBlock.contains("android:taskAffinity=\"\""))
         // Attribute must stay off: QS collapse can close system dialogs mid-consent.
         assertFalse(captureManifest.contains("android:finishOnCloseSystemDialogs"))
         val miuixConfirm =

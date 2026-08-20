@@ -19,6 +19,7 @@
 -keep class io.github.superisland.BatteryMonitorService { *; }
 -keep class io.github.superisland.source.screenrecord.ScreenRecordingCaptureActivity { *; }
 -keep class io.github.superisland.source.screenrecord.ScreenRecordingTileCaptureActivity { *; }
+-keep class io.github.superisland.source.screenrecord.ScreenRecordingCompletionActionActivity { *; }
 -keep class io.github.superisland.source.screenrecord.ScreenRecordingService { *; }
 -keep class io.github.superisland.source.screenrecord.ScreenRecordingTileService { *; }
 -keep class io.github.superisland.publisher.focus.FocusNotificationPublisher { *; }

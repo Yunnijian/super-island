@@ -2,10 +2,8 @@ package io.github.superisland.source.screenrecord
 
 import android.app.Notification
 import android.app.PendingIntent
-import android.content.ClipData
 import android.content.ContentResolver
 import android.content.Context
-import android.content.Intent
 import android.net.Uri
 import android.widget.RemoteViews
 import androidx.core.graphics.drawable.IconCompat
@@ -38,6 +36,7 @@ class ScreenRecordingFocusNotification(
         audioSource: ScreenRecordingAudioSource,
         pauseResumeIntent: PendingIntent,
         stopIntent: PendingIntent,
+        showInNotificationShade: Boolean,
     ): Notification {
         val duration = formatDuration(elapsedMillis)
         val title = if (paused) "录屏暂停" else "正在录屏..."
@@ -73,9 +72,9 @@ class ScreenRecordingFocusNotification(
                         intent = stopIntent,
                     ),
                 ),
-            // Island-only presentation: shade heads-up / default-importance flash made the
-            // status bar blink on every start even when PROJECT_MEDIA auto-granted consent.
-            showInNotificationShade = false,
+            // The initial FGS stays island-only while the projection hand-off settles. The service
+            // updates this same notification to a visible, silent Focus row once encoding starts.
+            showInNotificationShade = showInNotificationShade,
             showLeftIslandIcon = true,
             showRightIslandIcon = false,
             customRemoteViews =
@@ -99,8 +98,10 @@ class ScreenRecordingFocusNotification(
             "Recording output must use a content URI"
         }
         val title = if (savedToGallery) "已保存至“相册”" else "录屏已保存"
-        val viewIntent = viewPendingIntent(outputUri)
-        val shareIntent = sharePendingIntent(outputUri)
+        val viewIntent =
+            ScreenRecordingCompletionActionActivity.viewPendingIntent(appContext, outputUri)
+        val shareIntent =
+            ScreenRecordingCompletionActionActivity.sharePendingIntent(appContext, outputUri)
         return publisher.buildNotification(
             request =
                 FocusNotificationRequest(
@@ -119,7 +120,7 @@ class ScreenRecordingFocusNotification(
                         intent = shareIntent,
                     ),
                 ),
-            showInNotificationShade = false,
+            showInNotificationShade = true,
             showLeftIslandIcon = true,
             showRightIslandIcon = false,
             customRemoteViews = completedRemoteViews(title, viewIntent, shareIntent),
@@ -137,10 +138,29 @@ class ScreenRecordingFocusNotification(
         pauseResumeIntent: PendingIntent,
         stopIntent: PendingIntent,
     ): FocusCustomRemoteViews {
-        fun contentView(): RemoteViews =
-            RemoteViews(appContext.packageName, R.layout.screen_recording_focus_content).apply {
-                setTextViewText(R.id.screen_recording_focus_content_title, title)
-                setTextViewText(R.id.screen_recording_focus_content_timer, duration)
+        fun notificationView(layoutId: Int): RemoteViews =
+            RemoteViews(appContext.packageName, layoutId).apply {
+                setTextViewText(R.id.screen_recording_focus_notification_timer, duration)
+                setTextViewText(R.id.screen_recording_focus_notification_status, title)
+                setTextViewText(
+                    R.id.screen_recording_focus_notification_pause,
+                    appContext.getString(
+                        if (paused) {
+                            R.string.screen_recording_notification_resume
+                        } else {
+                            R.string.screen_recording_notification_pause
+                        },
+                    ),
+                )
+                setTextViewText(
+                    R.id.screen_recording_focus_notification_stop,
+                    appContext.getString(R.string.screen_recording_notification_stop),
+                )
+                setOnClickPendingIntent(
+                    R.id.screen_recording_focus_notification_pause,
+                    pauseResumeIntent,
+                )
+                setOnClickPendingIntent(R.id.screen_recording_focus_notification_stop, stopIntent)
             }
 
         val expanded =
@@ -169,8 +189,8 @@ class ScreenRecordingFocusNotification(
                 setOnClickPendingIntent(R.id.screen_recording_focus_stop, stopIntent)
             }
         return FocusCustomRemoteViews(
-            day = contentView(),
-            night = contentView(),
+            day = notificationView(R.layout.screen_recording_focus_notification),
+            night = notificationView(R.layout.screen_recording_focus_notification_night),
             islandExpanded = expanded,
         )
     }
@@ -180,46 +200,37 @@ class ScreenRecordingFocusNotification(
         viewIntent: PendingIntent,
         shareIntent: PendingIntent,
     ): FocusCustomRemoteViews {
-        fun completedView(): RemoteViews =
+        fun notificationView(layoutId: Int): RemoteViews =
+            RemoteViews(appContext.packageName, layoutId).apply {
+                setTextViewText(R.id.screen_recording_focus_notification_complete_title, title)
+                setTextViewText(
+                    R.id.screen_recording_focus_notification_complete_subtitle,
+                    appContext.getString(R.string.screen_recording_notification_tap_to_view),
+                )
+                setOnClickPendingIntent(
+                    R.id.screen_recording_focus_notification_complete_root,
+                    viewIntent,
+                )
+                setOnClickPendingIntent(
+                    R.id.screen_recording_focus_notification_complete_share,
+                    shareIntent,
+                )
+            }
+
+        val islandExpanded =
             RemoteViews(appContext.packageName, R.layout.screen_recording_focus_complete).apply {
                 setTextViewText(R.id.screen_recording_focus_complete_title, title)
-                setTextViewText(R.id.screen_recording_focus_complete_subtitle, "点击查看")
+                setTextViewText(
+                    R.id.screen_recording_focus_complete_subtitle,
+                    appContext.getString(R.string.screen_recording_notification_tap_to_view),
+                )
                 setOnClickPendingIntent(R.id.screen_recording_focus_complete_root, viewIntent)
                 setOnClickPendingIntent(R.id.screen_recording_focus_complete_share, shareIntent)
             }
         return FocusCustomRemoteViews(
-            day = completedView(),
-            night = completedView(),
-            islandExpanded = completedView(),
-        )
-    }
-
-    private fun viewPendingIntent(outputUri: Uri): PendingIntent {
-        val view =
-            Intent(Intent.ACTION_VIEW)
-                .setDataAndType(outputUri, VIDEO_MIME_TYPE)
-                .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                .apply { clipData = ClipData.newRawUri("screen-recording", outputUri) }
-        return PendingIntent.getActivity(
-            appContext,
-            VIEW_PENDING_INTENT_REQUEST_CODE,
-            Intent.createChooser(view, "查看录屏").addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION),
-            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
-        )
-    }
-
-    private fun sharePendingIntent(outputUri: Uri): PendingIntent {
-        val share =
-            Intent(Intent.ACTION_SEND)
-                .setType(VIDEO_MIME_TYPE)
-                .putExtra(Intent.EXTRA_STREAM, outputUri)
-                .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                .apply { clipData = ClipData.newRawUri("screen-recording", outputUri) }
-        return PendingIntent.getActivity(
-            appContext,
-            SHARE_PENDING_INTENT_REQUEST_CODE,
-            Intent.createChooser(share, "分享录屏").addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION),
-            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+            day = notificationView(R.layout.screen_recording_focus_notification_complete),
+            night = notificationView(R.layout.screen_recording_focus_notification_complete_night),
+            islandExpanded = islandExpanded,
         )
     }
 
@@ -233,10 +244,7 @@ class ScreenRecordingFocusNotification(
 
     companion object {
         const val NOTIFICATION_ID = 28_371
-        private const val VIEW_PENDING_INTENT_REQUEST_CODE = 28_373
-        private const val SHARE_PENDING_INTENT_REQUEST_CODE = 28_374
         private const val COMPLETION_TIMEOUT_MILLIS = 4_000L
-        private const val VIDEO_MIME_TYPE = "video/mp4"
 
         fun formatDuration(elapsedMillis: Long): String {
             val totalSeconds = TimeUnit.MILLISECONDS.toSeconds(elapsedMillis.coerceAtLeast(0L))

@@ -19,7 +19,12 @@
 - 2026-07-29 录屏磁贴 stopped 点击恢复增加真实连接 generation 后，最终
   `./scripts/check.sh` 门禁通过：610 tasks，`BUILD SUCCESSFUL in 2m 46s`。benchmark
   SHA-256 为 `12a92112a3aafc894848512d30ecf2ef303c4b3d8cd5e065bd2848318e402819`。
-- 同一 benchmark 已覆盖安装且设备 base APK SHA 一致；SystemUI 已从 PID `7946` 重载为
+- 2026-07-29 ColorOS Focus 通知收口后再次通过完整门禁：610 tasks，benchmark SHA-256
+  为 `2783b985d52718c68b1c27acb522afe76fa46afadbd31b2a7f8db5434dbba84e`；同一 APK
+  覆盖安装后设备 base APK 哈希一致，SystemUI 从 PID `18874` 重载为 `21791`，XMSF
+  PID `31104` 未变。
+- 上述 `12a92112…2819` benchmark 已覆盖安装且设备 base APK SHA 一致；SystemUI 已从
+  PID `7946` 重载为
   `30242`，XMSF persistent 已从 PID `10524` 重载为 `31683`。配置 schema 4 /
   revision `46` / digest
   `6ea09692…18601` 由两端接受；安装后 Hook/异常扫描为空。
@@ -43,6 +48,11 @@
   触摸启动均成功，顶部状态栏裁剪视频未检测到整条黑帧。
 - PMB110 录屏岛代码链：经审计的 ColorOS 标准静态资源、118dp 展开卡、真实暂停/恢复、
   暂停计时、完成卡和查看/分享动作均已实现；重复动作幂等且卡片更新与 ticker 串行。
+- 录屏 Focus 通知已改为 ColorOS 日间/夜间布局：运行、暂停、继续和完成态均在最终
+  benchmark 真机显示，暂停计时保持冻结；初始 FGS 继续隐藏，编码稳定一秒后才静默显示
+  通知行，避免恢复启动黑闪。完成卡查看/分享通过受 `STATUS_BAR_SERVICE` 保护的模块内
+  中转 Activity 恢复 URI grant 所有者身份，warsaw 已证明 SystemUI 解包后的原始 Intent
+  可分别打开视频查看 chooser 和带真实视频预览的分享 chooser。
 - 上一份已验收 benchmark 已在 warsaw 完成应用内录制、紧凑/展开岛、暂停/恢复、暂停态停止、
   完成卡显示/超时、成品媒体连续性，以及无存活 App 进程时的 QS 磁贴冷启动验收；运行期
   异常扫描为空。
@@ -64,7 +74,8 @@
 - 录屏入口的高帧率外部相机视觉复核；当前设备内录可证明状态栏容器和无整条黑帧，
   但不能排除 165 Hz 下仅持续一帧的闪烁。
 - 补完整 Miuix / Material 双皮肤录屏页矩阵。
-- 分别真实点击完成卡查看与分享。
+- SAF document URI 的完成卡查看/分享待在切换保存目录后单独手动验收；MediaStore 路径
+  已通过。
 - test-source 首装被系统以 `INSTALL_FAILED_USER_RESTRICTED` 拒绝；待正常授权后完成真实
   source-SBN smoke，未使用 Root 绕过。
 - MiShare resolver 在本次仓库重构后的回归。

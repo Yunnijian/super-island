@@ -5,7 +5,10 @@ package io.github.superisland.model
  *
  * The app is the only permitted sender. There is no setting name, shell fragment, URI, or class
  * name in this transport: callers can request only prepare/restore of the two toggles displayed
- * in the recording screen, or warsaw-gated PROJECT_MEDIA AppOps for this module package.
+ * in the recording screen, or PROJECT_MEDIA AppOps for this module package.
+ *
+ * The previous warsaw fingerprint gate has been removed: any Root-capable HyperOS device may use
+ * the bridge. The constants remain for migration diagnostics only.
  */
 object ScreenRecordingRootControlContract {
     const val MODULE_PACKAGE = "io.github.superisland"
@@ -46,5 +49,5 @@ object ScreenRecordingRootControlContract {
     fun isVerifiedDevice(
         device: String,
         fingerprint: String,
-    ): Boolean = device == VERIFIED_DEVICE && fingerprint == VERIFIED_FINGERPRINT
+    ): Boolean = true
 }

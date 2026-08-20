@@ -2,7 +2,6 @@ package io.github.superisland.source.screenrecord
 
 import android.content.Context
 import android.content.Intent
-import android.os.Build
 import android.util.Log
 import io.github.superisland.model.ScreenRecordingConfig
 import io.github.superisland.model.ScreenRecordingRootControlContract
@@ -25,22 +24,10 @@ class ScreenRecordingRootSettings(private val context: Context) {
     private val applicationContext = context.applicationContext
 
     fun capability(): ScreenRecordingRootCapability =
-        if (
-            ScreenRecordingRootControlContract.isVerifiedDevice(
-                Build.DEVICE,
-                Build.FINGERPRINT,
-            )
-        ) {
-            ScreenRecordingRootCapability(
-                supported = true,
-                summary = "warsaw / HyperOS 已验证；录制时由 SystemUI 安全桥接处理所选 Root 设置",
-            )
-        } else {
-            ScreenRecordingRootCapability(
-                supported = false,
-                summary = "当前 ROM 未通过录屏 Root 设置验证，不会修改系统设置",
-            )
-        }
+        ScreenRecordingRootCapability(
+            supported = true,
+            summary = "录制时由 SystemUI 安全桥接处理所选 Root 设置",
+        )
 
     /**
      * Always succeeds with either a prepared session or [ScreenRecordingRootSession.empty].

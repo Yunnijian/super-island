@@ -22,6 +22,10 @@
   点击恢复、一次性 provenance permit、真实连接/点击消费 generation、无回调超时与失败
   清理、完整门禁、APK 身份、进程重载、配置接受、负向日志及最终
   `12a92112…2819` 的用户手动验收。
+- `artifacts/coloros_focus_notification_2026-07-29/`：ColorOS 日间/夜间运行与完成 Focus
+  通知、暂停冻结/继续/完成动作、4 秒完成卡、SystemUI 原始 Intent 到模块内 URI grant
+  中转、MediaStore 查看/分享 chooser、最终 `2783b985…ba84e` benchmark 身份、进程重载、
+  资源释放和负向日志。
 - `device_research/`：ROM、反编译和互操作研究。
 
 公开或提交摘要前必须移除设备 serial、用户名绝对路径、第三方通知 key/UID 和通知正文。

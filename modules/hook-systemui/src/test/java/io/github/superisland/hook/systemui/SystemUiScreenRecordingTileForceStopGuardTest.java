@@ -38,8 +38,8 @@ public final class SystemUiScreenRecordingTileForceStopGuardTest {
                 "warsaw",
                 "Redmi/warsaw/warsaw:16/BP2A.250605.031.A3/OS3.0.306.0.WHPCNXM:user/release-keys",
                 202_501_210L));
-        assertFalse(SystemUiScreenRecordingTileForceStopGuard.isSupportedBuild(
-                "warsaw",
+        assertTrue(SystemUiScreenRecordingTileForceStopGuard.isSupportedBuild(
+                "songyuan",
                 "different-fingerprint",
                 202_501_210L));
         assertFalse(SystemUiScreenRecordingTileForceStopGuard.isSupportedBuild(

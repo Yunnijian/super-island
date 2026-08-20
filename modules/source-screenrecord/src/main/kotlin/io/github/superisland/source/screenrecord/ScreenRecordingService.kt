@@ -43,6 +43,7 @@ class ScreenRecordingService : Service() {
     private val started = AtomicBoolean(false)
     private val stopRequested = AtomicBoolean(false)
     private val recordingPaused = AtomicBoolean(false)
+    private val focusRowVisible = AtomicBoolean(false)
 
     private var cleanupFinished = false
     private var encoder: ScreenRecordingEncoder? = null
@@ -54,6 +55,22 @@ class ScreenRecordingService : Service() {
     private val mainHandler = Handler(Looper.getMainLooper())
     private val recordingClock = PausableRecordingClock { SystemClock.elapsedRealtime() }
     private var recordingStartedAtElapsed = 0L
+    private val focusRowReveal =
+        Runnable {
+            if (
+                !started.get() ||
+                    stopRequested.get() ||
+                    recordingStartedAtElapsed == 0L
+            ) {
+                return@Runnable
+            }
+            focusRowVisible.set(true)
+            val paused = recordingPaused.get()
+            notifyActiveFocusNotification(currentElapsedMillis(), paused)
+            if (!paused && !stopRequested.get()) {
+                mainHandler.postDelayed(islandTicker, ISLAND_TICK_MILLIS)
+            }
+        }
     private val islandTicker =
         object : Runnable {
             override fun run() {
@@ -65,15 +82,7 @@ class ScreenRecordingService : Service() {
                 ) {
                     return
                 }
-                val notification =
-                    activeFocusNotification(
-                        elapsedMillis = currentElapsedMillis(),
-                        paused = false,
-                    )
-                runCatching {
-                    NotificationManagerCompat.from(this@ScreenRecordingService)
-                        .notify(ScreenRecordingFocusNotification.NOTIFICATION_ID, notification)
-                }
+                notifyActiveFocusNotification(currentElapsedMillis(), paused = false)
                 if (!recordingPaused.get() && !stopRequested.get()) {
                     mainHandler.postDelayed(this, ISLAND_TICK_MILLIS)
                 }
@@ -131,7 +140,9 @@ class ScreenRecordingService : Service() {
             "onDestroy cleanupFinished=$cleanupFinished started=${started.get()} " +
                 "phase=${runCatching { runtimeStore.load().phase }.getOrNull()}",
         )
+        mainHandler.removeCallbacks(focusRowReveal)
         mainHandler.removeCallbacks(islandTicker)
+        focusRowVisible.set(false)
         recordingClock.reset()
         val mustCleanUp = synchronized(lifecycleLock) { !cleanupFinished }
         if (mustCleanUp) {
@@ -178,6 +189,7 @@ class ScreenRecordingService : Service() {
                     audioSource = config.audioSource,
                     pauseResumeIntent = pauseResumePendingIntent(currentlyPaused = false),
                     stopIntent = stopPendingIntent(),
+                    showInNotificationShade = false,
                 ),
                 foregroundServiceType(config),
             )
@@ -240,7 +252,11 @@ class ScreenRecordingService : Service() {
             recordingClock.start()
             recordingStartedAtElapsed = SystemClock.elapsedRealtime()
             recordingPaused.set(false)
-            mainHandler.post(islandTicker)
+            focusRowVisible.set(false)
+            // Keep the first FGS update island-only while the projection activity exits. The first
+            // stable reveal shows the silent ColorOS-style Focus row on the same notification ID.
+            mainHandler.removeCallbacks(focusRowReveal)
+            mainHandler.postDelayed(focusRowReveal, ISLAND_TICK_MILLIS)
             runtimeStore.save(
                 ScreenRecordingRuntimeState(
                     phase = ScreenRecordingPhase.RECORDING,
@@ -346,7 +362,9 @@ class ScreenRecordingService : Service() {
                 val activeElapsed = currentElapsedMillis()
                 postActiveFocusNotification(activeElapsed, paused = false)
                 mainHandler.removeCallbacks(islandTicker)
-                mainHandler.postDelayed(islandTicker, ISLAND_TICK_MILLIS)
+                if (focusRowVisible.get()) {
+                    mainHandler.postDelayed(islandTicker, ISLAND_TICK_MILLIS)
+                }
                 Log.e(TAG, "Unable to pause recording; previous state restored", failure)
                 return
             }
@@ -383,7 +401,9 @@ class ScreenRecordingService : Service() {
                 if (stopRequested.get() || cleanupFinished) return
                 postActiveFocusNotification(elapsed, paused = false)
                 mainHandler.removeCallbacks(islandTicker)
-                mainHandler.postDelayed(islandTicker, ISLAND_TICK_MILLIS)
+                if (focusRowVisible.get()) {
+                    mainHandler.postDelayed(islandTicker, ISLAND_TICK_MILLIS)
+                }
             }
         } catch (failure: Throwable) {
             val rollbackFailure =
@@ -499,6 +519,7 @@ class ScreenRecordingService : Service() {
             if (cleanupFinished) return
             cleanupFinished = true
         }
+        stopRequested.set(true)
 
         var failure = initialFailure
         var savedOutput: ScreenRecordingOutput? = null
@@ -536,46 +557,39 @@ class ScreenRecordingService : Service() {
         output = null
         rootSession = null
 
-        if (failure == null && restoreFailure == null) {
-            runtimeStore.save(
-                ScreenRecordingRuntimeState(
-                    phase = ScreenRecordingPhase.IDLE,
-                    message = successMessage,
-                    outputUri = savedOutput?.uri?.toString(),
-                    elapsedDurationMillis = currentElapsedMillis(),
-                ),
-            )
-        } else if (failure == null) {
-            Log.w(TAG, "Recording was saved, but Root settings could not be restored", restoreFailure)
-            runtimeStore.save(
-                ScreenRecordingRuntimeState(
-                    phase = ScreenRecordingPhase.ERROR,
-                    message = "录屏已保存，但系统设置恢复失败",
-                    outputUri = savedOutput?.uri?.toString(),
-                    elapsedDurationMillis = currentElapsedMillis(),
-                ),
-            )
-        } else {
+        if (restoreFailure != null) {
+            val restoreMessage =
+                if (failure == null && savedOutput != null) {
+                    "Recording was saved, but Root settings could not be restored"
+                } else {
+                    "Root settings could not be restored during recording cleanup"
+                }
+            Log.w(TAG, restoreMessage, restoreFailure)
+        }
+        if (failure != null) {
             Log.w(TAG, "Screen recording ended without a completed output", failure)
-            val detail =
-                (failure.message?.trim()?.takeIf { it.isNotEmpty() }
-                    ?: failure.javaClass.simpleName)
-                    .take(160)
-                    .takeIf { it.isNotBlank() }
-            runtimeStore.save(
-                ScreenRecordingRuntimeState(
-                    phase = ScreenRecordingPhase.ERROR,
-                    message =
-                        if (detail != null) {
-                            "录屏失败：$detail"
-                        } else {
-                            "录屏失败，未保留不完整文件"
-                        },
-                ),
+        }
+        val completionOutputUri = savedOutput?.uri?.toString()
+        val completionState =
+            ScreenRecordingCompletionPolicy.finishedState(
+                recordingFailure = failure,
+                outputUri = completionOutputUri,
+                rootRestoreFailure = restoreFailure,
+                successMessage = successMessage,
+                elapsedDurationMillis = currentElapsedMillis(),
             )
+        val completionStatePersisted = runtimeStore.save(completionState)
+        val shouldPublishCompletion =
+            ScreenRecordingCompletionPolicy.shouldPublish(
+                recordingFailure = failure,
+                outputUri = completionOutputUri,
+                statePersisted = completionStatePersisted,
+            )
+        if (failure == null && savedOutput != null && !shouldPublishCompletion) {
+            Log.e(TAG, "Saved recording URI was not persisted; suppressing unusable completion card")
         }
         val completionPosted =
-            if (failure == null && savedOutput != null) {
+            if (shouldPublishCompletion && savedOutput != null) {
                 runCatching {
                     NotificationManagerCompat.from(this)
                         .notify(
@@ -591,7 +605,9 @@ class ScreenRecordingService : Service() {
             } else {
                 false
             }
+        mainHandler.removeCallbacks(focusRowReveal)
         mainHandler.removeCallbacks(islandTicker)
+        focusRowVisible.set(false)
         recordingPaused.set(false)
         recordingStartedAtElapsed = 0L
         recordingClock.reset()
@@ -660,7 +676,23 @@ class ScreenRecordingService : Service() {
             audioSource = activeConfig?.audioSource ?: ScreenRecordingAudioSource.NONE,
             pauseResumeIntent = pauseResumePendingIntent(currentlyPaused = paused),
             stopIntent = stopPendingIntent(),
+            showInNotificationShade = focusRowVisible.get(),
         )
+
+    private fun notifyActiveFocusNotification(
+        elapsedMillis: Long,
+        paused: Boolean,
+    ) {
+        runCatching {
+            NotificationManagerCompat.from(this)
+                .notify(
+                    ScreenRecordingFocusNotification.NOTIFICATION_ID,
+                    activeFocusNotification(elapsedMillis, paused),
+                )
+        }.onFailure { failure ->
+            Log.w(TAG, "Unable to update recording Focus card", failure)
+        }
+    }
 
     private fun postActiveFocusNotification(
         elapsedMillis: Long,
@@ -674,15 +706,7 @@ class ScreenRecordingService : Service() {
             ) {
                 return@post
             }
-            runCatching {
-                NotificationManagerCompat.from(this)
-                    .notify(
-                        ScreenRecordingFocusNotification.NOTIFICATION_ID,
-                        activeFocusNotification(elapsedMillis, paused),
-                    )
-            }.onFailure { failure ->
-                Log.w(TAG, "Unable to update recording Focus card", failure)
-            }
+            notifyActiveFocusNotification(elapsedMillis, paused)
         }
     }
 

@@ -61,7 +61,7 @@
 | 胶囊定制 | ColorOS 流体云运行时方案已冻结，开关固定关闭并回退 HyperOS | `NO-GO`，未经重新决策不得实现 |
 | 卡片定制、尺寸与卡片布局 | 仅保留信息架构占位，当前不可编辑 | L4 预留 |
 | 小米互传文件夹 | 拓展页独立开关，将固定接收目录交给 MT 管理器 | resolver 已验证，真实传输用户手动验收通过 |
-| 超级岛录屏 | 拓展页 MediaProjection 录屏；可选 warsaw 固定 Root 设置桥（触控反馈 / 暂时关屏幕共享保护）；默认保存 `DCIM/screenrecorder` 或 SAF；录屏岛可直接复用经 PMB110 审计的 ColorOS 标准 Android 静态资源与视觉参数，但 transport 仍为 Xiaomi Focus | 应用内录制、暂停/恢复、暂停态停止、完成卡超时、成品媒体和真实连接 generation 加固后的 stopped 磁贴点击恢复已在最终 benchmark 真机验收；查看/分享和双皮肤矩阵待补 |
+| 超级岛录屏 | 拓展页 MediaProjection 录屏；可选 warsaw 固定 Root 设置桥（触控反馈 / 暂时关屏幕共享保护）；默认保存 `DCIM/screenrecorder` 或 SAF；录屏岛可直接复用经 PMB110 审计的 ColorOS 标准 Android 静态资源与视觉参数，但 transport 仍为 Xiaomi Focus | 应用内录制、暂停/恢复、暂停态停止、ColorOS 日夜 Focus 通知、完成卡超时、MediaStore 查看/分享、成品媒体和真实连接 generation 加固后的 stopped 磁贴点击恢复已在最终 benchmark 真机验收；SAF 动作和双皮肤页面矩阵待补 |
 
 ## 4. 常驻超级岛配置
 

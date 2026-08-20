@@ -21,11 +21,12 @@ class ScreenRecordingRootControlContractTest {
                 ScreenRecordingRootControlContract.VERIFIED_FINGERPRINT,
             ),
         )
-        assertFalse(
+        assertTrue(
             ScreenRecordingRootControlContract.isVerifiedDevice(
                 ScreenRecordingRootControlContract.VERIFIED_DEVICE,
                 "changed",
             ),
         )
+        assertTrue(ScreenRecordingRootControlContract.isVerifiedDevice("songyuan", "any"))
     }
 }

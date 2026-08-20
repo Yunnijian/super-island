@@ -5,7 +5,6 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.net.Uri;
-import android.os.Build;
 import android.os.Bundle;
 import android.os.Process;
 import android.os.UserHandle;
@@ -23,8 +22,9 @@ import java.util.concurrent.Executors;
  * Fixed SystemUI-side settings bridge for the two Root-only recording controls.
  *
  * <p>This contains no shell, app_process, Shizuku, arbitrary setting name, or arbitrary Binder
- * dispatch. Requests come only from the module's signed app, are exact-fingerprint gated, and
- * report a bounded result through the existing STATUS_BAR_SERVICE-protected provider.
+ * dispatch. Requests come only from the module's signed app and report a bounded result through
+ * the existing STATUS_BAR_SERVICE-protected provider. The previous warsaw fingerprint gate has
+ * been removed.
  */
 final class SystemUiScreenRecordingRootBridge {
     private static final String TAG = "SuperIslandScreenRecordRoot";
@@ -156,10 +156,6 @@ final class SystemUiScreenRecordingRootBridge {
             Intent intent,
             String operation
     ) {
-        if (!ScreenRecordingRootControlContract.INSTANCE.isVerifiedDevice(
-                Build.DEVICE, Build.FINGERPRINT)) {
-            return RootControlResult.failure("当前 ROM 未通过录屏 Root 设置验证", RootState.empty());
-        }
         if (ScreenRecordingRootControlContract.OPERATION_PREPARE.equals(operation)) {
             return prepare(
                     context,
@@ -189,7 +185,7 @@ final class SystemUiScreenRecordingRootBridge {
 
     /**
      * Grants or revokes {@code android:project_media} for the module package only. Mirrors the
-     * closed IslandRecorder Root path: fixed op, fixed package/UID, warsaw fingerprint gate.
+     * closed IslandRecorder Root path: fixed op, fixed package/UID.
      */
     private static RootControlResult setProjectMedia(Context context, boolean allowed) {
         try {
@@ -249,7 +245,7 @@ final class SystemUiScreenRecordingRootBridge {
             Object code = strOpToOp.invoke(null, OPSTR_PROJECT_MEDIA);
             if (code instanceof Integer) return (Integer) code;
         } catch (Throwable ignored) {
-            // Fall through to the fixed warsaw op code.
+            // Fall through to the fixed op code.
         }
         return OP_PROJECT_MEDIA;
     }
