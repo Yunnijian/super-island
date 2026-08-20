@@ -1,12 +1,12 @@
 # 当前状态
 
-更新时间：2026-07-29
+更新时间：2026-08-21
 
 | 项目 | 当前值 |
 | --- | --- |
 | 应用 | `io.github.superisland` |
 | 版本 | `0.4.8-m4-dev` / versionCode `12` |
-| 目标设备 | `warsaw` / HyperOS `OS3.0.306.0.WHPCNXM` |
+| 目标设备 | `warsaw` / `M332BF` / `songyuan` / `M098FE` / HyperOS `OS3.0.306.0.WHPCNXM` |
 | 运行架构 | Root + LSPosed，libxposed API 102 |
 | UI | 默认 Miuix，可选整页 Material 3 |
 
@@ -34,15 +34,22 @@
 - 最终录屏文件为 HEVC `1280x2772` + AAC、约 `788.510s`；视频 4841 帧、音频
   36955 帧的 PTS 非单调计数均为 0，原始音视频解码均退出 0。恢复首帧为 I 帧，边界抽帧
   无花屏；录屏服务、MediaProjection 和 VirtualDisplay 已退出。
+- 2026-08-21 去 warsaw 指纹门控并补齐 ColorOS 完成卡策略后再次通过完整门禁：610 tasks，
+  `BUILD SUCCESSFUL in 2m 22s`。benchmark SHA-256 为
+  `2cbebcb9dca7d93ef88c06f6888c13d9c87a75e20e2892da38697cc9d893f3cb`；同一 APK 覆盖安装后
+  设备 base APK 哈希一致，SystemUI 从 PID `5655` 重载为 `23346`，XMSF 从 `8857` 重载为 `24208`
+  （`songyuan` / `M098FE` / `OS3.0.306.0.WGNCNXM`）。Root 设置桥与磁贴 guard 已去
+  fingerprint 校验，三开关在 `songyuan` 上可直接开启；`testing.md:60` smoke 与双皮肤矩阵
+  已在该机手动验收通过。
 
 ## 已完成
 
-- SystemUI 常驻岛宿主、App 强停后刷新。
-- 第三方 source-SBN 原地 Focus 映射和受限 XMSF 适配。
-- schema v4 App/Channel 规则、优先级和 App 默认仅焦点。
-- 常驻展开内容与三个安全动作槽位。
+- SystemUI 常驻岛宿主、App 强停后刷新（`testing.md:60` smoke 已在 `2cbebcb9` 的 `songyuan` 上复验通过）。
+- 第三方 source-SBN 原地 Focus 映射和受限 XMSF 适配（同 smoke 复验通过）。
+- schema v4 App/Channel 规则、优先级和 App 默认仅焦点；Channel 级仅焦点与双皮肤持久化已复测通过。
+- 常驻展开内容与三个安全动作槽位；常驻中优先级 `1` 与低/高优先级队列仲裁已复测通过。
 - MiShare 固定目录拓展与有界 DexKit 兜底。
-- 录屏 MediaProjection 主链、有声 PTS 和 Root 设置桥。
+- 录屏 MediaProjection 主链、有声 PTS 和 Root 设置桥（已去 `warsaw` 指纹门控，`songyuan` 上三开关可直接开启）。
 - 录屏 QS 磁贴与应用内开始录制的状态栏黑闪修复：透明 edge-to-edge 授权中转页、
   无 affinity 的一次性磁贴任务和零转场已装机；上一轮 benchmark 的真实磁贴与应用内
   触摸启动均成功，顶部状态栏裁剪视频未检测到整条黑帧。
@@ -65,21 +72,18 @@
   `12a92112…2819` 也已完成门禁、安装、Hook 装载、负向扫描及用户手动复验。最终设备
   时间线证明 stopped 恢复、TileService 冷启动、录屏创建/释放，并生成 `963,528` 字节
   MP4；用户回报“正常，可以提交推送远端了”。
+- `2cbebcb9…3cb` 在 `songyuan`/`M098FE` 上完成 `testing.md:60` 全量 smoke（常驻强停刷新、新 source-SBN、优先级仲裁、录屏全链路）与 Miuix/Material 双皮肤录屏矩阵手动验收，均正常。
 - benchmark Xposed ABI 门禁。
 
 ## 待完成
 
-- 常驻中优先级与低/高优先级队列仲裁复测。
-- Channel 级仅焦点和双皮肤持久化复测。
 - 录屏入口的高帧率外部相机视觉复核；当前设备内录可证明状态栏容器和无整条黑帧，
   但不能排除 165 Hz 下仅持续一帧的闪烁。
-- 补完整 Miuix / Material 双皮肤录屏页矩阵。
 - SAF document URI 的完成卡查看/分享待在切换保存目录后单独手动验收；MediaStore 路径
   已通过。
 - test-source 首装被系统以 `INSTALL_FAILED_USER_RESTRICTED` 拒绝；待正常授权后完成真实
   source-SBN smoke，未使用 Root 绕过。
 - MiShare resolver 在本次仓库重构后的回归。
-- 本次最终安装后的 App 强停常驻刷新和真实新 source-SBN 复测。
 - L3/L4 尚未开始，ColorOS 流体云保持冻结。
 
 历史时间线位于 `archive/development-history.md`，设备证据位置见 `evidence-index.md`。

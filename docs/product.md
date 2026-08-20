@@ -1,6 +1,6 @@
 # 产品规格与当前真相
 
-更新时间：2026-07-23
+更新时间：2026-08-21
 
 本文是产品层的唯一现行真相。实现细节以代码和专项审计为准；历史路线只在
 `archive/history.md` 中解释，不能重新变成实现依据。
@@ -18,7 +18,7 @@
 - 当前版本：`0.4.8-m4-dev`，versionCode `12`
 - 默认皮肤：Miuix；可选整页 Material 3
 - 一级导航：首页、超级岛、拓展、设置、我的
-- 目标验证机：`warsaw` / `M332BF` / HyperOS `OS3.0.306.0.WHPCNXM`
+- 目标验证机：`warsaw` / `M332BF` / `songyuan` / `M098FE` / HyperOS `OS3.0.306.0.WHPCNXM`（Root 设置桥已去指纹门控，任意 Root 设备可用）
 
 ## 2. 运行作用域与身份链
 
@@ -61,7 +61,7 @@
 | 胶囊定制 | ColorOS 流体云运行时方案已冻结，开关固定关闭并回退 HyperOS | `NO-GO`，未经重新决策不得实现 |
 | 卡片定制、尺寸与卡片布局 | 仅保留信息架构占位，当前不可编辑 | L4 预留 |
 | 小米互传文件夹 | 拓展页独立开关，将固定接收目录交给 MT 管理器 | resolver 已验证，真实传输用户手动验收通过 |
-| 超级岛录屏 | 拓展页 MediaProjection 录屏；可选 warsaw 固定 Root 设置桥（触控反馈 / 暂时关屏幕共享保护）；默认保存 `DCIM/screenrecorder` 或 SAF；录屏岛可直接复用经 PMB110 审计的 ColorOS 标准 Android 静态资源与视觉参数，但 transport 仍为 Xiaomi Focus | 应用内录制、暂停/恢复、暂停态停止、ColorOS 日夜 Focus 通知、完成卡超时、MediaStore 查看/分享、成品媒体和真实连接 generation 加固后的 stopped 磁贴点击恢复已在最终 benchmark 真机验收；SAF 动作和双皮肤页面矩阵待补 |
+| 超级岛录屏 | 拓展页 MediaProjection 录屏；可选 Root 设置桥（触控反馈 / 暂时关屏幕共享保护，已去 warsaw 指纹门控）；默认保存 `DCIM/screenrecorder` 或 SAF；录屏岛可直接复用经 PMB110 审计的 ColorOS 标准 Android 静态资源与视觉参数，但 transport 仍为 Xiaomi Focus | 应用内录制、暂停/恢复、暂停态停止、ColorOS 日夜 Focus 通知、完成卡超时、MediaStore 查看/分享、成品媒体和真实连接 generation 加固后的 stopped 磁贴点击恢复已在 `warsaw`/`songyuan` 双机验收；`2cbebcb9` 双皮肤录屏矩阵已验收，SAF 切换后查看/分享待补 |
 
 ## 4. 常驻超级岛配置
 
@@ -124,7 +124,7 @@ OEM `canShowFocus` 原值。进度通知的过滤和 XMSF 的 scope/package/key/
 ## 6. 数据与安全
 
 所有新功能必须先评估公开 Android API，再评估小米服务 API，最后才考虑固定、只读、
-fingerprint 门控的机型回退。不能因为已经有 Root 就直接读 `/sys`、`/proc` 或日志。
+fingerprint 门控的机型回退。录屏 Root 设置桥已按用户决策去除指纹门控；其它模块仍保持固定只读门控。不能因为已经有 Root 就直接读 `/sys`、`/proc` 或日志。
 
 DexKit 只用于 MiShare 混淆 Intent builder 的有界兜底：精确方法 -> APK 身份绑定
 descriptor 缓存 -> 唯一结果的有界扫描。不得在 Focus、常驻刷新、权限判断或 UI

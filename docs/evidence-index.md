@@ -26,6 +26,10 @@
   通知、暂停冻结/继续/完成动作、4 秒完成卡、SystemUI 原始 Intent 到模块内 URI grant
   中转、MediaStore 查看/分享 chooser、最终 `2783b985…ba84e` benchmark 身份、进程重载、
   资源释放和负向日志。
+- `artifacts/screen_recording_whitelist_removal_2026-08-21/`：去 warsaw 指纹门控后的
+  `2cbebcb9…3cb` 完整门禁、双机覆盖安装、SystemUI `5655→23346` / XMSF `24208` 重载、
+  `songyuan` 三 Root 开关可用性、`testing.md:60` 全量 smoke 与 Miuix/Material 双皮肤
+  录屏矩阵手动验收。
 - `device_research/`：ROM、反编译和互操作研究。
 
 公开或提交摘要前必须移除设备 serial、用户名绝对路径、第三方通知 key/UID 和通知正文。
