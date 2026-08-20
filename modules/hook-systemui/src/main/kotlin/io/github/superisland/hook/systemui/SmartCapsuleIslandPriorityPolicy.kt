@@ -9,6 +9,5 @@ internal object SmartCapsuleIslandPriorityPolicy {
     fun effective(
         configured: IslandPriority,
         fingerprint: String,
-    ): IslandPriority =
-        if (fingerprint == SUPPORTED_FINGERPRINT) configured else IslandPriority.LOW
+    ): IslandPriority = configured
 }

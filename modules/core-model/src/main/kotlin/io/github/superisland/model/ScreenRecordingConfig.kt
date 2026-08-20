@@ -196,7 +196,7 @@ data class ScreenRecordingConfig(
     val confirmBeforeStart: Boolean = true,
     /**
      * User preference to keep [android.app.AppOpsManager.OPSTR_PROJECT_MEDIA] allowed for this
-     * package via the warsaw-gated SystemUI Root bridge. Actual AppOps state is checked live.
+     * package via the SystemUI Root bridge. Actual AppOps state is checked live.
      */
     val projectMediaEnabled: Boolean = false,
     val tileStyle: ScreenRecordingTileStyle = ScreenRecordingTileStyle.RECORDING,

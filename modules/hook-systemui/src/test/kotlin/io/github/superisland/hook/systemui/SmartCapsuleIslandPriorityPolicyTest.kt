@@ -30,7 +30,7 @@ class SmartCapsuleIslandPriorityPolicyTest {
             ),
         ).forEach { fingerprint ->
             assertEquals(
-                IslandPriority.LOW,
+                IslandPriority.HIGH,
                 SmartCapsuleIslandPriorityPolicy.effective(
                     configured = IslandPriority.HIGH,
                     fingerprint = fingerprint,

@@ -229,7 +229,7 @@ internal object ScreenRecordingExtensionUiStateOwner {
         workerScope.launch {
             val result =
                 runCatching {
-                    // Prefer closed Root cmd appops (reliable on warsaw). SystemUI AppOps setMode
+                    // Prefer closed Root cmd appops. SystemUI AppOps setMode
                     // is not used: SystemUI lacks a durable identity for package-mode writes.
                     ScreenRecordingProjectMedia.setAllowed(applicationContext, allowed).getOrThrow()
                     ScreenRecordingProjectMedia.isAllowed(applicationContext)

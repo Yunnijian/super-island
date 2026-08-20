@@ -157,15 +157,6 @@ final class SystemUiScreenRecordingTileForceStopGuard {
                 ? context.getApplicationContext()
                 : context;
         if (!SYSTEM_UI_PACKAGE.equals(appContext.getPackageName())) return null;
-        long versionCode;
-        try {
-            versionCode = appContext.getPackageManager()
-                    .getPackageInfo(SYSTEM_UI_PACKAGE, 0)
-                    .getLongVersionCode();
-        } catch (PackageManager.NameNotFoundException missing) {
-            return null;
-        }
-        if (!isSupportedBuild(Build.DEVICE, Build.FINGERPRINT, versionCode)) return null;
 
         LauncherApps launcherApps = appContext.getSystemService(LauncherApps.class);
         if (launcherApps == null) {
@@ -345,7 +336,7 @@ final class SystemUiScreenRecordingTileForceStopGuard {
     }
 
     static boolean isSupportedBuild(String device, String fingerprint, long systemUiVersionCode) {
-        return systemUiVersionCode == WARSAW_SYSTEM_UI_VERSION_CODE;
+        return true;
     }
 
     static boolean shouldBlock(String packageName, String className, int applicationFlags) {
