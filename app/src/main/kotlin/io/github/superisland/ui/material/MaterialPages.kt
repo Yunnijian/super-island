@@ -162,7 +162,6 @@ fun MaterialPrimaryPage(
                 onEntrySelected = { entryId ->
                     onOpenDestination(
                         when (entryId) {
-                            "device_adapter" -> AppDestination.EXTENSION_DEVICE
                             "mishare_folder" -> AppDestination.EXTENSION_MISHARE_FOLDER
                             "screen_recording" -> AppDestination.EXTENSION_SCREEN_RECORDING
                             else -> AppDestination.EXTENSIONS
@@ -205,7 +204,6 @@ private fun MaterialSuperIslandDirectory(
                 "monitor" -> onOpenDestination(AppDestination.BATTERY_CONFIGURATION)
                 "smart_capsule" -> onOpenDestination(AppDestination.SMART_CAPSULE_APPS)
                 "media_island" -> onOpenDestination(AppDestination.MEDIA)
-                "live_update_lab" -> onOpenDestination(AppDestination.LIVE_UPDATE_LAB)
                 "capsule_appearance" -> onOpenDestination(AppDestination.CAPSULE_APPEARANCE)
             }
         },

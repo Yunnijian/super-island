@@ -30,6 +30,10 @@
   `2cbebcb9…3cb` 完整门禁、双机覆盖安装、SystemUI `5655→23346` / XMSF `24208` 重载、
   `songyuan` 三 Root 开关可用性、`testing.md:60` 全量 smoke 与 Miuix/Material 双皮肤
   录屏矩阵手动验收。
+- `artifacts/whitelist_removal_all_but_fan_2026-08-21/`：去所有非风扇白名单（优先级、磁贴版本门控）后的
+  `7a2991dd…c060` 完整门禁、双机安装、SystemUI `5154→17687` / `23346→22210` 重载与风扇保留验证。
+- `artifacts/remove_focus_test_and_device_adapter_2026-08-21/`：完整移除焦点通知测试与设备能力适配入口（保留风扇监控）后的
+  `610 tasks` 门禁、`PrimaryDirectory`、`AppNavigator`、`MainActivity`、`Adaptive/Material` 链路清理。
 - `device_research/`：ROM、反编译和互操作研究。
 
 公开或提交摘要前必须移除设备 serial、用户名绝对路径、第三方通知 key/UID 和通知正文。

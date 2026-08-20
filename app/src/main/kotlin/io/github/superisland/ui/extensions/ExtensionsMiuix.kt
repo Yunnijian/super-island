@@ -10,7 +10,6 @@ import io.github.superisland.ui.extensionsDirectoryGroups
 @Composable
 fun ExtensionsMiuix(
     onTabSelected: (AppPrimaryTab) -> Unit,
-    onOpenDeviceAdapter: () -> Unit,
     onOpenMiShareFolder: () -> Unit,
     onOpenScreenRecording: () -> Unit,
     showBottomBar: Boolean = true,
@@ -26,7 +25,6 @@ fun ExtensionsMiuix(
         onTabSelected = onTabSelected,
         onEntrySelected = { entryId ->
             when (entryId) {
-                "device_adapter" -> onOpenDeviceAdapter()
                 "mishare_folder" -> onOpenMiShareFolder()
                 "screen_recording" -> onOpenScreenRecording()
             }

@@ -11,8 +11,6 @@ import io.github.superisland.design.BatteryMonitorDiagnosticsScreen as MiuixBatt
 import io.github.superisland.design.BatteryMonitorEventsScreen as MiuixBatteryMonitorEventsScreen
 import io.github.superisland.design.BatteryRealtimeScreen as MiuixBatteryRealtimeScreen
 import io.github.superisland.design.DirectoryGroupUi
-import io.github.superisland.design.FocusNotificationCapabilityScreen as MiuixFocusNotificationCapabilityScreen
-import io.github.superisland.design.FocusNotificationEventScreen as MiuixFocusNotificationEventScreen
 import io.github.superisland.design.InformationEntryUi
 import io.github.superisland.design.IslandPriorityOptionUi
 import io.github.superisland.design.MediaIslandConnectionScreen as MiuixMediaIslandConnectionScreen
@@ -35,8 +33,6 @@ import io.github.superisland.ui.material.MaterialBatteryContinuousMonitorScreen
 import io.github.superisland.ui.material.MaterialBatteryMonitorDiagnosticsScreen
 import io.github.superisland.ui.material.MaterialBatteryMonitorEventsScreen
 import io.github.superisland.ui.material.MaterialBatteryRealtimeScreen
-import io.github.superisland.ui.material.MaterialFocusNotificationCapabilityScreen
-import io.github.superisland.ui.material.MaterialFocusNotificationEventScreen
 import io.github.superisland.ui.material.MaterialMediaIslandConnectionScreen
 import io.github.superisland.ui.material.MaterialMediaIslandSourcesScreen
 import io.github.superisland.ui.material.MaterialMediaIslandStatusScreen
@@ -149,77 +145,6 @@ fun AppInformationDetailScreen(
     when (LocalUiMode.current) {
         UiMode.Miuix -> MiuixAppInformationDetailScreen(title, subtitle, entries, backLabel, onBack)
         UiMode.Material -> MaterialAppInformationDetailScreen(title, subtitle, entries, backLabel, onBack)
-    }
-}
-
-@Composable
-fun FocusNotificationCapabilityScreen(
-    modeLabel: String,
-    notificationStatus: String,
-    focusProtocolStatus: String,
-    showNotificationPermissionAction: Boolean,
-    onRequestNotificationPermission: () -> Unit,
-    onRefresh: () -> Unit,
-    onBackToFocusTest: () -> Unit,
-) {
-    when (LocalUiMode.current) {
-        UiMode.Miuix ->
-            MiuixFocusNotificationCapabilityScreen(
-                modeLabel,
-                notificationStatus,
-                focusProtocolStatus,
-                showNotificationPermissionAction,
-                onRequestNotificationPermission,
-                onRefresh,
-                onBackToFocusTest,
-            )
-        UiMode.Material ->
-            MaterialFocusNotificationCapabilityScreen(
-                modeLabel,
-                notificationStatus,
-                focusProtocolStatus,
-                showNotificationPermissionAction,
-                onRequestNotificationPermission,
-                onRefresh,
-                onBackToFocusTest,
-            )
-    }
-}
-
-@Composable
-fun FocusNotificationEventScreen(
-    modeLabel: String,
-    operationStatus: String,
-    progress: Int,
-    canPublish: Boolean,
-    onPublish: () -> Unit,
-    onAdvance: () -> Unit,
-    onCancel: () -> Unit,
-    onBackToFocusTest: () -> Unit,
-) {
-    when (LocalUiMode.current) {
-        UiMode.Miuix ->
-            MiuixFocusNotificationEventScreen(
-                modeLabel,
-                operationStatus,
-                progress,
-                canPublish,
-                onPublish,
-                onAdvance,
-                onCancel,
-                onBackToFocusTest,
-            )
-        UiMode.Material ->
-            MaterialFocusNotificationEventScreen(
-                modeLabel,
-                operationStatus,
-                progress,
-                canPublish,
-                onPublish,
-                onAdvance,
-                onCancel,
-                onBackToFocusTest,
-            )
     }
 }
 

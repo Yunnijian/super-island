@@ -14,7 +14,6 @@ fun superIslandDirectoryGroups(): List<DirectoryGroupUi> =
                     DirectoryEntryUi("monitor", "常驻超级岛", "通过超级岛常驻显示设备实时状态", DirectoryIcon.MONITOR, showChevron = false),
                     DirectoryEntryUi("smart_capsule", "超级岛通知", "将你允许的应用通知显示到超级岛", DirectoryIcon.NOTIFICATION, showChevron = false),
                     DirectoryEntryUi("media_island", "超级岛音乐", "管理已允许播放器的媒体会话与歌词入口", DirectoryIcon.MEDIA, showChevron = false),
-                    DirectoryEntryUi("live_update_lab", "焦点通知测试", "发送受控测试事件并检查系统上岛能力", DirectoryIcon.LAB, showChevron = false),
                 ),
         ),
         DirectoryGroupUi(
@@ -50,18 +49,6 @@ fun extensionsDirectoryGroups(): List<DirectoryGroupUi> =
                         id = "mishare_folder",
                         title = "小米互传文件夹",
                         summary = "使用 MT 管理器打开接收文件夹",
-                        icon = DirectoryIcon.DEVICE,
-                    ),
-                ),
-        ),
-        DirectoryGroupUi(
-            title = "设备适配",
-            entries =
-                listOf(
-                    DirectoryEntryUi(
-                        id = "device_adapter",
-                        title = "设备能力适配",
-                        summary = "识别机型并说明可用的固定只读能力",
                         icon = DirectoryIcon.DEVICE,
                     ),
                 ),

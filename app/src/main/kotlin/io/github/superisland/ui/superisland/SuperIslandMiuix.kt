@@ -14,7 +14,6 @@ fun SuperIslandMiuix(
     onOpenSmartCapsule: () -> Unit,
     onOpenMediaIsland: () -> Unit,
     onOpenBatteryMonitor: () -> Unit,
-    onOpenLiveUpdateLab: () -> Unit,
     onOpenCapsuleAppearance: () -> Unit,
     showBottomBar: Boolean = true,
     bottomInnerPadding: Dp = 0.dp,
@@ -32,7 +31,6 @@ fun SuperIslandMiuix(
                 "smart_capsule" -> onOpenSmartCapsule()
                 "media_island" -> onOpenMediaIsland()
                 "monitor" -> onOpenBatteryMonitor()
-                "live_update_lab" -> onOpenLiveUpdateLab()
                 "capsule_appearance" -> onOpenCapsuleAppearance()
             }
         },

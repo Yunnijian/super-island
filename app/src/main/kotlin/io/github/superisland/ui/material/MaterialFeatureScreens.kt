@@ -453,63 +453,6 @@ private fun DirectoryIcon.materialFeatureIcon(): ImageVector =
     }
 
 @Composable
-fun MaterialFocusNotificationCapabilityScreen(
-    modeLabel: String,
-    notificationStatus: String,
-    focusProtocolStatus: String,
-    showNotificationPermissionAction: Boolean,
-    onRequestNotificationPermission: () -> Unit,
-    onRefresh: () -> Unit,
-    onBackToFocusTest: () -> Unit,
-) {
-    MaterialFeatureScreen(title = "系统权限", subtitle = modeLabel, onBack = onBackToFocusTest) {
-        MaterialInformationGroup(
-            listOf(
-                MaterialInformationRow("通知权限", notificationStatus),
-                MaterialInformationRow("焦点通知状态", focusProtocolStatus),
-            ),
-        )
-        if (showNotificationPermissionAction) {
-            MaterialPrimaryAction("允许通知", onClick = onRequestNotificationPermission)
-        }
-        MaterialSecondaryAction("刷新能力状态", onClick = onRefresh)
-        MaterialTextAction("返回焦点通知测试", onClick = onBackToFocusTest)
-    }
-}
-
-@Composable
-fun MaterialFocusNotificationEventScreen(
-    modeLabel: String,
-    operationStatus: String,
-    progress: Int,
-    canPublish: Boolean,
-    onPublish: () -> Unit,
-    onAdvance: () -> Unit,
-    onCancel: () -> Unit,
-    onBackToFocusTest: () -> Unit,
-) {
-    MaterialFeatureScreen(title = "测试事件", subtitle = modeLabel, onBack = onBackToFocusTest) {
-        MaterialProgressInformation(
-            title = "测试事件",
-            summary = operationStatus,
-            progress = progress / 100f,
-        )
-        MaterialInformationGroup(
-            listOf(
-                MaterialInformationRow(
-                    title = "发送条件",
-                    summary = if (canPublish) "系统通知已允许，可以发送测试事件" else "请先完成系统权限设置",
-                ),
-            ),
-        )
-        MaterialPrimaryAction("发送测试事件", enabled = canPublish, onClick = onPublish)
-        MaterialSecondaryAction("推进 20%", enabled = canPublish, onClick = onAdvance)
-        MaterialSecondaryAction("结束事件", onClick = onCancel)
-        MaterialTextAction("返回焦点通知测试", onClick = onBackToFocusTest)
-    }
-}
-
-@Composable
 fun MaterialSmartCapsuleAppsScreen(
     enabled: Boolean,
     apps: List<NotificationSourceOptionUi>,

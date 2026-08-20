@@ -4,20 +4,16 @@ import android.os.Build
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import io.github.superisland.BatteryMonitorService
-import io.github.superisland.FocusNotificationFeatureStore
 import io.github.superisland.IslandAppearanceConfigSync
 import io.github.superisland.IslandAppearanceStore
 import io.github.superisland.MiShareFolderExtensionStore
-import io.github.superisland.R
 import io.github.superisland.ResidentMonitorConfigStore
 import io.github.superisland.SmartCapsuleConfigStore
 import io.github.superisland.ModuleScopeController
 import io.github.superisland.model.RuntimeEnvironmentSnapshot
-import io.github.superisland.publisher.focus.FocusNotificationPublisher
 import io.github.superisland.publisher.focus.SystemUiResidentIslandPublisher
 import io.github.superisland.source.notification.NotificationProxyController
 import io.github.superisland.ui.material.HomeMaterial
@@ -66,7 +62,6 @@ fun HomeScreen(
     val residentConfigStore = remember { ResidentMonitorConfigStore(context) }
     val miShareFolderExtensionStore = remember { MiShareFolderExtensionStore(context) }
     val islandAppearanceStore = remember { IslandAppearanceStore(context) }
-    val focusNotificationChannelName = stringResource(R.string.focus_notification_channel_name)
     val state =
         remember(environment) {
             HomeUiState(
@@ -87,7 +82,6 @@ fun HomeScreen(
             residentConfigStore,
             miShareFolderExtensionStore,
             islandAppearanceStore,
-            focusNotificationChannelName,
         ) {
             HomeActions(
                 restartScopes = {
@@ -114,8 +108,6 @@ fun HomeScreen(
                             IslandAppearanceConfigSync.syncStoredAndReload()
                             SmartCapsuleConfigStore(context).reset().getOrThrow()
                             notificationController.resetAllSettings()
-                            FocusNotificationFeatureStore(context).reset()
-                            FocusNotificationPublisher(context, focusNotificationChannelName).cancel()
                         }
                     }.start()
                 },

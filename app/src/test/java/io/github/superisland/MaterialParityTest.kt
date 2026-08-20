@@ -19,8 +19,6 @@ class MaterialParityTest {
             "AppFeatureMasterSwitch",
             "AppDirectoryDetailScreen",
             "AppInformationDetailScreen",
-            "FocusNotificationCapabilityScreen",
-            "FocusNotificationEventScreen",
             "SmartCapsuleAppsScreen",
             "SmartCapsuleAppProfileScreen",
             "SmartCapsulePriorityPreference",

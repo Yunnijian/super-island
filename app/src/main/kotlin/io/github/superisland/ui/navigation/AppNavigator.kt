@@ -24,7 +24,6 @@ enum class AppDestination : AppRoute {
     HOME_ABOUT,
     SUPER_ISLAND,
     EXTENSIONS,
-    EXTENSION_DEVICE,
     EXTENSION_MISHARE_FOLDER,
     EXTENSION_SCREEN_RECORDING,
     SETTINGS,
@@ -45,9 +44,6 @@ enum class AppDestination : AppRoute {
     MEDIA_CONNECTION,
     MEDIA_SOURCES,
     MEDIA_STATUS,
-    LIVE_UPDATE_LAB,
-    LIVE_UPDATE_CAPABILITY,
-    LIVE_UPDATE_EVENT,
 }
 
 /** The selected package is part of the route so the detail page can never observe a stale null. */
@@ -86,7 +82,6 @@ val AppDestination.backDestination: AppDestination
             AppDestination.PROFILE_USAGE_GUIDE,
             AppDestination.PROFILE_ABOUT,
             -> AppDestination.PROFILE
-            AppDestination.EXTENSION_DEVICE,
             AppDestination.EXTENSION_MISHARE_FOLDER,
             AppDestination.EXTENSION_SCREEN_RECORDING,
             -> AppDestination.EXTENSIONS
@@ -104,12 +99,8 @@ val AppDestination.backDestination: AppDestination
             -> AppDestination.BATTERY_MONITOR
             AppDestination.BATTERY_CONFIGURATION -> AppDestination.SUPER_ISLAND
             AppDestination.BATTERY_EXPANDED_CONTENT -> AppDestination.BATTERY_CONFIGURATION
-            AppDestination.LIVE_UPDATE_CAPABILITY,
-            AppDestination.LIVE_UPDATE_EVENT,
-            -> AppDestination.LIVE_UPDATE_LAB
             AppDestination.BATTERY_MONITOR,
             AppDestination.MEDIA,
-            AppDestination.LIVE_UPDATE_LAB,
             -> AppDestination.SUPER_ISLAND
             AppDestination.HOME,
             AppDestination.SUPER_ISLAND,

@@ -31,16 +31,12 @@ class NavigationPerformanceSourceContractTest {
                 .substringBefore("private fun ResidentMonitorSettings(")
         val resident =
             activity.substringAfter("private fun BatteryMonitor(")
-                .substringBefore("private fun LiveUpdateLab(")
-        val focus =
-            activity.substringAfter("private fun LiveUpdateLab(")
-                .substringBefore("internal fun focusNotificationRequest")
+                .substringBefore("private fun ResidentMetricKey.metricValue(")
 
         listOf(
             "SmartCapsuleDashboardStateOwner",
             "MediaIslandDashboardStateOwner",
             "ResidentMonitorDashboardStateOwner",
-            "FocusLabDashboardStateOwner",
         ).forEach { owner ->
             assertTrue("$owner must be created above NavDisplay", "remember(context.applicationContext)" in activity && owner in activity)
             assertTrue("$owner must be disposed with the root host", "onDispose" in activity && "::close" in activity)
@@ -50,8 +46,6 @@ class NavigationPerformanceSourceContractTest {
         assertFalse("Media composables must not construct page-local controllers", "NotificationProxyController" in media)
         assertFalse("Media composables must not synchronously build a system snapshot", ".mediaSnapshot()" in media)
         assertTrue("Current resident settings must leave the legacy state tree before it is built", resident.indexOf("ResidentMonitorSettings(") < resident.indexOf("val context = LocalContext.current"))
-        assertFalse("Focus composables must not query system capability directly", ".capability()" in focus)
-        assertFalse("Focus composables must not construct a publisher during transition", "FocusNotificationPublisher(" in focus)
     }
 
     @Test

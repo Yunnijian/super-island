@@ -81,7 +81,6 @@ import io.github.superisland.model.ResidentMonitorConfig
 import io.github.superisland.model.ThermalDiagnosticSnapshot
 import io.github.superisland.model.WarsawFanMetricSnapshot
 import io.github.superisland.model.WarsawPerformanceMetricSnapshot
-import io.github.superisland.publisher.focus.FocusNotificationPublisher
 import io.github.superisland.source.notification.NotificationProxyController
 import io.github.superisland.source.root.RootDeviceAdapterRegistry
 import io.github.superisland.source.root.RootDeviceFeature
@@ -104,8 +103,6 @@ import io.github.superisland.ui.adaptive.BatteryContinuousMonitorScreen
 import io.github.superisland.ui.adaptive.BatteryMonitorDiagnosticsScreen
 import io.github.superisland.ui.adaptive.BatteryMonitorEventsScreen
 import io.github.superisland.ui.adaptive.BatteryRealtimeScreen
-import io.github.superisland.ui.adaptive.FocusNotificationCapabilityScreen
-import io.github.superisland.ui.adaptive.FocusNotificationEventScreen
 import io.github.superisland.ui.adaptive.MediaIslandConnectionScreen
 import io.github.superisland.ui.adaptive.MediaIslandSourcesScreen
 import io.github.superisland.ui.adaptive.MediaIslandStatusScreen
@@ -232,18 +229,7 @@ class MainActivity : ComponentActivity() {
 
     private fun runDebugBatteryCommand(intent: Intent?) {
         if (!BuildConfig.DEBUG) return
-        val publisher = FocusNotificationPublisher(this, getString(R.string.focus_notification_channel_name))
         when (intent?.action) {
-            DEBUG_PUBLISH_BATTERY_MONITOR_ACTION -> {
-                val snapshot = BatteryMetricSource(this).read()
-                publisher.post(
-                    request = snapshot.monitorFocusNotificationRequest(),
-                    smallIconResId = R.drawable.ic_stat_island,
-                    contentIntent = contentIntent(),
-                    notificationId = BATTERY_MONITOR_NOTIFICATION_ID,
-                )
-            }
-            DEBUG_CANCEL_BATTERY_MONITOR_ACTION -> publisher.cancel(BATTERY_MONITOR_NOTIFICATION_ID)
             DEBUG_START_CONTINUOUS_BATTERY_MONITOR_ACTION -> BatteryMonitorService.start(this)
             DEBUG_STOP_CONTINUOUS_BATTERY_MONITOR_ACTION -> BatteryMonitorService.stop(this)
             DEBUG_REFRESH_MEDIA_ACTION -> NotificationProxyController(this).refreshMedia()
@@ -342,10 +328,6 @@ private fun SuperIslandApp(
         remember(context.applicationContext) {
             ResidentMonitorDashboardStateOwner(context.applicationContext)
         }
-    val focusLabStateOwner =
-        remember(context.applicationContext) {
-            FocusLabDashboardStateOwner(context.applicationContext)
-        }
     val islandAppearanceStateOwner =
         remember(context.applicationContext) {
             IslandAppearanceDashboardStateOwner(context.applicationContext)
@@ -361,9 +343,6 @@ private fun SuperIslandApp(
     }
     DisposableEffect(residentMonitorStateOwner) {
         onDispose(residentMonitorStateOwner::close)
-    }
-    DisposableEffect(focusLabStateOwner) {
-        onDispose(focusLabStateOwner::close)
     }
     DisposableEffect(islandAppearanceStateOwner) {
         onDispose(islandAppearanceStateOwner::close)
@@ -428,9 +407,6 @@ private fun SuperIslandApp(
         ) {
             residentMonitorStateOwner.activate()
         }
-        if (destination == AppDestination.LIVE_UPDATE_LAB) {
-            focusLabStateOwner.activate()
-        }
         if (destination is AppDestination && destination.isPrimaryTab) {
             navigator.popToRoot()
             mainPagerState.animateToPage(destination.primaryTab.pageIndex)
@@ -478,7 +454,6 @@ private fun SuperIslandApp(
                             smartCapsuleStateOwner = smartCapsuleStateOwner,
                             mediaIslandStateOwner = mediaIslandStateOwner,
                             residentMonitorStateOwner = residentMonitorStateOwner,
-                            focusLabStateOwner = focusLabStateOwner,
                             islandAppearanceStateOwner = islandAppearanceStateOwner,
                         )
                     }
@@ -529,7 +504,6 @@ private fun SuperIslandMainPager(
                                 onOpenSmartCapsule = { onOpenDestination(AppDestination.SMART_CAPSULE_APPS) },
                                 onOpenMediaIsland = { onOpenDestination(AppDestination.MEDIA) },
                                 onOpenBatteryMonitor = { onOpenDestination(AppDestination.BATTERY_CONFIGURATION) },
-                                onOpenLiveUpdateLab = { onOpenDestination(AppDestination.LIVE_UPDATE_LAB) },
                                 onOpenCapsuleAppearance = { onOpenDestination(AppDestination.CAPSULE_APPEARANCE) },
                                 showBottomBar = false,
                                 bottomInnerPadding = bottomInnerPadding,
@@ -537,7 +511,6 @@ private fun SuperIslandMainPager(
                         AppPrimaryTab.EXTENSIONS ->
                             ExtensionsMiuix(
                                 onTabSelected = { selectedTab -> mainPagerState.animateToPage(selectedTab.pageIndex) },
-                                onOpenDeviceAdapter = { onOpenDestination(AppDestination.EXTENSION_DEVICE) },
                                 onOpenMiShareFolder = {
                                     onOpenDestination(AppDestination.EXTENSION_MISHARE_FOLDER)
                                 },
@@ -611,7 +584,6 @@ private fun SuperIslandDestinationContent(
     smartCapsuleStateOwner: SmartCapsuleDashboardStateOwner,
     mediaIslandStateOwner: MediaIslandDashboardStateOwner,
     residentMonitorStateOwner: ResidentMonitorDashboardStateOwner,
-    focusLabStateOwner: FocusLabDashboardStateOwner,
     islandAppearanceStateOwner: IslandAppearanceDashboardStateOwner,
 ) {
     when (destination) {
@@ -677,7 +649,6 @@ private fun SuperIslandDestinationContent(
             HomeServiceStatus(
                 resumeGeneration = resumeGeneration,
                 stateOwner = mediaIslandStateOwner,
-                focusLabStateOwner = focusLabStateOwner,
                 onBack = { onNavigate(AppDestination.HOME) },
             )
         AppDestination.HOME_USAGE_GUIDE ->
@@ -694,19 +665,13 @@ private fun SuperIslandDestinationContent(
                 onOpenSmartCapsule = { onNavigate(AppDestination.SMART_CAPSULE_APPS) },
                 onOpenMediaIsland = { onNavigate(AppDestination.MEDIA) },
                 onOpenBatteryMonitor = { onNavigate(AppDestination.BATTERY_CONFIGURATION) },
-                onOpenLiveUpdateLab = { onNavigate(AppDestination.LIVE_UPDATE_LAB) },
                 onOpenCapsuleAppearance = { onNavigate(AppDestination.CAPSULE_APPEARANCE) },
             )
         AppDestination.EXTENSIONS ->
             ExtensionsMiuix(
                 onTabSelected = { tab -> onNavigate(tab.destination) },
-                onOpenDeviceAdapter = { onNavigate(AppDestination.EXTENSION_DEVICE) },
                 onOpenMiShareFolder = { onNavigate(AppDestination.EXTENSION_MISHARE_FOLDER) },
                 onOpenScreenRecording = { onNavigate(AppDestination.EXTENSION_SCREEN_RECORDING) },
-            )
-        AppDestination.EXTENSION_DEVICE ->
-            DeviceAdapterDetail(
-                onBack = { onNavigate(AppDestination.EXTENSIONS) },
             )
         AppDestination.EXTENSION_MISHARE_FOLDER ->
             MiShareFolderExtensionScreen(
@@ -849,30 +814,6 @@ private fun SuperIslandDestinationContent(
                 onOpenPage = { page -> onNavigate(page.destination) },
                 onBack = { onNavigate(AppDestination.MEDIA) },
             )
-        AppDestination.LIVE_UPDATE_LAB ->
-            LiveUpdateLab(
-                resumeGeneration = resumeGeneration,
-                page = LiveUpdatePage.OVERVIEW,
-                stateOwner = focusLabStateOwner,
-                onOpenPage = { page -> onNavigate(page.destination) },
-                onBack = { onNavigate(AppDestination.SUPER_ISLAND) },
-            )
-        AppDestination.LIVE_UPDATE_CAPABILITY ->
-            LiveUpdateLab(
-                resumeGeneration = resumeGeneration,
-                page = LiveUpdatePage.CAPABILITY,
-                stateOwner = focusLabStateOwner,
-                onOpenPage = { page -> onNavigate(page.destination) },
-                onBack = { onNavigate(AppDestination.LIVE_UPDATE_LAB) },
-            )
-        AppDestination.LIVE_UPDATE_EVENT ->
-            LiveUpdateLab(
-                resumeGeneration = resumeGeneration,
-                page = LiveUpdatePage.EVENT,
-                stateOwner = focusLabStateOwner,
-                onOpenPage = { page -> onNavigate(page.destination) },
-                onBack = { onNavigate(AppDestination.LIVE_UPDATE_LAB) },
-            )
     }
 }
 
@@ -880,17 +821,14 @@ private fun SuperIslandDestinationContent(
 private fun HomeServiceStatus(
     resumeGeneration: Int,
     stateOwner: MediaIslandDashboardStateOwner,
-    focusLabStateOwner: FocusLabDashboardStateOwner,
     onBack: () -> Unit,
 ) {
     val contentReady = rememberContentReady()
     val mediaState by stateOwner.state.collectAsStateWithLifecycle()
-    val focusState by focusLabStateOwner.state.collectAsStateWithLifecycle()
     val snapshot = mediaState.snapshot
     LaunchedEffect(contentReady, resumeGeneration) {
         if (!contentReady) return@LaunchedEffect
         stateOwner.onVisible(resumeGeneration)
-        focusLabStateOwner.onVisible(resumeGeneration)
     }
 
     AppInformationDetailScreen(
@@ -906,20 +844,6 @@ private fun HomeServiceStatus(
                 InformationEntryUi(
                     "媒体监听服务",
                     if (snapshot.listenerConnected) "已连接" else "未连接；可在超级岛音乐的通知访问与连接中处理",
-                ),
-                InformationEntryUi(
-                    "焦点通知",
-                    if (focusState.capability.notificationsEnabled) {
-                        if (focusState.capability.focusProtocolEnabled) {
-                            "通知与 HyperOS 焦点通知协议均可用"
-                        } else {
-                            "通知已允许；当前 ROM 未启用焦点通知协议"
-                        }
-                    } else if (!focusState.loaded) {
-                        "正在检查"
-                    } else {
-                        "通知尚未允许"
-                    },
                 ),
             ),
         backLabel = "返回首页",
@@ -963,40 +887,6 @@ private fun HomeAbout(
                 InformationEntryUi("发布状态", "当前为开发构建；账号、激活与付费权益功能尚未开放。"),
             ),
         backLabel = backLabel,
-        onBack = onBack,
-    )
-}
-
-@Composable
-private fun DeviceAdapterDetail(
-    onBack: () -> Unit,
-) {
-    val capability =
-        remember {
-            RootDeviceAdapterRegistry.capability(
-                device = Build.DEVICE,
-                fingerprint = Build.FINGERPRINT,
-            )
-        }
-    val deviceName = listOf(Build.MANUFACTURER, Build.MODEL).filter { it.isNotBlank() }.joinToString(" ")
-
-    AppInformationDetailScreen(
-        title = "设备能力适配",
-        subtitle = ROOT_MODE_LABEL,
-        entries =
-            listOf(
-                InformationEntryUi("当前设备", deviceName.ifBlank { "未知设备" }),
-                InformationEntryUi("设备适配", capability.summary),
-                InformationEntryUi(
-                    "风扇遥测",
-                    if (capability.supports(RootDeviceFeature.FAN_TELEMETRY)) "已验证；只在 Root 模式主动读取" else "当前设备未提供已验证适配",
-                ),
-                InformationEntryUi(
-                    "CPU/GPU 频率",
-                    if (capability.supports(RootDeviceFeature.PERFORMANCE_TELEMETRY)) "已验证；只在 Root 模式主动读取" else "当前设备未提供已验证适配",
-                ),
-            ),
-        backLabel = "返回拓展",
         onBack = onBack,
     )
 }
@@ -2275,119 +2165,6 @@ private fun BatteryMonitor(
     }
 }
 
-@Composable
-private fun LiveUpdateLab(
-    resumeGeneration: Int,
-    page: LiveUpdatePage,
-    stateOwner: FocusLabDashboardStateOwner,
-    onOpenPage: (LiveUpdatePage) -> Unit,
-    onBack: () -> Unit,
-) {
-    val contentReady = rememberContentReady()
-    val dashboardState by stateOwner.state.collectAsStateWithLifecycle()
-    LaunchedEffect(contentReady, resumeGeneration) {
-        if (contentReady) stateOwner.onVisible(resumeGeneration)
-    }
-    val permissionLauncher =
-        rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-            stateOwner.onNotificationPermissionResult(granted)
-        }
-
-    val notificationStatus =
-        if (dashboardState.notificationPermissionGranted && dashboardState.capability.notificationsEnabled) {
-            "已允许"
-        } else {
-            "未允许"
-        }
-    val focusProtocolStatus =
-        if (dashboardState.capability.focusProtocolEnabled) {
-            if (dashboardState.capability.systemPermissionGranted) "系统已授权焦点通知" else "由 LSPosed 焦点桥接授权"
-        } else {
-            "当前 ROM 未启用焦点通知协议"
-        }
-
-    when (page) {
-        LiveUpdatePage.OVERVIEW ->
-            AppDirectoryDetailScreen(
-                title = "焦点通知测试",
-                subtitle = ROOT_MODE_LABEL,
-                header = {
-                    AppFeatureMasterSwitch(
-                        title = "启用焦点通知测试",
-                        summary =
-                            if (dashboardState.featureEnabled) {
-                                "已启用；可在测试事件中手动发布受控上岛通知"
-                            } else {
-                                "已关闭；已结束当前测试事件，且不会发布新的测试事件"
-                            },
-                        checked = dashboardState.featureEnabled,
-                        onCheckedChange = stateOwner::setFeatureEnabled,
-                    )
-                },
-                onBack = onBack,
-                groups =
-                    listOf(
-                        DirectoryGroupUi(
-                            title = "设置与操作",
-                            entries =
-                                listOf(
-                                    DirectoryEntryUi(
-                                        id = "capability",
-                                        title = "系统权限",
-                                        summary = "通知权限与 HyperOS 焦点通知协议",
-                                        icon = DirectoryIcon.PRIVACY,
-                                        status = notificationStatus,
-                                    ),
-                                    DirectoryEntryUi(
-                                        id = "event",
-                                        title = "测试事件",
-                                        summary = dashboardState.operationStatus,
-                                        icon = DirectoryIcon.LAB,
-                                        status = "${dashboardState.progress}%",
-                                    ),
-                                ),
-                        ),
-                    ),
-                onEntrySelected = { id ->
-                    when (id) {
-                        "capability" -> onOpenPage(LiveUpdatePage.CAPABILITY)
-                        "event" -> onOpenPage(LiveUpdatePage.EVENT)
-                    }
-                },
-            )
-        LiveUpdatePage.CAPABILITY ->
-            FocusNotificationCapabilityScreen(
-                modeLabel = ROOT_MODE_LABEL,
-                notificationStatus = notificationStatus,
-                focusProtocolStatus = focusProtocolStatus,
-                showNotificationPermissionAction = !dashboardState.notificationPermissionGranted,
-                onRequestNotificationPermission = {
-                    permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-                },
-                onRefresh = stateOwner::refresh,
-                onBackToFocusTest = onBack,
-            )
-        LiveUpdatePage.EVENT ->
-            FocusNotificationEventScreen(
-                modeLabel = ROOT_MODE_LABEL,
-                operationStatus = dashboardState.operationStatus,
-                progress = dashboardState.progress,
-                canPublish = dashboardState.canPublish,
-                onPublish = stateOwner::publish,
-                onAdvance = stateOwner::advance,
-                onCancel = stateOwner::cancelEvent,
-                onBackToFocusTest = onBack,
-            )
-    }
-}
-
-internal fun focusNotificationRequest(progress: Int): FocusNotificationRequest =
-    FocusNotificationRequest(
-        title = "焦点通知测试",
-        text = "正在验证 HyperOS 焦点通知超级岛",
-        progress = progress,
-    )
-
 fun BatteryMetricSnapshot.monitorFocusNotificationRequest(
     config: ResidentMonitorConfig = ResidentMonitorConfig(),
     systemEvent: BatterySystemEvent? = null,
@@ -2749,20 +2526,6 @@ private val BatteryMonitorPage.destination: AppDestination
             BatteryMonitorPage.EXPANDED_CONTENT -> AppDestination.BATTERY_EXPANDED_CONTENT
         }
 
-private enum class LiveUpdatePage {
-    OVERVIEW,
-    CAPABILITY,
-    EVENT,
-}
-
-private val LiveUpdatePage.destination: AppDestination
-    get() =
-        when (this) {
-            LiveUpdatePage.OVERVIEW -> AppDestination.LIVE_UPDATE_LAB
-            LiveUpdatePage.CAPABILITY -> AppDestination.LIVE_UPDATE_CAPABILITY
-            LiveUpdatePage.EVENT -> AppDestination.LIVE_UPDATE_EVENT
-        }
-
 private val AppPrimaryTab.destination: AppDestination
     get() =
         when (this) {
@@ -2793,12 +2556,8 @@ private val AppDestination.primaryTab: AppPrimaryTab
             AppDestination.MEDIA_CONNECTION,
             AppDestination.MEDIA_SOURCES,
             AppDestination.MEDIA_STATUS,
-            AppDestination.LIVE_UPDATE_LAB,
-            AppDestination.LIVE_UPDATE_CAPABILITY,
-            AppDestination.LIVE_UPDATE_EVENT,
             -> AppPrimaryTab.SUPER_ISLAND
             AppDestination.EXTENSIONS,
-            AppDestination.EXTENSION_DEVICE,
             AppDestination.EXTENSION_MISHARE_FOLDER,
             AppDestination.EXTENSION_SCREEN_RECORDING,
             -> AppPrimaryTab.EXTENSIONS

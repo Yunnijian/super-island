@@ -41,6 +41,11 @@
   （`songyuan` / `M098FE` / `OS3.0.306.0.WGNCNXM`）。Root 设置桥与磁贴 guard 已去
   fingerprint 校验，三开关在 `songyuan` 上可直接开启；`testing.md:60` smoke 与双皮肤矩阵
   已在该机手动验收通过。
+- 2026-08-21 去除所有非风扇白名单（`SmartCapsuleIslandPriorityPolicy`、磁贴 guard 版本门控）后再次通过完整门禁：610 tasks，
+  `BUILD SUCCESSFUL in 1m 43s`。benchmark SHA-256 为
+  `7a2991ddfea8550e30345636700b3132d02ed0b325f32385693c8acf448fc060`；双机覆盖安装后双机 base APK 哈希一致，`songyuan` SystemUI `23346→22210` / XMSF `24208→23080`，`warsaw` SystemUI `5154→17687` / `OS4.0.0.15`。
+  仅风扇相关白名单保留。
+- 2026-08-21 完整移除焦点通知测试与设备能力适配入口（保留风扇监控）后再次通过完整门禁：610 tasks，`BUILD SUCCESSFUL in 1m 43s`。
 
 ## 已完成
 
