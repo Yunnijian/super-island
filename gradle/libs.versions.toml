@@ -17,6 +17,11 @@ hiddenapibypass = "6.1"
 appiconloader = "1.5.0"
 navigationevent = "1.1.2"
 junit4 = "4.13.2"
+kotlinx-serialization = "1.9.0"
+daimajia-animations = "2.4"
+daimajia-easing = "2.4"
+androidx-interpolator = "1.0.0"
+superlyric-api = "3.4"
 
 [libraries]
 androidx-activity-compose = { module = "androidx.activity:activity-compose", version.ref = "activity" }
@@ -44,9 +49,15 @@ hiddenapibypass = { module = "org.lsposed.hiddenapibypass:hiddenapibypass", vers
 appiconloader = { module = "me.zhanghai.android.appiconloader:appiconloader", version.ref = "appiconloader" }
 androidx-navigationevent-compose = { module = "androidx.navigationevent:navigationevent-compose", version.ref = "navigationevent" }
 junit4 = { module = "junit:junit", version.ref = "junit4" }
+kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "kotlinx-serialization" }
+daimajia-animations = { group = "com.daimajia.androidanimations", name = "library", version.ref = "daimajia-animations" }
+daimajia-easing = { group = "com.daimajia.easing", name = "library", version.ref = "daimajia-easing" }
+androidx-interpolator = { module = "androidx.interpolator:interpolator", version.ref = "androidx-interpolator" }
+superlyric-api = { module = "com.github.HChenX:SuperLyricApi", version.ref = "superlyric-api" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
 android-library = { id = "com.android.library", version.ref = "agp" }
 compose-compiler = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
 kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
+kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
