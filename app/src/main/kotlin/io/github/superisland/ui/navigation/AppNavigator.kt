@@ -44,6 +44,7 @@ enum class AppDestination : AppRoute {
     MEDIA_CONNECTION,
     MEDIA_SOURCES,
     MEDIA_STATUS,
+    LYRIC,
 }
 
 /** The selected package is part of the route so the detail page can never observe a stale null. */
@@ -99,6 +100,7 @@ val AppDestination.backDestination: AppDestination
             -> AppDestination.BATTERY_MONITOR
             AppDestination.BATTERY_CONFIGURATION -> AppDestination.SUPER_ISLAND
             AppDestination.BATTERY_EXPANDED_CONTENT -> AppDestination.BATTERY_CONFIGURATION
+            AppDestination.LYRIC -> AppDestination.SUPER_ISLAND
             AppDestination.BATTERY_MONITOR,
             AppDestination.MEDIA,
             -> AppDestination.SUPER_ISLAND

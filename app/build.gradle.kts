@@ -83,6 +83,7 @@ dependencies {
     implementation(project(":core-model"))
     implementation(project(":hook-systemui"))
     implementation(project(":publisher-focus"))
+    implementation(project(":source-lyric"))
     implementation(project(":source-notification"))
     implementation(project(":source-root"))
     implementation(project(":source-screenrecord"))

@@ -825,6 +825,11 @@ private fun SuperIslandDestinationContent(
                 onOpenPage = { page -> onNavigate(page.destination) },
                 onBack = { onNavigate(AppDestination.MEDIA) },
             )
+        AppDestination.LYRIC ->
+            // TODO: Lyric island detail, reuse SuperLyric source
+            HomeAbout(
+                onBack = { onNavigate(AppDestination.SUPER_ISLAND) },
+            )
     }
 }
 
@@ -2567,6 +2572,7 @@ private val AppDestination.primaryTab: AppPrimaryTab
             AppDestination.MEDIA_CONNECTION,
             AppDestination.MEDIA_SOURCES,
             AppDestination.MEDIA_STATUS,
+            AppDestination.LYRIC,
             -> AppPrimaryTab.SUPER_ISLAND
             AppDestination.EXTENSIONS,
             AppDestination.EXTENSION_MISHARE_FOLDER,

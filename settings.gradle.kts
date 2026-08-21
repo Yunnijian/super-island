@@ -24,6 +24,7 @@ mapOf(
     ":core-model" to "modules/core-model",
     ":hook-systemui" to "modules/hook-systemui",
     ":publisher-focus" to "modules/publisher-focus",
+    ":source-lyric" to "modules/source-lyric",
     ":source-notification" to "modules/source-notification",
     ":source-root" to "modules/source-root",
     ":source-screenrecord" to "modules/source-screenrecord",
