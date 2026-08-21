@@ -9,6 +9,9 @@ object LyricIslandContract {
     const val REMOTE_PREFERENCES = "SuperIslandLyricHost"
     const val KEY_ENABLED = "enabled"
 
+    /** Full config JSON (LyricIslandConfig serialized). */
+    const val KEY_CONFIG_JSON = "config_json"
+
     /** Channel id reuses the resident focus channel family but stays distinct. */
     const val CHANNEL_ID = "focus_lyric_island"
 }
