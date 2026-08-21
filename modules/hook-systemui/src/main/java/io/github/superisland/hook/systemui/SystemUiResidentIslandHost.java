@@ -329,6 +329,14 @@ final class SystemUiResidentIslandHost {
                     request.getText(),
                     resolveExpandedActions(context)
             );
+            // OS4 HyperOS 2: also try DynamicIsland path in addition to miui.focus.
+            if (Build.VERSION.SDK_INT >= 35) {
+                try {
+                    notifyOS4DynamicIsland(context, request);
+                } catch (Throwable os4Error) {
+                    Log.w(TAG, "OS4 DynamicIsland notify failed, keeping miui.focus only", os4Error);
+                }
+            }
             notificationManager.notify(
                     SystemUiResidentIslandContract.HOST_NOTIFICATION_ID,
                     publisher.buildSystemUiResidentNotification(
@@ -342,15 +350,6 @@ final class SystemUiResidentIslandHost {
                             MODULE_PACKAGE
                     )
             );
-            // OS4 (HyperOS 2, SDK 37) uses DynamicIsland via island_param / DynamicIslandManager.
-            // Dual-write: keep miui.focus for OS3 compatibility and also notify OS4's DynamicIsland.
-            if (Build.VERSION.SDK_INT >= 35) {
-                try {
-                    notifyOS4DynamicIsland(context, request);
-                } catch (Throwable os4Error) {
-                    Log.w(TAG, "OS4 DynamicIsland notify failed, keeping miui.focus only", os4Error);
-                }
-            }
         } catch (Throwable error) {
             Log.e(TAG, "Could not publish SystemUI-owned resident island", error);
         } finally {
@@ -1099,20 +1098,43 @@ final class SystemUiResidentIslandHost {
     }
 
     private static void notifyOS4DynamicIsland(Context context, FocusNotificationRequest request) throws Exception {
-        // HyperOS 2 (OS4, SDK 37) DynamicIsland is driven by miui.dynamicisland.DynamicIslandManager
-        // in addition to the legacy miui.focus path. Keep miui.focus for OS3 and dual-write for OS4.
+        // HyperOS 2 (OS4, SDK 37) uses DynamicIslandWindowAnimHelper.notifyIslandInfoAdd via
+        // miui.dynamicisland.DynamicIslandManager. Use the helper that wraps the manager's
+        // DynamicIslandData construction, as the manager's direct API is obfuscated per build.
+        try {
+            Class<?> helperClass = Class.forName("com.android.systemui.statusbar.notification.utils.DynamicIslandWindowAnimHelper");
+            // Helper's overload is (String pkg, int uid, String pkg2, ElementSurfaceTransition)
+            // Use 4-arg if available, otherwise 3-arg (pkg, uid, transition)
+            try {
+                helperClass.getMethod("notifyIslandInfoAdd", String.class, int.class, String.class, Class.forName("android.app.ElementSurfaceTransition"))
+                        .invoke(null, MODULE_PACKAGE, context.getApplicationInfo().uid, MODULE_PACKAGE, null);
+            } catch (NoSuchMethodException e1) {
+                try {
+                    helperClass.getMethod("notifyIslandInfoAdd", String.class, int.class, Class.forName("android.app.ElementSurfaceTransition"))
+                            .invoke(null, MODULE_PACKAGE, context.getApplicationInfo().uid, null);
+                } catch (NoSuchMethodException e2) {
+                    // Fallback to manager's single-arg DynamicIslandData path
+                    Class<?> managerClass = Class.forName("miui.dynamicisland.DynamicIslandManager");
+                    Object manager = managerClass.getMethod("getInstance").invoke(null);
+                    Class<?> dataClass = Class.forName("miui.dynamicisland.DynamicIslandData");
+                    Object data = dataClass.getConstructor(String.class, Integer.TYPE, Class.forName("android.app.ElementSurfaceTransition"))
+                            .newInstance(MODULE_PACKAGE, context.getApplicationInfo().uid, null);
+                    managerClass.getMethod("notifyIslandInfoAdd", dataClass).invoke(manager, data);
+                }
+            }
+            Log.i(TAG, "Notified OS4 DynamicIsland via helper for " + request.getTitle());
+            return;
+        } catch (Throwable helperError) {
+            Log.w(TAG, "DynamicIslandWindowAnimHelper path failed, trying manager", helperError);
+        }
+        // Final fallback: manager single-arg
         Class<?> managerClass = Class.forName("miui.dynamicisland.DynamicIslandManager");
         Object manager = managerClass.getMethod("getInstance").invoke(null);
-        // Use the ActivityManager-less overload if ElementSurfaceTransition is unavailable.
-        try {
-            managerClass.getMethod("notifyIslandInfoAdd", String.class, int.class, Class.forName("android.app.ElementSurfaceTransition"))
-                    .invoke(manager, MODULE_PACKAGE, context.getApplicationInfo().uid, null);
-        } catch (NoSuchMethodException e) {
-            // Fallback to 2-arg variant on some OS4 builds.
-            managerClass.getMethod("notifyIslandInfoAdd", String.class, int.class)
-                    .invoke(manager, MODULE_PACKAGE, context.getApplicationInfo().uid);
-        }
-        Log.i(TAG, "Notified OS4 DynamicIsland via DynamicIslandManager for " + request.getTitle());
+        Class<?> dataClass = Class.forName("miui.dynamicisland.DynamicIslandData");
+        Object data = dataClass.getConstructor(String.class, Integer.TYPE, Class.forName("android.app.ElementSurfaceTransition"))
+                .newInstance(MODULE_PACKAGE, context.getApplicationInfo().uid, null);
+        managerClass.getMethod("notifyIslandInfoAdd", dataClass).invoke(manager, data);
+        Log.i(TAG, "Notified OS4 DynamicIsland via manager fallback for " + request.getTitle());
     }
 
     private static String bounded(String value) {
