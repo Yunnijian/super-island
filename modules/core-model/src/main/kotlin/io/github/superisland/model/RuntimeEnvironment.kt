@@ -17,13 +17,16 @@ data class RuntimeEnvironmentSnapshot(
     val lsposedVersion: String? = null,
     /** Actual API reported by the official libxposed service; not a manager-version guess. */
     val lsposedApiVersion: Int? = null,
+    /** True while the initial async probe has not yet completed; card should not flash error. */
+    val isLoading: Boolean = false,
 ) {
     val environmentAcceptable: Boolean
-        get() = rootAvailable && lsposedActive
+        get() = !isLoading && rootAvailable && lsposedActive
 
     val statusLabel: String
         get() =
             when {
+                isLoading -> "正在检查环境…"
                 environmentAcceptable -> "环境已就绪"
                 rootAvailable && !lsposedActive -> "已 Root · LSPosed 未激活"
                 !rootAvailable && lsposedActive -> "LSPosed 已激活 · 未检测到 Root"

@@ -39,9 +39,15 @@ fun HomeMiuix(
                 statusCards =
                     listOf(
                         AppRuntimeStatusCardUi(
-                            title = if (state.environment.lsposedActive) "模块已激活" else "模块未激活",
+                            title =
+                                when {
+                                    state.isLoading -> "正在检查环境…"
+                                    state.environment.lsposedActive -> "模块已激活"
+                                    else -> "模块未激活"
+                                },
                             summary = state.moduleSummary,
-                            active = state.environment.lsposedActive && state.environment.rootAvailable,
+                            active = state.environment.environmentAcceptable,
+                            isLoading = state.isLoading,
                         ),
                     ),
                 informationEntries =

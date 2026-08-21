@@ -111,6 +111,7 @@ data class AppRuntimeStatusCardUi(
     val title: String,
     val summary: String,
     val active: Boolean,
+    val isLoading: Boolean = false,
 )
 
 @Composable
@@ -124,11 +125,25 @@ fun AppRuntimeStatusHeader(
         // Tilt press feedback. Product-specific state and wording replace KernelSU fields.
         // The status card must use semantic container pairs. Fixed light colors become
         // unreadable when the user selects a dark dynamic Miuix scheme.
+        // While isLoading, show a neutral container to avoid flashing the error state on first frame.
         val containerColor =
-            if (card.active) MiuixTheme.colorScheme.primaryContainer else MiuixTheme.colorScheme.errorContainer
+            when {
+                card.isLoading -> MiuixTheme.colorScheme.surface
+                card.active -> MiuixTheme.colorScheme.primaryContainer
+                else -> MiuixTheme.colorScheme.errorContainer
+            }
         val contentColor =
-            if (card.active) MiuixTheme.colorScheme.onPrimaryContainer else MiuixTheme.colorScheme.onErrorContainer
-        val statusColor = if (card.active) MiuixTheme.colorScheme.primary else MiuixTheme.colorScheme.error
+            when {
+                card.isLoading -> MiuixTheme.colorScheme.onSurface
+                card.active -> MiuixTheme.colorScheme.onPrimaryContainer
+                else -> MiuixTheme.colorScheme.onErrorContainer
+            }
+        val statusColor =
+            when {
+                card.isLoading -> MiuixTheme.colorScheme.onSurfaceVariantSummary
+                card.active -> MiuixTheme.colorScheme.primary
+                else -> MiuixTheme.colorScheme.error
+            }
         Card(
             modifier = Modifier.fillMaxWidth().height(142.dp),
             colors = CardDefaults.defaultColors(color = containerColor, contentColor = contentColor),
@@ -143,7 +158,12 @@ fun AppRuntimeStatusHeader(
                 ) {
                     Icon(
                         modifier = Modifier.size(170.dp),
-                        imageVector = if (card.active) Icons.Rounded.CheckCircleOutline else Icons.Rounded.ErrorOutline,
+                        imageVector =
+                            when {
+                                card.isLoading -> Icons.Rounded.CheckCircleOutline
+                                card.active -> Icons.Rounded.CheckCircleOutline
+                                else -> Icons.Rounded.ErrorOutline
+                            },
                         tint = statusColor,
                         contentDescription = null,
                     )
@@ -164,6 +184,10 @@ fun AppRuntimeStatusHeader(
                         fontWeight = FontWeight.Medium,
                         color = contentColor,
                     )
+                    if (card.isLoading) {
+                        Spacer(Modifier.height(8.dp))
+                        LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                    }
                 }
             }
         }

@@ -27,6 +27,9 @@ data class HomeUiState(
     val deviceModel: String,
     val fingerprint: String,
 ) {
+    val isLoading: Boolean
+        get() = environment.isLoading
+
     val lsposedSummary: String
         get() =
             buildString {
@@ -37,10 +40,10 @@ data class HomeUiState(
 
     val moduleSummary: String
         get() =
-            if (environment.rootAvailable) {
-                lsposedSummary
-            } else {
-                "$lsposedSummary · 未获取 Root 权限"
+            when {
+                environment.isLoading -> "正在检查环境…"
+                environment.rootAvailable -> lsposedSummary
+                else -> "$lsposedSummary · 未获取 Root 权限"
             }
 }
 

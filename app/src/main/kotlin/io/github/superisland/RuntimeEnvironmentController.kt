@@ -1,5 +1,8 @@
 package io.github.superisland
 
+import android.os.Handler
+import android.os.Looper
+import android.os.SystemClock
 import io.github.superisland.model.RuntimeEnvironmentLabels
 import io.github.superisland.model.RuntimeEnvironmentSnapshot
 import java.util.concurrent.CopyOnWriteArraySet
@@ -38,6 +41,19 @@ object RuntimeEnvironmentController {
     private var lsposedVersion: String? = null
 
     @Volatile
+    private var isLoading: Boolean = true
+
+    @Volatile
+    private var lsposedReported: Boolean = false
+
+    @Volatile
+    private var rootReported: Boolean = false
+
+    private val loadingStartElapsed: Long = SystemClock.elapsedRealtime()
+    private val mainHandler = Handler(Looper.getMainLooper())
+    private const val MIN_LOADING_MILLIS = 700L
+
+    @Volatile
     private var current: RuntimeEnvironmentSnapshot = buildSnapshot()
 
     private var xposedSubscription: (() -> Unit)? = null
@@ -51,6 +67,7 @@ object RuntimeEnvironmentController {
                 lsposedActive = status.active
                 lsposedDetail = status.detail
                 lsposedApiVersion = status.apiVersion
+                lsposedReported = true
                 publish()
             }
         refreshRoot()
@@ -81,12 +98,26 @@ object RuntimeEnvironmentController {
                     } else {
                         null
                     }
+                rootReported = true
                 publish()
             },
         )?.cancel(true)
     }
 
     private fun publish() {
+        // Keep loading placeholder until both probes have reported and the minimum
+        // visible loading duration has elapsed. This avoids a sub-second flash where
+        // the card would briefly show loading then immediately flip to the final state.
+        if (isLoading && lsposedReported && rootReported) {
+            val elapsed = SystemClock.elapsedRealtime() - loadingStartElapsed
+            if (elapsed < MIN_LOADING_MILLIS) {
+                val remaining = MIN_LOADING_MILLIS - elapsed
+                mainHandler.removeCallbacksAndMessages(null)
+                mainHandler.postDelayed({ publish() }, remaining)
+                return
+            }
+            isLoading = false
+        }
         val next = buildSnapshot()
         current = next
         listeners.forEach { it(next) }
@@ -101,5 +132,6 @@ object RuntimeEnvironmentController {
             rootSummary = rootSummary,
             lsposedVersion = lsposedVersion,
             lsposedApiVersion = lsposedApiVersion,
+            isLoading = isLoading,
         )
 }

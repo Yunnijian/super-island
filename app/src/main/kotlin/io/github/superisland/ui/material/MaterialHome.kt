@@ -66,10 +66,26 @@ fun HomeMaterial(
 ) {
     var pendingAction by remember { mutableStateOf<MaterialHomeMaintenanceAction?>(null) }
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
-    val active = state.environment.lsposedActive && state.environment.rootAvailable
-    val statusContainer = if (active) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.errorContainer
-    val statusContent = if (active) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onErrorContainer
-    val statusIcon = if (active) Icons.Rounded.CheckCircleOutline else Icons.Rounded.ErrorOutline
+    val isLoading = state.isLoading
+    val active = state.environment.environmentAcceptable
+    val statusContainer =
+        when {
+            isLoading -> MaterialTheme.colorScheme.surfaceVariant
+            active -> MaterialTheme.colorScheme.primaryContainer
+            else -> MaterialTheme.colorScheme.errorContainer
+        }
+    val statusContent =
+        when {
+            isLoading -> MaterialTheme.colorScheme.onSurfaceVariant
+            active -> MaterialTheme.colorScheme.onPrimaryContainer
+            else -> MaterialTheme.colorScheme.onErrorContainer
+        }
+    val statusIcon =
+        when {
+            isLoading -> Icons.Rounded.CheckCircleOutline
+            active -> Icons.Rounded.CheckCircleOutline
+            else -> Icons.Rounded.ErrorOutline
+        }
     val informationEntries =
         listOf(
             AppKernelInfoUi("设备权限", state.environment.rootSummary),
@@ -125,11 +141,21 @@ fun HomeMaterial(
                         )
                         Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                             Text(
-                                text = if (state.environment.lsposedActive) "模块已激活" else "模块未激活",
+                                text =
+                                    when {
+                                        state.isLoading -> "正在检查环境…"
+                                        state.environment.lsposedActive -> "模块已激活"
+                                        else -> "模块未激活"
+                                    },
                                 style = MaterialTheme.typography.titleLarge,
                                 fontWeight = FontWeight.SemiBold,
                             )
                             Text(text = state.moduleSummary, style = MaterialTheme.typography.bodyMedium)
+                            if (state.isLoading) {
+                                androidx.compose.material3.LinearProgressIndicator(
+                                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                                )
+                            }
                         }
                     }
                 }
