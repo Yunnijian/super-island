@@ -30,6 +30,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.movableContentOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -189,6 +190,15 @@ class MainActivity : ComponentActivity() {
                         fontScale = systemDensity.fontScale,
                     )
                 }
+            // Hoist navigation state above the skin host so a uiMode switch (Miuix<->Material)
+            // does not dispose and recreate the backStack. SuperIslandApp's remember* would
+            // otherwise be torn down when KernelSuRootHost switches branches.
+            val navigator = rememberAppNavigator(AppDestination.MAIN)
+            val pagerState = rememberPagerState(
+                initialPage = this@MainActivity.launchDestination.primaryTab.pageIndex,
+                pageCount = { AppPrimaryTab.entries.size },
+            )
+            val mainPagerState = rememberMainPagerState(pagerState)
             CompositionLocalProvider(
                 LocalDensity provides scaledDensity,
                 LocalAppAppearanceViewModel provides appearanceViewModel,
@@ -209,6 +219,8 @@ class MainActivity : ComponentActivity() {
                         resumeGeneration = this@MainActivity.resumeGeneration,
                         initialDestination = this@MainActivity.launchDestination,
                         onAppearanceChange = onAppearanceChange,
+                        navigator = navigator,
+                        mainPagerState = mainPagerState,
                     )
                 }
             }
@@ -302,6 +314,10 @@ private fun KernelSuRootHost(
     uiMode: UiMode,
     content: @Composable () -> Unit,
 ) {
+    // Keep NavDisplay/navigator alive when the skin switches by hoisting the navigation
+    // state above the skin host. A plain `when (uiMode)` would dispose the previous
+    // branch's content and recreate SuperIslandApp, resetting the backStack to MAIN.
+    // movableContentOf is retained for the theme container itself, but navigation is hoisted.
     when (uiMode) {
         UiMode.Material -> KernelSuMaterialRootHost(content)
         UiMode.Miuix -> KernelSuMiuixRootHost(content)
@@ -314,6 +330,8 @@ private fun SuperIslandApp(
     resumeGeneration: Int,
     initialDestination: AppDestination,
     onAppearanceChange: ((AppAppearanceSettings) -> AppAppearanceSettings) -> Unit,
+    navigator: io.github.superisland.ui.navigation.AppNavigator,
+    mainPagerState: io.github.superisland.ui.navigation.MainPagerState,
 ) {
     val context = LocalContext.current
     val smartCapsuleStateOwner =
@@ -374,13 +392,6 @@ private fun SuperIslandApp(
         }
         smartCapsuleStateOwner.refreshConfigAndRuntime()
     }
-    val pagerState =
-        rememberPagerState(
-            initialPage = initialDestination.primaryTab.pageIndex,
-            pageCount = { AppPrimaryTab.entries.size },
-        )
-    val mainPagerState = rememberMainPagerState(pagerState)
-    val navigator = rememberAppNavigator(AppDestination.MAIN)
 
     LaunchedEffect(initialDestination) {
         // Debug entry points still land on their detail destination, above the root pager.
