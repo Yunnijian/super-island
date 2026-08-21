@@ -59,8 +59,8 @@
 - 第三方 source-SBN 原地 Focus 映射和受限 XMSF 适配（同 smoke 复验通过）。
 - schema v4 App/Channel 规则、优先级和 App 默认仅焦点；Channel 级仅焦点与双皮肤持久化已复测通过。
 - 常驻展开内容与三个安全动作槽位；常驻中优先级 `1` 与低/高优先级队列仲裁已复测通过。
-- MiShare 固定目录拓展与有界 DexKit 兜底。
-- 录屏 MediaProjection 主链、有声 PTS 和 Root 设置桥（已去 `warsaw` 指纹门控，`songyuan` 上三开关可直接开启）。
+- MiShare 固定目录拓展与有界 DexKit 兜底（`2026-08-21` 双机重构回归与真实互传均手动验收通过）。
+- 录屏 MediaProjection 主链、有声 PTS 和 Root 设置桥（已去 `warsaw` 指纹门控，`songyuan` 上三开关可直接开启；`SAF document://` 完成卡查看/分享在 `songyuan` 切换目录后手动验收通过）。
 - 录屏 QS 磁贴与应用内开始录制的状态栏黑闪修复：透明 edge-to-edge 授权中转页、
   无 affinity 的一次性磁贴任务和零转场已装机；上一轮 benchmark 的真实磁贴与应用内
   触摸启动均成功，顶部状态栏裁剪视频未检测到整条黑帧。
@@ -90,11 +90,8 @@
 
 - 录屏入口的高帧率外部相机视觉复核；当前设备内录可证明状态栏容器和无整条黑帧，
   但不能排除 165 Hz 下仅持续一帧的闪烁。
-- SAF document URI 的完成卡查看/分享待在切换保存目录后单独手动验收；MediaStore 路径
-  已通过。
 - test-source 首装被系统以 `INSTALL_FAILED_USER_RESTRICTED` 拒绝；待正常授权后完成真实
   source-SBN smoke，未使用 Root 绕过。
-- MiShare resolver 在本次仓库重构后的回归。
 - OS4 `warsaw` 的录屏 QS stopped-package guard 仍为可选 API 漂移，核心常驻岛 Focus bridge 不受影响；需另行回归。
 - L3/L4 尚未开始，ColorOS 流体云保持冻结。
 
