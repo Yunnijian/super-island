@@ -14,6 +14,7 @@ import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
 import android.graphics.drawable.Icon;
 import android.os.BatteryManager;
+import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.SystemClock;
@@ -341,6 +342,15 @@ final class SystemUiResidentIslandHost {
                             MODULE_PACKAGE
                     )
             );
+            // OS4 (HyperOS 2, SDK 37) uses DynamicIsland via island_param / DynamicIslandManager.
+            // Dual-write: keep miui.focus for OS3 compatibility and also notify OS4's DynamicIsland.
+            if (Build.VERSION.SDK_INT >= 35) {
+                try {
+                    notifyOS4DynamicIsland(context, request);
+                } catch (Throwable os4Error) {
+                    Log.w(TAG, "OS4 DynamicIsland notify failed, keeping miui.focus only", os4Error);
+                }
+            }
         } catch (Throwable error) {
             Log.e(TAG, "Could not publish SystemUI-owned resident island", error);
         } finally {
@@ -1086,6 +1096,23 @@ final class SystemUiResidentIslandHost {
             return null;
         }
         return icon;
+    }
+
+    private static void notifyOS4DynamicIsland(Context context, FocusNotificationRequest request) throws Exception {
+        // HyperOS 2 (OS4, SDK 37) DynamicIsland is driven by miui.dynamicisland.DynamicIslandManager
+        // in addition to the legacy miui.focus path. Keep miui.focus for OS3 and dual-write for OS4.
+        Class<?> managerClass = Class.forName("miui.dynamicisland.DynamicIslandManager");
+        Object manager = managerClass.getMethod("getInstance").invoke(null);
+        // Use the ActivityManager-less overload if ElementSurfaceTransition is unavailable.
+        try {
+            managerClass.getMethod("notifyIslandInfoAdd", String.class, int.class, Class.forName("android.app.ElementSurfaceTransition"))
+                    .invoke(manager, MODULE_PACKAGE, context.getApplicationInfo().uid, null);
+        } catch (NoSuchMethodException e) {
+            // Fallback to 2-arg variant on some OS4 builds.
+            managerClass.getMethod("notifyIslandInfoAdd", String.class, int.class)
+                    .invoke(manager, MODULE_PACKAGE, context.getApplicationInfo().uid);
+        }
+        Log.i(TAG, "Notified OS4 DynamicIsland via DynamicIslandManager for " + request.getTitle());
     }
 
     private static String bounded(String value) {

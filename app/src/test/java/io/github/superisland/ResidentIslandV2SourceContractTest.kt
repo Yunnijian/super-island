@@ -449,7 +449,7 @@ class ResidentIslandV2SourceContractTest {
             ).readText()
         val bigArea = functionDeclaration(focusSource, "bigIslandArea")
 
-        listOf("narrowFont", "turnAnim").forEach { override ->
+        listOf("narrowFont").forEach { override ->
             assertFalse(
                 "Resident focus JSON must leave Xiaomi's default typography untouched: $override",
                 override in focusSource,
@@ -459,6 +459,12 @@ class ResidentIslandV2SourceContractTest {
                 override in hostSource,
             )
         }
+        // OS4 DynamicIsland (island_param) uses DeviceNotificationModel.TextParams.turnAnim for device
+        // notifications; its presence in islandParamForOS4 is expected and does not affect miui.focus typography.
+        assertFalse(
+            "Resident focus JSON must leave Xiaomi's default typography untouched: narrowFont",
+            "narrowFont" in focusSource,
+        )
         assertTrue(
             "The left title must remain one complete system-default title",
             Regex(

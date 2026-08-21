@@ -9,6 +9,7 @@ import android.content.Context
 import android.graphics.Color
 import android.graphics.drawable.Icon
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.os.SystemClock
 import android.provider.Settings
@@ -184,6 +185,11 @@ class FocusNotificationPublisher(
                     }
                 },
             )
+            // OS4 (Android 15+, HyperOS 2) uses DynamicIsland via island_param in addition to miui.focus.
+            // Keep miui.focus for OS3 compatibility and add island_param for OS4.
+            if (Build.VERSION.SDK_INT >= 35) {
+                putString("island_param", islandParamForOS4(request))
+            }
         }
         return builder.build()
     }
@@ -392,6 +398,23 @@ class FocusNotificationPublisher(
             .put("colorContent", "#99000000")
             .put("colorTitleDark", "#ffffff")
             .put("colorContentDark", "#99ffffff")
+
+    private fun islandParamForOS4(request: FocusNotificationRequest): String =
+        JSONObject()
+            .put(
+                "left",
+                JSONObject().put(
+                    "textParams",
+                    JSONObject().put("text", request.title).put("turnAnim", false),
+                ),
+            ).put(
+                "right",
+                JSONObject().put(
+                    "textParams",
+                    JSONObject().put("text", request.shortStatus).put("turnAnim", false),
+                ),
+            ).put("glowEffect", JSONObject().put("enable", false))
+            .toString()
 
     private fun canShowFocusFromSystem(): Boolean =
         runCatching {
