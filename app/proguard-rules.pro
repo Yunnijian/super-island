@@ -23,3 +23,6 @@
 -keep class io.github.superisland.source.screenrecord.ScreenRecordingService { *; }
 -keep class io.github.superisland.source.screenrecord.ScreenRecordingTileService { *; }
 -keep class io.github.superisland.publisher.focus.FocusNotificationPublisher { *; }
+
+# SuperLyricApi references the hidden android.os.ServiceManager at runtime via reflection.
+-dontwarn android.os.ServiceManager

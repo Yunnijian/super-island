@@ -57,6 +57,7 @@ android {
 dependencies {
     implementation(project(":core-model"))
     implementation(project(":publisher-focus"))
+    implementation(project(":source-lyric"))
     implementation(libs.hyperisland.kit)
     implementation(libs.dexkit)
     add(dexKitVerification.name, libs.dexkit)

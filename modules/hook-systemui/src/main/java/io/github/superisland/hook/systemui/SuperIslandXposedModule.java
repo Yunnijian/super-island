@@ -382,6 +382,15 @@ public final class SuperIslandXposedModule extends XposedModule {
                             log(Log.ERROR, TAG, "Could not register resident-island host", error);
                         }
                         try {
+                            io.github.superisland.hook.systemui.lyric.LyricIslandSystemUiHost.register(
+                                    (android.content.Context) context,
+                                    name -> getRemotePreferences(name)
+                            );
+                            log(Log.INFO, TAG, "Registered SystemUI lyric-island host");
+                        } catch (Throwable error) {
+                            log(Log.ERROR, TAG, "Could not register lyric-island host", error);
+                        }
+                        try {
                             SystemUiScreenRecordingRootBridge.register(
                                     (android.content.Context) context
                             );
