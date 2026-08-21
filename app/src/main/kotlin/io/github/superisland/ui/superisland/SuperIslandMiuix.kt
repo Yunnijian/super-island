@@ -15,6 +15,7 @@ fun SuperIslandMiuix(
     onOpenMediaIsland: () -> Unit,
     onOpenBatteryMonitor: () -> Unit,
     onOpenCapsuleAppearance: () -> Unit,
+    onOpenLyric: () -> Unit = {},
     showBottomBar: Boolean = true,
     bottomInnerPadding: Dp = 0.dp,
 ) {
@@ -32,6 +33,7 @@ fun SuperIslandMiuix(
                 "media_island" -> onOpenMediaIsland()
                 "monitor" -> onOpenBatteryMonitor()
                 "capsule_appearance" -> onOpenCapsuleAppearance()
+                "lyric" -> onOpenLyric()
             }
         },
     )

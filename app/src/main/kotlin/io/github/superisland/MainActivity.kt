@@ -93,6 +93,7 @@ import io.github.superisland.ui.extensions.ExtensionsMiuix
 import io.github.superisland.ui.extensions.MiShareFolderExtensionScreen
 import io.github.superisland.ui.extensions.ScreenRecordingExtensionScreen
 import io.github.superisland.ui.home.HomeScreen
+import io.github.superisland.ui.lyric.LyricScreen
 import io.github.superisland.ui.profile.ProfileMiuix
 import io.github.superisland.ui.settings.SettingsMiuix
 import io.github.superisland.ui.superisland.SuperIslandMiuix
@@ -677,6 +678,7 @@ private fun SuperIslandDestinationContent(
                 onOpenMediaIsland = { onNavigate(AppDestination.MEDIA) },
                 onOpenBatteryMonitor = { onNavigate(AppDestination.BATTERY_CONFIGURATION) },
                 onOpenCapsuleAppearance = { onNavigate(AppDestination.CAPSULE_APPEARANCE) },
+                onOpenLyric = { onNavigate(AppDestination.LYRIC) },
             )
         AppDestination.EXTENSIONS ->
             ExtensionsMiuix(
@@ -826,8 +828,7 @@ private fun SuperIslandDestinationContent(
                 onBack = { onNavigate(AppDestination.MEDIA) },
             )
         AppDestination.LYRIC ->
-            // TODO: Lyric island detail, reuse SuperLyric source
-            HomeAbout(
+            LyricScreen(
                 onBack = { onNavigate(AppDestination.SUPER_ISLAND) },
             )
     }
