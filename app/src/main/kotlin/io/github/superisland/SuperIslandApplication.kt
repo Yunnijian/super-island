@@ -16,6 +16,7 @@ class SuperIslandApplication : Application() {
             getSystemService(android.app.NotificationManager::class.java)?.cancel(0x464F)
         }
         ResidentIslandHostConfigSync.start(this)
+        LyricIslandHostConfigSync.start(this)
         IslandAppearanceConfigSync.start(this)
         MiShareFolderExtensionConfigSync.start(this)
         SmartCapsuleRuntimeStatusController.start(this)
