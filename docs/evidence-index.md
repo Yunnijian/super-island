@@ -34,6 +34,11 @@
   `7a2991dd…c060` 完整门禁、双机安装、SystemUI `5154→17687` / `23346→22210` 重载与风扇保留验证。
 - `artifacts/remove_focus_test_and_device_adapter_2026-08-21/`：完整移除焦点通知测试与设备能力适配入口（保留风扇监控）后的
   `610 tasks` 门禁、`PrimaryDirectory`、`AppNavigator`、`MainActivity`、`Adaptive/Material` 链路清理。
+- `artifacts/os4_resident_island_2026-08-21/`：OS4 `warsaw` 的当前 benchmark 门禁、安装后
+  SystemUI/XMSF 重载、APK SHA-256、运行态日志和解锁后的常驻 Focus 大岛截图；截图与日志确认
+  `screenLocked=false`、`onAuthSuccess`、`BigIsland` 以及中优先级常驻岛状态。
+- `artifacts/os4_focus_api_2026-08-21/`：OS4 `MIUISystemUIPlugin`/SystemUI API 反编译、插件上下文
+  与 `canShowFocus` 签名证据，以及同一包的 Focus 运行日志。
 - `device_research/`：ROM、反编译和互操作研究。
 
 公开或提交摘要前必须移除设备 serial、用户名绝对路径、第三方通知 key/UID 和通知正文。

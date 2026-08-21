@@ -18,7 +18,8 @@
 - 当前版本：`0.4.8-m4-dev`，versionCode `12`
 - 默认皮肤：Miuix；可选整页 Material 3
 - 一级导航：首页、超级岛、拓展、设置、我的
-- 目标验证机：`warsaw` / `M332BF` / `songyuan` / `M098FE` / HyperOS `OS3.0.306.0.WHPCNXM`（Root 设置桥已去指纹门控，任意 Root 设备可用）
+- 目标验证机：`warsaw` / `M332BF` / HyperOS `OS4.0.0.15.XPMCNXM`，以及
+  `songyuan` / `M098FE` / HyperOS `OS3.0.306.0.WGNCNXM`（Root 设置桥已去指纹门控，任意 Root 设备可用）
 
 ## 2. 运行作用域与身份链
 

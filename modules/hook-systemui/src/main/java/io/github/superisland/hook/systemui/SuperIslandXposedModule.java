@@ -600,7 +600,11 @@ public final class SuperIslandXposedModule extends XposedModule {
         try {
             Object focusPlugin = getFocusNotificationPlugin(pluginInstance);
             if (focusPlugin == null) return;
-            Context pluginContext = getPluginContext(pluginInstance);
+            // HyperOS OS4 moved the plugin context off PluginInstance. The loaded Focus plugin
+            // inherits the public PluginBase API, while older SystemUI builds exposed the
+            // context directly on PluginInstance. Resolve the actual plugin first and retain the
+            // instance path only as a compatibility fallback.
+            Context pluginContext = getPluginContext(focusPlugin, pluginInstance);
             Context systemUiContext = getSystemUiContext(focusPlugin);
             ClassLoader pluginClassLoader = pluginContext.getClassLoader();
             installFocusHooksIfPresent(pluginClassLoader, "MIUI SystemUI plugin loader");
@@ -619,10 +623,20 @@ public final class SuperIslandXposedModule extends XposedModule {
         }
     }
 
-    /** Uses PluginInstance's API first; the field is retained only for older compatible builds. */
-    private Context getPluginContext(Object pluginInstance) throws ReflectiveOperationException {
+    /** Resolves the context from the loaded plugin, with the pre-OS4 PluginInstance fallback. */
+    private Context getPluginContext(Object focusPlugin, Object pluginInstance)
+            throws ReflectiveOperationException {
+        try {
+            Method getter = focusPlugin.getClass().getMethod("getPluginContext");
+            getter.setAccessible(true);
+            Object value = getter.invoke(focusPlugin);
+            if (value instanceof Context) return (Context) value;
+        } catch (NoSuchMethodException ignored) {
+            // Fall through to the historical PluginInstance API.
+        }
         try {
             Method getter = pluginInstance.getClass().getMethod("getPluginContext");
+            getter.setAccessible(true);
             Object value = getter.invoke(pluginInstance);
             if (value instanceof Context) return (Context) value;
         } catch (NoSuchMethodException ignored) {
@@ -919,12 +933,24 @@ public final class SuperIslandXposedModule extends XposedModule {
                 false,
                 classLoader
         );
-        Method canShowFocus = focusUtils.getDeclaredMethod(
-                "canShowFocus",
-                android.content.Context.class,
-                String.class,
-                int.class
-        );
+        Method canShowFocus;
+        try {
+            // OS4 passes the complete source SBN so the Focus provider can resolve its user.
+            canShowFocus = focusUtils.getDeclaredMethod(
+                    "canShowFocus",
+                    android.content.Context.class,
+                    String.class,
+                    StatusBarNotification.class
+            );
+        } catch (NoSuchMethodException os4SignatureMissing) {
+            // Older HyperOS releases exposed only the numeric user id.
+            canShowFocus = focusUtils.getDeclaredMethod(
+                    "canShowFocus",
+                    android.content.Context.class,
+                    String.class,
+                    int.class
+            );
+        }
         deoptimize(canShowFocus);
         return hook(canShowFocus)
                 .setExceptionMode(io.github.libxposed.api.XposedInterface.ExceptionMode.PROTECTIVE)

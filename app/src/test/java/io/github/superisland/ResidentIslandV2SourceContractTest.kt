@@ -13,6 +13,63 @@ import org.junit.Test
 /** Source-level coverage for Android-private boundaries that have no local JVM test seam. */
 class ResidentIslandV2SourceContractTest {
     @Test
+    fun os4ResidentUsesTheFocusNotificationTransport() {
+        val hostSource =
+            sourceFile(
+                "modules/hook-systemui/src/main/java/io/github/superisland/hook/systemui/SystemUiResidentIslandHost.java",
+            ).readText()
+        val publisherSource =
+            sourceFile(
+                "modules/publisher-focus/src/main/kotlin/io/github/superisland/publisher/focus/FocusNotificationPublisher.kt",
+            ).readText()
+        val publishSnapshot =
+            javaMethodDeclaration(
+                source = hostSource,
+                methodName = "publishCurrentSnapshot",
+                parameterFragment = "boolean refreshFanMetric",
+            )
+        val focusPayload = functionDeclaration(publisherSource, "focusParamJson")
+        val customFocusPayload = functionDeclaration(publisherSource, "customFocusParamJson")
+
+        assertFalse("The resident host must not bypass NotificationManager on OS4", "notifyOS4DynamicIsland" in hostSource)
+        assertFalse("The resident host must not call the unsupported DynamicIsland manager directly", "DynamicIslandManager" in hostSource)
+        assertFalse("The resident host must not call the transition-only helper directly", "DynamicIslandWindowAnimHelper" in hostSource)
+        assertTrue(
+            "Every resident snapshot must publish one SystemUI-owned Focus notification",
+            Regex(
+                """notificationManager\.notify\s*\(\s*SystemUiResidentIslandContract\.HOST_NOTIFICATION_ID\s*,\s*publisher\.buildSystemUiResidentNotification""",
+            ).containsMatchIn(publishSnapshot),
+        )
+        assertFalse(
+            "The publisher must not write the unrelated top-level island_param transport",
+            Regex("""putString\s*\(\s*\"island_param\"""").containsMatchIn(publisherSource),
+        )
+        assertTrue("The regular Focus payload must carry its nested island model", "\"param_island\"" in focusPayload)
+        assertTrue("The custom Focus payload must carry its nested island model", "\"param_island\"" in customFocusPayload)
+    }
+
+    @Test
+    fun focusVisibilityGateSupportsOs4AndLegacySignatures() {
+        val moduleSource =
+            sourceFile(
+                "modules/hook-systemui/src/main/java/io/github/superisland/hook/systemui/SuperIslandXposedModule.java",
+            ).readText()
+
+        assertTrue(
+            "OS4 Focus visibility must resolve the source-SBN overload",
+            Regex(
+                """getDeclaredMethod\(\s*\"canShowFocus\"[\s\S]*StatusBarNotification\.class""",
+            ).containsMatchIn(moduleSource),
+        )
+        assertTrue(
+            "Older HyperOS Focus visibility must retain the user-id fallback",
+            Regex(
+                """getDeclaredMethod\(\s*\"canShowFocus\"[\s\S]*int\.class""",
+            ).containsMatchIn(moduleSource),
+        )
+    }
+
+    @Test
     fun residentIslandStaysAboveLowPriorityWithoutRefreshReordering() {
         val residentSource =
             sourceFile(
@@ -459,8 +516,8 @@ class ResidentIslandV2SourceContractTest {
                 override in hostSource,
             )
         }
-        // OS4 DynamicIsland (island_param) uses DeviceNotificationModel.TextParams.turnAnim for device
-        // notifications; its presence in islandParamForOS4 is expected and does not affect miui.focus typography.
+        // Xiaomi's device-notification typography is controlled by the nested Focus island model;
+        // this publisher intentionally leaves the system-default font parameters untouched.
         assertFalse(
             "Resident focus JSON must leave Xiaomi's default typography untouched: narrowFont",
             "narrowFont" in focusSource,

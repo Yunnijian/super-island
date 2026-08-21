@@ -6,7 +6,7 @@
 | --- | --- |
 | 应用 | `io.github.superisland` |
 | 版本 | `0.4.8-m4-dev` / versionCode `12` |
-| 目标设备 | `warsaw` / `M332BF` / `songyuan` / `M098FE` / HyperOS `OS3.0.306.0.WHPCNXM` |
+| 目标设备 | `warsaw` / `M332BF` / HyperOS `OS4.0.0.15.XPMCNXM`；`songyuan` / `M098FE` / HyperOS `OS3.0.306.0.WGNCNXM` |
 | 运行架构 | Root + LSPosed，libxposed API 102 |
 | UI | 默认 Miuix，可选整页 Material 3 |
 
@@ -46,10 +46,16 @@
   `7a2991ddfea8550e30345636700b3132d02ed0b325f32385693c8acf448fc060`；双机覆盖安装后双机 base APK 哈希一致，`songyuan` SystemUI `23346→22210` / XMSF `24208→23080`，`warsaw` SystemUI `5154→17687` / `OS4.0.0.15`。
   仅风扇相关白名单保留。
 - 2026-08-21 完整移除焦点通知测试与设备能力适配入口（保留风扇监控）后再次通过完整门禁：610 tasks，`BUILD SUCCESSFUL in 1m 43s`。
+- 2026-08-21 OS4 `warsaw` 常驻岛兼容修复后再次通过 `./scripts/check.sh`：610 tasks，benchmark
+  SHA-256 为 `10f1ff231fcaa3cd5fd51555d4e82707ab50506c85fe597cc62dbd6a46460fa0`，设备 base APK
+  SHA-256 一致；覆盖安装并重载 SystemUI/XMSF 后，解锁视觉证据确认常驻 Focus 大岛可见，实时显示
+  温度与风扇转速，且保持 `islandPriority=1`、`islandOrder=false`。OS4 的 Focus 插件上下文与
+  `canShowFocus(Context,String,StatusBarNotification)` 签名均已适配，旧版 userId 签名保留回退。
 
 ## 已完成
 
-- SystemUI 常驻岛宿主、App 强停后刷新（`testing.md:60` smoke 已在 `2cbebcb9` 的 `songyuan` 上复验通过）。
+- SystemUI 常驻岛宿主、App 强停后刷新（`testing.md:60` smoke 已在 `2cbebcb9` 的 `songyuan` 上复验通过，
+  OS4 `warsaw` 解锁视觉验收见 `os4_resident_island_2026-08-21`）。
 - 第三方 source-SBN 原地 Focus 映射和受限 XMSF 适配（同 smoke 复验通过）。
 - schema v4 App/Channel 规则、优先级和 App 默认仅焦点；Channel 级仅焦点与双皮肤持久化已复测通过。
 - 常驻展开内容与三个安全动作槽位；常驻中优先级 `1` 与低/高优先级队列仲裁已复测通过。
@@ -89,6 +95,7 @@
 - test-source 首装被系统以 `INSTALL_FAILED_USER_RESTRICTED` 拒绝；待正常授权后完成真实
   source-SBN smoke，未使用 Root 绕过。
 - MiShare resolver 在本次仓库重构后的回归。
+- OS4 `warsaw` 的录屏 QS stopped-package guard 仍为可选 API 漂移，核心常驻岛 Focus bridge 不受影响；需另行回归。
 - L3/L4 尚未开始，ColorOS 流体云保持冻结。
 
 历史时间线位于 `archive/development-history.md`，设备证据位置见 `evidence-index.md`。
