@@ -690,90 +690,70 @@ private fun LyricMaterialDirectory(
             SegmentedColumn(
                 modifier = Modifier.fillMaxWidth(),
                 title = "小米超级岛歌词",
-                content = listOf {
-                    SegmentedSwitchItem(
-                        title = "启用",
-                        summary = if (enabled) "正在通过超级岛显示歌词" else "关闭后不会发布歌词超级岛",
-                        checked = enabled,
-                        enabled = true,
-                        onCheckedChange = onEnabledChange,
-                    )
-                },
+                content = listOf(
+                    {
+                        SegmentedSwitchItem(
+                            title = "启用",
+                            summary = if (enabled) "正在通过超级岛显示歌词" else "关闭后不会发布歌词超级岛",
+                            checked = enabled,
+                            enabled = true,
+                            onCheckedChange = onEnabledChange,
+                        )
+                    },
+                    {
+                        SegmentedDropdownItem(
+                            title = "歌词模式",
+                            items = lyricModeLabels,
+                            selectedIndex = config.lyricMode.coerceIn(0, lyricModeLabels.lastIndex),
+                            enabled = enabled,
+                            onItemSelected = { mode ->
+                                onConfigChange(config.copy(lyricMode = mode).normalized())
+                            },
+                        )
+                    },
+                    {
+                        SegmentedDropdownItem(
+                            title = "歌词源",
+                            items = sourceLabels,
+                            selectedIndex = sources.selected(config.sourceMode.publicPickerMode()),
+                            enabled = enabled,
+                            onItemSelected = { source ->
+                                onConfigChange(config.copy(sourceMode = sources.getOrElse(source) { LyricSourceMode.LYRICON }).normalized())
+                            },
+                        )
+                    },
+                ),
             )
-            SegmentedColumn(
-                modifier = Modifier.fillMaxWidth(),
-                title = "",
-                content = listOf {
-                    SegmentedDropdownItem(
-                        title = "歌词模式",
-                        items = lyricModeLabels,
-                        selectedIndex = config.lyricMode.coerceIn(0, lyricModeLabels.lastIndex),
-                        enabled = enabled,
-                        onItemSelected = { mode ->
-                            onConfigChange(config.copy(lyricMode = mode).normalized())
-                        },
-                    )
-                },
-            )
-            SegmentedColumn(
-                modifier = Modifier.fillMaxWidth(),
-                title = "",
-                content = listOf {
-                    SegmentedDropdownItem(
-                        title = "歌词源",
-                        items = sourceLabels,
-                        selectedIndex = sources.selected(config.sourceMode.publicPickerMode()),
-                        enabled = enabled,
-                        onItemSelected = { source ->
-                            onConfigChange(config.copy(sourceMode = sources.getOrElse(source) { LyricSourceMode.LYRICON }).normalized())
-                        },
-                    )
-                },
-            )
-            LyricConfigSection.entries
+            val sections = LyricConfigSection.entries
                 .filter {
                     it != LyricConfigSection.SOURCE &&
                         (it != LyricConfigSection.PROVIDER || config.sourceMode == LyricSourceMode.LYRICON)
                 }
-                .forEachIndexed { index, section ->
-                LyricMaterialDirectoryEntry(
-                    section = section,
-                    config = config,
-                    enabled = enabled,
-                    title = if (index == 0) "自定义配置" else "",
-                    onOpenSection = onOpenSection,
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun LyricMaterialDirectoryEntry(
-    section: LyricConfigSection,
-    config: LyricIslandConfig,
-    enabled: Boolean,
-    title: String,
-    onOpenSection: (LyricConfigSection) -> Unit,
-) {
-    SegmentedColumn(
-        Modifier.fillMaxWidth(),
-        title = title,
-        content = listOf {
-            SegmentedListItem(
-                onClick = { onOpenSection(section) },
-                enabled = enabled,
-                headlineContent = { Text(section.title) },
-                supportingContent = { Text(lyricSectionSummary(section, config)) },
-                trailingContent = {
-                    Icon(
-                        Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                        contentDescription = "进入",
-                    )
+            SegmentedColumn(
+                modifier = Modifier.fillMaxWidth(),
+                title = "自定义配置",
+                content = sections.map { section ->
+                    {
+                        SegmentedListItem(
+                            onClick = { onOpenSection(section) },
+                            enabled = enabled,
+                            headlineContent = { Text(section.title) },
+                            supportingContent = {
+                                val summary = lyricSectionSummary(section, config)
+                                if (summary.isNotEmpty()) Text(summary)
+                            },
+                            trailingContent = {
+                                Icon(
+                                    Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                                    contentDescription = "进入",
+                                )
+                            },
+                        )
+                    }
                 },
             )
-        },
-    )
+        }
+    }
 }
 
 private fun lyricSectionSummary(
