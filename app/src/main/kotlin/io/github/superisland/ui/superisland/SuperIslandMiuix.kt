@@ -12,7 +12,6 @@ import io.github.superisland.ui.superIslandDirectoryGroups
 fun SuperIslandMiuix(
     onTabSelected: (AppPrimaryTab) -> Unit,
     onOpenSmartCapsule: () -> Unit,
-    onOpenMediaIsland: () -> Unit,
     onOpenBatteryMonitor: () -> Unit,
     onOpenCapsuleAppearance: () -> Unit,
     onOpenLyric: () -> Unit = {},

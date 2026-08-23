@@ -63,7 +63,6 @@ import io.github.superisland.design.SmartCapsuleAppProfileChannelUi
 import io.github.superisland.design.SmartCapsuleAppProfileUi
 import io.github.superisland.design.ResidentMetricOptionUi
 import io.github.superisland.design.ResidentSlotOptionUi
-import io.github.superisland.design.MediaSourceOptionUi
 import io.github.superisland.model.AppRule
 import io.github.superisland.model.BatteryChargeState
 import io.github.superisland.model.AppAppearanceSettings
@@ -105,9 +104,6 @@ import io.github.superisland.ui.adaptive.BatteryContinuousMonitorScreen
 import io.github.superisland.ui.adaptive.BatteryMonitorDiagnosticsScreen
 import io.github.superisland.ui.adaptive.BatteryMonitorEventsScreen
 import io.github.superisland.ui.adaptive.BatteryRealtimeScreen
-import io.github.superisland.ui.adaptive.MediaIslandConnectionScreen
-import io.github.superisland.ui.adaptive.MediaIslandSourcesScreen
-import io.github.superisland.ui.adaptive.MediaIslandStatusScreen
 import io.github.superisland.ui.adaptive.ResidentMonitorConfigurationScreen
 import io.github.superisland.ui.adaptive.SmartCapsuleAppsScreen
 import io.github.superisland.ui.adaptive.SmartCapsuleAppProfileScreen
@@ -410,9 +406,6 @@ private fun SuperIslandApp(
             // starts the transition, then publish the complete list in one owner update.
             smartCapsuleStateOwner.activateAppPage()
         }
-        if (destination == AppDestination.MEDIA) {
-            mediaIslandStateOwner.activate()
-        }
         if (
             destination == AppDestination.BATTERY_CONFIGURATION ||
             destination == AppDestination.BATTERY_EXPANDED_CONTENT
@@ -514,7 +507,6 @@ private fun SuperIslandMainPager(
                             SuperIslandMiuix(
                                 onTabSelected = { selectedTab -> mainPagerState.animateToPage(selectedTab.pageIndex) },
                                 onOpenSmartCapsule = { onOpenDestination(AppDestination.SMART_CAPSULE_APPS) },
-                                onOpenMediaIsland = { onOpenDestination(AppDestination.MEDIA) },
                                 onOpenBatteryMonitor = { onOpenDestination(AppDestination.BATTERY_CONFIGURATION) },
                                 onOpenCapsuleAppearance = { onOpenDestination(AppDestination.CAPSULE_APPEARANCE) },
                                 showBottomBar = false,
@@ -675,7 +667,6 @@ private fun SuperIslandDestinationContent(
             SuperIslandMiuix(
                 onTabSelected = { tab -> onNavigate(tab.destination) },
                 onOpenSmartCapsule = { onNavigate(AppDestination.SMART_CAPSULE_APPS) },
-                onOpenMediaIsland = { onNavigate(AppDestination.MEDIA) },
                 onOpenBatteryMonitor = { onNavigate(AppDestination.BATTERY_CONFIGURATION) },
                 onOpenCapsuleAppearance = { onNavigate(AppDestination.CAPSULE_APPEARANCE) },
                 onOpenLyric = { onNavigate(AppDestination.LYRIC) },
@@ -794,38 +785,6 @@ private fun SuperIslandDestinationContent(
                 stateOwner = residentMonitorStateOwner,
                 onOpenPage = { page -> onNavigate(page.destination) },
                 onBack = { onNavigate(AppDestination.BATTERY_CONFIGURATION) },
-            )
-        AppDestination.MEDIA ->
-            MediaIsland(
-                resumeGeneration = resumeGeneration,
-                page = MediaIslandPage.OVERVIEW,
-                stateOwner = mediaIslandStateOwner,
-                onOpenPage = { page -> onNavigate(page.destination) },
-                onBack = { onNavigate(AppDestination.SUPER_ISLAND) },
-            )
-        AppDestination.MEDIA_CONNECTION ->
-            MediaIsland(
-                resumeGeneration = resumeGeneration,
-                page = MediaIslandPage.CONNECTION,
-                stateOwner = mediaIslandStateOwner,
-                onOpenPage = { page -> onNavigate(page.destination) },
-                onBack = { onNavigate(AppDestination.MEDIA) },
-            )
-        AppDestination.MEDIA_SOURCES ->
-            MediaIsland(
-                resumeGeneration = resumeGeneration,
-                page = MediaIslandPage.SOURCES,
-                stateOwner = mediaIslandStateOwner,
-                onOpenPage = { page -> onNavigate(page.destination) },
-                onBack = { onNavigate(AppDestination.MEDIA) },
-            )
-        AppDestination.MEDIA_STATUS ->
-            MediaIsland(
-                resumeGeneration = resumeGeneration,
-                page = MediaIslandPage.STATUS,
-                stateOwner = mediaIslandStateOwner,
-                onOpenPage = { page -> onNavigate(page.destination) },
-                onBack = { onNavigate(AppDestination.MEDIA) },
             )
         AppDestination.LYRIC ->
             LyricScreen(
@@ -1431,142 +1390,6 @@ private fun SmartCapsuleDashboard(
                 )
             }
         }
-    }
-}
-
-@Composable
-private fun MediaIsland(
-    resumeGeneration: Int,
-    page: MediaIslandPage,
-    stateOwner: MediaIslandDashboardStateOwner,
-    onOpenPage: (MediaIslandPage) -> Unit,
-    onBack: () -> Unit,
-) {
-    val context = LocalContext.current
-    val contentReady = rememberContentReady()
-    val dashboardState by stateOwner.state.collectAsStateWithLifecycle()
-    LaunchedEffect(contentReady, resumeGeneration) {
-        if (contentReady) stateOwner.onVisible(resumeGeneration)
-    }
-
-    val snapshot = dashboardState.snapshot
-    val enabledIds = snapshot.enabledSources.mapTo(mutableSetOf()) { it.id }
-    val runtimeStatus = dashboardState.operationStatus.ifBlank { snapshot.lastResult }
-    val enabledSummary =
-        snapshot.enabledSources.joinToString(separator = "\n") { it.appLabel }.ifBlank { "未启用" }
-    val notificationAccessStatus = if (snapshot.notificationAccessGranted) "已允许" else "未允许"
-    val listenerStatus =
-        when {
-            snapshot.listenerConnected -> "已连接"
-            snapshot.notificationAccessGranted -> "未连接 · 请检查 HyperOS 自启动"
-            else -> "未连接"
-        }
-    val candidates =
-        snapshot.candidates.map { candidate ->
-            MediaSourceOptionUi(
-                id = candidate.id,
-                title = candidate.appLabel,
-                summary = "${candidate.packageName} · 仅在播放中上岛",
-                selected = candidate.id in enabledIds,
-            )
-        }
-    val refresh = stateOwner::refresh
-
-    when (page) {
-        MediaIslandPage.OVERVIEW ->
-            AppDirectoryDetailScreen(
-                title = "超级岛音乐",
-                subtitle = ROOT_MODE_LABEL,
-                header = {
-                    AppFeatureMasterSwitch(
-                        title = "启用超级岛音乐",
-                        summary =
-                            if (snapshot.featureEnabled) {
-                                "已启用；仅发布你允许的播放器会话"
-                            } else {
-                                "已关闭；保留播放器列表，但不会发布新的音乐岛事件"
-                            },
-                        checked = snapshot.featureEnabled,
-                        onCheckedChange = stateOwner::setFeatureEnabled,
-                    )
-                },
-                onBack = onBack,
-                groups =
-                    listOf(
-                        DirectoryGroupUi(
-                            title = "设置与状态",
-                            entries =
-                                listOf(
-                                    DirectoryEntryUi(
-                                        id = "connection",
-                                        title = "通知访问与连接",
-                                        summary = "通知访问 $notificationAccessStatus · 监听服务 $listenerStatus",
-                                        icon = DirectoryIcon.NOTIFICATION,
-                                    ),
-                                    DirectoryEntryUi(
-                                        id = "sources",
-                                        title = "播放器来源",
-                                        summary =
-                                            if (snapshot.enabledSources.isEmpty()) {
-                                                "选择允许显示到超级岛的播放器"
-                                            } else {
-                                                "已允许 ${snapshot.enabledSources.size} 个播放器"
-                                            },
-                                        icon = DirectoryIcon.MEDIA,
-                                        status = "${snapshot.enabledSources.size} 个",
-                                    ),
-                                    DirectoryEntryUi(
-                                        id = "status",
-                                        title = "运行状态",
-                                        summary = runtimeStatus.ifBlank { "暂无活跃媒体岛" },
-                                        icon = DirectoryIcon.INFO,
-                                        status = "${snapshot.activeMediaCount} 个事件",
-                                    ),
-                                ),
-                        ),
-                    ),
-                onEntrySelected = { id ->
-                    when (id) {
-                        "connection" -> onOpenPage(MediaIslandPage.CONNECTION)
-                        "sources" -> onOpenPage(MediaIslandPage.SOURCES)
-                        "status" -> onOpenPage(MediaIslandPage.STATUS)
-                    }
-                },
-            )
-        MediaIslandPage.CONNECTION ->
-            MediaIslandConnectionScreen(
-                modeLabel = ROOT_MODE_LABEL,
-                notificationAccessStatus = notificationAccessStatus,
-                listenerStatus = listenerStatus,
-                showNotificationAccessAction = !snapshot.notificationAccessGranted,
-                showAutostartSettingsAction =
-                    snapshot.notificationAccessGranted && !snapshot.listenerConnected,
-                onOpenNotificationAccess = {
-                    context.startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
-                },
-                onOpenAutostartSettings = { context.openHyperOsAutostartSettings() },
-                onRefresh = refresh,
-                onBackToMediaIsland = onBack,
-            )
-        MediaIslandPage.SOURCES ->
-            MediaIslandSourcesScreen(
-                modeLabel = ROOT_MODE_LABEL,
-                enabledSummary = enabledSummary,
-                candidates = candidates,
-                hasEnabledSources = snapshot.enabledSources.isNotEmpty(),
-                onSelectCandidate = stateOwner::toggleCandidate,
-                onClearRules = stateOwner::clearRules,
-                onRefresh = refresh,
-                onBackToMediaIsland = onBack,
-            )
-        MediaIslandPage.STATUS ->
-            MediaIslandStatusScreen(
-                modeLabel = ROOT_MODE_LABEL,
-                activeMediaCount = snapshot.activeMediaCount,
-                operationStatus = runtimeStatus,
-                onRefresh = refresh,
-                onBackToMediaIsland = onBack,
-            )
     }
 }
 
@@ -2468,7 +2291,7 @@ private fun Intent?.debugDestination(): AppDestination =
             this?.action == DEBUG_REFRESH_MEDIA_ACTION ||
             this?.action == DEBUG_ENABLE_TEST_MEDIA_ACTION
         ) {
-            AppDestination.MEDIA
+            AppDestination.SUPER_ISLAND
         } else {
             AppDestination.BATTERY_MONITOR
         }
@@ -2504,22 +2327,6 @@ private val IslandPriority.displayName: String
 
 private fun String.toIslandPriorityNameOrNull(): IslandPriority? =
     IslandPriority.entries.firstOrNull { priority -> priority.name == this }
-
-private enum class MediaIslandPage {
-    OVERVIEW,
-    CONNECTION,
-    SOURCES,
-    STATUS,
-}
-
-private val MediaIslandPage.destination: AppDestination
-    get() =
-        when (this) {
-            MediaIslandPage.OVERVIEW -> AppDestination.MEDIA
-            MediaIslandPage.CONNECTION -> AppDestination.MEDIA_CONNECTION
-            MediaIslandPage.SOURCES -> AppDestination.MEDIA_SOURCES
-            MediaIslandPage.STATUS -> AppDestination.MEDIA_STATUS
-        }
 
 private enum class BatteryMonitorPage {
     OVERVIEW,
@@ -2569,10 +2376,6 @@ private val AppDestination.primaryTab: AppPrimaryTab
             AppDestination.BATTERY_DIAGNOSTICS,
             AppDestination.BATTERY_CONFIGURATION,
             AppDestination.BATTERY_EXPANDED_CONTENT,
-            AppDestination.MEDIA,
-            AppDestination.MEDIA_CONNECTION,
-            AppDestination.MEDIA_SOURCES,
-            AppDestination.MEDIA_STATUS,
             AppDestination.LYRIC,
             -> AppPrimaryTab.SUPER_ISLAND
             AppDestination.EXTENSIONS,

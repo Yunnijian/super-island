@@ -734,10 +734,10 @@ final class LyricIslandNativeRenderer {
 
         void updatePosition(long position, float speed, boolean playing) {
             if (canvas == null || canvas.getParent() != container) return;
+            updateStatusBarTextColor();
             boolean effectivePlaying = frozen ? false : playing;
             if (hasPosition && lastPosition == position && lastSpeed == speed
                     && lastPlaying == effectivePlaying) return;
-            updateStatusBarTextColor();
             if (metadataMode) {
                 canvas.updateMetadataPosition(position, speed, effectivePlaying);
             } else {

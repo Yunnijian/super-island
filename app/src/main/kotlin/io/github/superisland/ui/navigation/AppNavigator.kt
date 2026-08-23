@@ -40,10 +40,6 @@ enum class AppDestination : AppRoute {
     BATTERY_DIAGNOSTICS,
     BATTERY_CONFIGURATION,
     BATTERY_EXPANDED_CONTENT,
-    MEDIA,
-    MEDIA_CONNECTION,
-    MEDIA_SOURCES,
-    MEDIA_STATUS,
     LYRIC,
 }
 
@@ -89,10 +85,6 @@ val AppDestination.backDestination: AppDestination
             AppDestination.SETTINGS_THEME -> AppDestination.SETTINGS
             AppDestination.SMART_CAPSULE_APPS -> AppDestination.SUPER_ISLAND
             AppDestination.CAPSULE_APPEARANCE -> AppDestination.SUPER_ISLAND
-            AppDestination.MEDIA_CONNECTION,
-            AppDestination.MEDIA_SOURCES,
-            AppDestination.MEDIA_STATUS,
-            -> AppDestination.MEDIA
             AppDestination.BATTERY_REALTIME,
             AppDestination.BATTERY_CONTINUOUS,
             AppDestination.BATTERY_EVENTS,
@@ -102,7 +94,6 @@ val AppDestination.backDestination: AppDestination
             AppDestination.BATTERY_EXPANDED_CONTENT -> AppDestination.BATTERY_CONFIGURATION
             AppDestination.LYRIC -> AppDestination.SUPER_ISLAND
             AppDestination.BATTERY_MONITOR,
-            AppDestination.MEDIA,
             -> AppDestination.SUPER_ISLAND
             AppDestination.HOME,
             AppDestination.SUPER_ISLAND,

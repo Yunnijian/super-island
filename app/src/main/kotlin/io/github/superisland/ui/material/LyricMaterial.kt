@@ -53,8 +53,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.Dp
 import java.util.Locale
@@ -89,24 +87,6 @@ private val animationIds = listOf("none", "default", "fade_out_fade_in", "fade_o
 private val animationLabels = listOf("无动画", "默认", "渐隐渐现", "向上渐隐＆向上渐现", "向下渐隐＆向下渐现", "向左渐隐＆右侧渐现", "向左渐隐＆向上渐现", "向左渐隐＆缩放渐现", "向左渐隐＆柔缓着陆", "向右渐隐＆左侧渐现", "向右渐隐＆向上渐现", "向右渐隐＆缩放渐现", "向右渐隐＆聚焦着陆", "向左渐隐＆右侧缩放渐现", "向右渐隐＆左侧缩放渐现", "左侧滑出＆右侧滑入", "左侧滑出＆向上渐现", "左侧滑出＆缩放渐现", "左侧滑出＆柔缓着陆", "右侧滑出＆左侧滑入", "右侧滑出＆向上渐现", "右侧滑出＆缩放渐现", "右侧滑出＆柔缓着陆", "X轴翻转", "Y轴翻转", "旋转", "缩放")
 
 private fun List<Any>.selected(value: Any): Int = indexOf(value).takeIf { it >= 0 } ?: 0
-
-private data class MaterialIntEditorSpec(
-    val title: String,
-    val label: String,
-    val initialValue: Int,
-    val min: Int,
-    val max: Int,
-    val onConfirm: (Int) -> Unit,
-)
-
-private data class MaterialFloatEditorSpec(
-    val title: String,
-    val label: String,
-    val initialValue: Float,
-    val min: Float,
-    val max: Float,
-    val onConfirm: (Float) -> Unit,
-)
 
 private val contentModes = listOf(
     IslandContentMode.NONE,
@@ -252,10 +232,6 @@ private fun LyricMaterialDetail(
         mutableFloatStateOf(config.rightContentMaxWidth.coerceIn(islandWidthMin, islandWidthMax).toFloat())
     }
     var editingFieldRow by remember { mutableStateOf<Int?>(null) }
-    var editingPaddingSide by remember { mutableStateOf<Int?>(null) }
-    var showIslandWidthDialog by remember { mutableStateOf(false) }
-    var intEditor by remember { mutableStateOf<MaterialIntEditorSpec?>(null) }
-    var floatEditor by remember { mutableStateOf<MaterialFloatEditorSpec?>(null) }
     val editingFields = when (editingFieldRow) {
         0 -> LyricMusicInfoLayout.parseFields(config.musicInfoFirstLine, LyricMusicInfoLayout.FIELD_TITLE)
         1 -> LyricMusicInfoLayout.parseFields(config.musicInfoSecondLine, LyricMusicInfoLayout.FIELD_ARTIST)
@@ -275,64 +251,6 @@ private fun LyricMaterialDetail(
             editingFieldRow = null
         },
     )
-    val paddingSide = editingPaddingSide
-    MaterialPaddingDialog(
-        show = paddingSide != null,
-        title = if (paddingSide == 1) "右侧内容内边距" else "左侧内容内边距",
-        initialLeft = if (paddingSide == 1) config.rightPaddingLeft else config.leftPaddingLeft,
-        initialRight = if (paddingSide == 1) config.rightPaddingRight else config.leftPaddingRight,
-        onDismiss = { editingPaddingSide = null },
-        onConfirm = { left, right ->
-            set(
-                if (paddingSide == 1) config.copy(rightPaddingLeft = left, rightPaddingRight = right)
-                else config.copy(leftPaddingLeft = left, leftPaddingRight = right),
-            )
-            editingPaddingSide = null
-        },
-    )
-    MaterialNumberInputDialog(
-        show = showIslandWidthDialog,
-        title = "超级岛长度",
-        label = "范围：$islandWidthMin ~ $islandWidthMax",
-        initialValue = config.rightContentMaxWidth,
-        min = islandWidthMin,
-        max = islandWidthMax,
-        onDismiss = { showIslandWidthDialog = false },
-        onConfirm = { value ->
-            set(config.copy(rightContentMaxWidth = value))
-            showIslandWidthDialog = false
-        },
-    )
-    intEditor?.let { editor ->
-        MaterialNumberInputDialog(
-            show = true,
-            title = editor.title,
-            label = editor.label,
-            initialValue = editor.initialValue,
-            min = editor.min,
-            max = editor.max,
-            onDismiss = { intEditor = null },
-            onConfirm = { value ->
-                editor.onConfirm(value)
-                intEditor = null
-            },
-        )
-    }
-    floatEditor?.let { editor ->
-        MaterialFloatInputDialog(
-            show = true,
-            title = editor.title,
-            label = editor.label,
-            initialValue = editor.initialValue,
-            min = editor.min,
-            max = editor.max,
-            onDismiss = { floatEditor = null },
-            onConfirm = { value ->
-                editor.onConfirm(value)
-                floatEditor = null
-            },
-        )
-    }
     val dropdown: @Composable (String, List<String>, Int, (Int) -> Unit) -> Unit = { title, values, index, onSelect ->
         SegmentedDropdownItem(title = title, items = values, selectedIndex = index.coerceIn(0, values.lastIndex), enabled = config.enabled, onItemSelected = onSelect)
     }
@@ -733,9 +651,8 @@ private fun LyricMaterialDirectory(
                             onClick = { onOpenSection(section) },
                             enabled = enabled,
                             headlineContent = { Text(section.title) },
-                            supportingContent = {
-                                val summary = lyricSectionSummary(section, config)
-                                if (summary.isNotEmpty()) Text(summary)
+                            supportingContent = lyricSectionSummary(section, config)?.let { summary ->
+                                { Text(summary) }
                             },
                             trailingContent = {
                                 Icon(
@@ -754,7 +671,7 @@ private fun LyricMaterialDirectory(
 private fun lyricSectionSummary(
     section: LyricConfigSection,
     config: LyricIslandConfig,
-): String = when (section) {
+): String? = when (section) {
     LyricConfigSection.SOURCE -> when (config.sourceMode) {
         LyricSourceMode.SUPER_LYRIC -> "SuperLyric"
         LyricSourceMode.LYRIC_INFO -> "LyricInfo"
@@ -767,7 +684,7 @@ private fun lyricSectionSummary(
     LyricConfigSection.SCROLL,
     LyricConfigSection.VERBATIM,
     LyricConfigSection.ANIMATION,
-    -> ""
+    -> null
     LyricConfigSection.TRANSLATION -> "歌词翻译、下一句歌词等功能"
 }
 
@@ -844,118 +761,6 @@ private fun MaterialFieldOrderDialog(
             TextButton(onClick = {
                 val fields = order.filter { it in selected }
                 if (!requireSelection || fields.isNotEmpty()) onConfirm(fields)
-            }) { Text("确定") }
-        },
-    )
-}
-
-/** Numeric fixed-width editor copied from HyperLyric's Super Island settings. */
-@Composable
-private fun MaterialNumberInputDialog(
-    show: Boolean,
-    title: String,
-    label: String,
-    initialValue: Int,
-    min: Int,
-    max: Int,
-    onDismiss: () -> Unit,
-    onConfirm: (Int) -> Unit,
-) {
-    if (!show) return
-    var sliderValue by remember(initialValue, min, max) {
-        mutableFloatStateOf(initialValue.coerceIn(min, max).toFloat())
-    }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(title) },
-        text = {
-            Column {
-                Text("${sliderValue.toInt()}  $label")
-                Slider(
-                    value = sliderValue,
-                    onValueChange = { sliderValue = it.coerceIn(min.toFloat(), max.toFloat()) },
-                    valueRange = min.toFloat()..max.toFloat(),
-                )
-            }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } },
-        confirmButton = {
-            TextButton(
-                onClick = {
-                    onConfirm(sliderValue.toInt().coerceIn(min, max))
-                },
-            ) {
-                Text("确定")
-            }
-        },
-    )
-}
-
-/** Decimal editor matching HyperLyric's coefficient dialogs. */
-@Composable
-private fun MaterialFloatInputDialog(
-    show: Boolean,
-    title: String,
-    label: String,
-    initialValue: Float,
-    min: Float,
-    max: Float,
-    onDismiss: () -> Unit,
-    onConfirm: (Float) -> Unit,
-) {
-    if (!show) return
-    var sliderValue by remember(initialValue, min, max) {
-        mutableFloatStateOf(initialValue.coerceIn(min, max))
-    }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(title) },
-        text = {
-            Column {
-                Text("%.2f  %s".format(Locale.ROOT, sliderValue, label))
-                Slider(
-                    value = sliderValue,
-                    onValueChange = { sliderValue = it.coerceIn(min, max) },
-                    valueRange = min..max,
-                )
-            }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } },
-        confirmButton = {
-            TextButton(onClick = {
-                onConfirm(sliderValue.coerceIn(min, max))
-            }) { Text("确定") }
-        },
-    )
-}
-
-@Composable
-private fun MaterialPaddingDialog(
-    show: Boolean,
-    title: String,
-    initialLeft: Int,
-    initialRight: Int,
-    onDismiss: () -> Unit,
-    onConfirm: (Int, Int) -> Unit,
-) {
-    if (!show) return
-    var left by remember(title, initialLeft) { mutableFloatStateOf(initialLeft.coerceIn(-50, 100).toFloat()) }
-    var right by remember(title, initialRight) { mutableFloatStateOf(initialRight.coerceIn(-50, 100).toFloat()) }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(title) },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("左侧：${left.toInt()}dp")
-                Slider(value = left, onValueChange = { left = it }, valueRange = -50f..100f)
-                Text("右侧：${right.toInt()}dp")
-                Slider(value = right, onValueChange = { right = it }, valueRange = -50f..100f)
-            }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } },
-        confirmButton = {
-            TextButton(onClick = {
-                onConfirm(left.toInt().coerceIn(-50, 100), right.toInt().coerceIn(-50, 100))
             }) { Text("确定") }
         },
     )

@@ -10,7 +10,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -20,7 +19,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.TextFieldValue
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import io.github.superisland.source.lyric.IslandContentMode
 import io.github.superisland.source.lyric.LyricIslandConfig
@@ -40,6 +38,7 @@ import top.yukonga.miuix.kmp.basic.TextField
 import top.yukonga.miuix.kmp.overlay.OverlayDialog
 import top.yukonga.miuix.kmp.preference.ArrowPreference
 import top.yukonga.miuix.kmp.preference.OverlayDropdownPreference
+import top.yukonga.miuix.kmp.preference.SliderPreference
 import top.yukonga.miuix.kmp.preference.SwitchPreference
 
 // MEDIA_FALLBACK is retained only for decoding old configurations. HyperLyric's basic source
@@ -82,23 +81,38 @@ private fun LyricInlineSliderRow(
     var sliderValue by remember(title, value, valueRange.start, valueRange.endInclusive) {
         mutableFloatStateOf(value.coerceIn(valueRange.start, valueRange.endInclusive))
     }
-    Row(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        Text(title, modifier = Modifier.weight(0.9f))
-        Text(valueLabel, modifier = Modifier.weight(0.25f), maxLines = 1)
-        Slider(
-            value = sliderValue,
-            onValueChange = { sliderValue = it },
-            onValueChangeFinished = { onValueChangeFinished(sliderValue) },
-            valueRange = valueRange,
-            steps = steps,
-            enabled = enabled,
-            modifier = Modifier.weight(1.4f),
-        )
-    }
+    SliderPreference(
+        value = sliderValue,
+        onValueChange = { sliderValue = it },
+        title = title,
+        valueText = valueLabel,
+        valueRange = valueRange,
+        steps = steps,
+        enabled = enabled,
+        onValueChangeFinished = { onValueChangeFinished(sliderValue) },
+        showKeyPoints = true,
+        keyPoints = lyricSliderKeyPoints(valueRange),
+        hapticEffect = SliderDefaults.SliderHapticEffect.Step,
+        magnetThreshold = 0f,
+    )
+}
+
+private fun lyricSliderKeyPoints(valueRange: ClosedFloatingPointRange<Float>): List<Float> {
+    val span = valueRange.endInclusive - valueRange.start
+    val step = when {
+        span >= 5_000f -> 1_000f
+        span >= 500f -> 100f
+        span >= 100f -> 10f
+        span >= 10f -> 2f
+        else -> span / 4f
+    }.coerceAtLeast(0.001f)
+    return buildList {
+        var point = valueRange.start
+        while (point <= valueRange.endInclusive + 0.001f) {
+            add(point.coerceIn(valueRange.start, valueRange.endInclusive))
+            point += step
+        }
+    }.distinct()
 }
 
 @Composable
@@ -147,17 +161,26 @@ fun LyricSectionEntryPageMiuix(
         LyricConfigSection.entries
             .filter { it != LyricConfigSection.PROVIDER || config.sourceMode == LyricSourceMode.LYRICON }
             .forEach { section ->
-            ArrowPreference(
-                title = section.title,
-                summary = lyricSectionSummary(section, config),
-                enabled = enabled,
-                onClick = { onSectionSelected(section) },
-            )
+            val summary = lyricSectionSummary(section, config)
+            if (summary == null) {
+                ArrowPreference(
+                    title = section.title,
+                    enabled = enabled,
+                    onClick = { onSectionSelected(section) },
+                )
+            } else {
+                ArrowPreference(
+                    title = section.title,
+                    summary = summary,
+                    enabled = enabled,
+                    onClick = { onSectionSelected(section) },
+                )
+            }
         }
     }
 }
 
-private fun lyricSectionSummary(section: LyricConfigSection, config: LyricIslandConfig): String = when (section) {
+private fun lyricSectionSummary(section: LyricConfigSection, config: LyricIslandConfig): String? = when (section) {
     LyricConfigSection.SOURCE -> when (config.sourceMode) {
         LyricSourceMode.LYRICON -> "Lyricon"
         LyricSourceMode.SUPER_LYRIC -> "SuperLyric"
@@ -172,27 +195,9 @@ private fun lyricSectionSummary(section: LyricConfigSection, config: LyricIsland
     LyricConfigSection.SCROLL,
     LyricConfigSection.VERBATIM,
     LyricConfigSection.ANIMATION,
-    -> ""
+    -> null
     LyricConfigSection.TRANSLATION -> "歌词翻译、下一句歌词等功能"
 }
-
-private data class IntEditorSpec(
-    val title: String,
-    val label: String,
-    val initialValue: Int,
-    val min: Int,
-    val max: Int,
-    val onConfirm: (Int) -> Unit,
-)
-
-private data class FloatEditorSpec(
-    val title: String,
-    val label: String,
-    val initialValue: Float,
-    val min: Float,
-    val max: Float,
-    val onConfirm: (Float) -> Unit,
-)
 
 private fun <T> List<T>.safeIndex(value: T): Int = indexOf(value).takeIf { it >= 0 } ?: 0
 
@@ -241,10 +246,6 @@ fun LyricConfigurationMiuix(
         mutableFloatStateOf(config.rightContentMaxWidth.coerceIn(islandWidthMin, islandWidthMax).toFloat())
     }
     var editingFieldRow by remember { mutableStateOf<Int?>(null) }
-    var editingPaddingSide by remember { mutableStateOf<Int?>(null) }
-    var showIslandWidthDialog by remember { mutableStateOf(false) }
-    var intEditor by remember { mutableStateOf<IntEditorSpec?>(null) }
-    var floatEditor by remember { mutableStateOf<FloatEditorSpec?>(null) }
 
     val editingFields = when (editingFieldRow) {
         0 -> LyricMusicInfoLayout.parseFields(
@@ -285,78 +286,6 @@ fun LyricConfigurationMiuix(
             editingFieldRow = null
         },
     )
-    val paddingSide = editingPaddingSide
-    val paddingLeft = when (paddingSide) {
-        0 -> config.leftPaddingLeft
-        1 -> config.rightPaddingLeft
-        else -> 0
-    }
-    val paddingRight = when (paddingSide) {
-        0 -> config.leftPaddingRight
-        1 -> config.rightPaddingRight
-        else -> 0
-    }
-    PaddingEditorDialog(
-        show = paddingSide != null,
-        title = if (paddingSide == 1) "右侧内容内边距" else "左侧内容内边距",
-        initialLeft = paddingLeft,
-        initialRight = paddingRight,
-        onDismiss = { editingPaddingSide = null },
-        onConfirm = { left, right ->
-            set(
-                if (paddingSide == 1) {
-                    config.copy(rightPaddingLeft = left, rightPaddingRight = right)
-                } else {
-                    config.copy(leftPaddingLeft = left, leftPaddingRight = right)
-                },
-            )
-            editingPaddingSide = null
-        },
-    )
-    NumberInputDialog(
-        show = showIslandWidthDialog,
-        title = "超级岛长度",
-        label = "范围：$islandWidthMin ~ $islandWidthMax",
-        initialValue = config.rightContentMaxWidth,
-        min = islandWidthMin,
-        max = islandWidthMax,
-        onDismiss = { showIslandWidthDialog = false },
-        onConfirm = { value ->
-            set(config.copy(rightContentMaxWidth = value))
-            showIslandWidthDialog = false
-        },
-    )
-    intEditor?.let { editor ->
-        NumberInputDialog(
-            show = true,
-            title = editor.title,
-            label = editor.label,
-            initialValue = editor.initialValue,
-            min = editor.min,
-            max = editor.max,
-            onDismiss = { intEditor = null },
-            onConfirm = { value ->
-                editor.onConfirm(value)
-                intEditor = null
-            },
-        )
-    }
-    floatEditor?.let { editor ->
-        FloatInputDialog(
-            show = true,
-            title = editor.title,
-            label = editor.label,
-            initialValue = editor.initialValue,
-            min = editor.min,
-            max = editor.max,
-            onDismiss = { floatEditor = null },
-            onConfirm = { value ->
-                editor.onConfirm(value)
-                floatEditor = null
-            },
-        )
-    }
-
     Column(
         modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(10.dp),
@@ -722,99 +651,6 @@ private fun <T> List<T>.moveItem(from: Int, to: Int): List<T> {
     return toMutableList().apply { add(to, removeAt(from)) }
 }
 
-/** Numeric fixed-width editor copied from HyperLyric's Super Island settings. */
-@Composable
-private fun NumberInputDialog(
-    show: Boolean,
-    title: String,
-    label: String,
-    initialValue: Int,
-    min: Int,
-    max: Int,
-    onDismiss: () -> Unit,
-    onConfirm: (Int) -> Unit,
-) {
-    if (!show) return
-    var sliderValue by remember(initialValue, min, max) {
-        mutableFloatStateOf(initialValue.coerceIn(min, max).toFloat())
-    }
-    OverlayDialog(
-        title = title,
-        show = true,
-        onDismissRequest = onDismiss,
-    ) {
-        Column(modifier = Modifier.fillMaxWidth()) {
-            Text("${sliderValue.toInt()}  $label")
-            Slider(
-                value = sliderValue,
-                onValueChange = { sliderValue = it.coerceIn(min.toFloat(), max.toFloat()) },
-                valueRange = min.toFloat()..max.toFloat(),
-                modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
-            )
-            Row(modifier = Modifier.fillMaxWidth()) {
-                Button(
-                    modifier = Modifier.weight(1f),
-                    onClick = onDismiss,
-                ) {
-                    Text("取消")
-                }
-                Spacer(modifier = Modifier.weight(0.1f))
-                Button(
-                    modifier = Modifier.weight(1f),
-                    onClick = {
-                        onConfirm(sliderValue.toInt().coerceIn(min, max))
-                    },
-                ) {
-                    Text("确定")
-                }
-            }
-        }
-    }
-}
-
-/** Decimal editor used by HyperLyric's word-motion coefficient settings. */
-@Composable
-private fun FloatInputDialog(
-    show: Boolean,
-    title: String,
-    label: String,
-    initialValue: Float,
-    min: Float,
-    max: Float,
-    onDismiss: () -> Unit,
-    onConfirm: (Float) -> Unit,
-) {
-    if (!show) return
-    var sliderValue by remember(initialValue, min, max) {
-        mutableFloatStateOf(initialValue.coerceIn(min, max))
-    }
-    OverlayDialog(
-        title = title,
-        show = true,
-        onDismissRequest = onDismiss,
-    ) {
-        Column(modifier = Modifier.fillMaxWidth()) {
-            Text("%.2f  %s".format(java.util.Locale.ROOT, sliderValue, label))
-            Slider(
-                value = sliderValue,
-                onValueChange = { sliderValue = it.coerceIn(min, max) },
-                valueRange = min..max,
-                modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
-            )
-            Row(modifier = Modifier.fillMaxWidth()) {
-                Button(onClick = onDismiss, modifier = Modifier.weight(1f)) { Text("取消") }
-                Spacer(modifier = Modifier.weight(0.1f))
-                Button(
-                    onClick = {
-                        onConfirm(sliderValue.coerceIn(min, max))
-                    },
-                    modifier = Modifier.weight(1f),
-                ) { Text("确定") }
-            }
-        }
-    }
-}
-
 /** HyperLyric's ordered checkbox editor, kept as a compact Miuix dialog. */
 @Composable
 private fun FieldOrderDialog(
@@ -867,43 +703,6 @@ private fun FieldOrderDialog(
                 Button(onClick = {
                     val fields = order.filter { it in selected }
                     if (!requireSelection || fields.isNotEmpty()) onConfirm(fields)
-                }) { Text("确定") }
-            }
-        }
-    }
-}
-
-@Composable
-private fun PaddingEditorDialog(
-    show: Boolean,
-    title: String,
-    initialLeft: Int,
-    initialRight: Int,
-    onDismiss: () -> Unit,
-    onConfirm: (Int, Int) -> Unit,
-) {
-    if (!show) return
-    var left by remember(title, initialLeft) { mutableFloatStateOf(initialLeft.coerceIn(-50, 100).toFloat()) }
-    var right by remember(title, initialRight) { mutableFloatStateOf(initialRight.coerceIn(-50, 100).toFloat()) }
-    OverlayDialog(
-        title = title,
-        summary = "分别设置左、右内边距（dp）",
-        show = true,
-        onDismissRequest = onDismiss,
-    ) {
-        Column(modifier = Modifier.fillMaxWidth()) {
-            Text("左侧：${left.toInt()}dp")
-            Slider(value = left, onValueChange = { left = it }, valueRange = -50f..100f)
-            Text("右侧：${right.toInt()}dp")
-            Slider(value = right, onValueChange = { right = it }, valueRange = -50f..100f)
-            Row(modifier = Modifier.fillMaxWidth()) {
-                Button(onClick = onDismiss) { Text("取消") }
-                Spacer(modifier = Modifier.weight(1f))
-                Button(onClick = {
-                    onConfirm(
-                        left.toInt().coerceIn(-50, 100),
-                        right.toInt().coerceIn(-50, 100),
-                    )
                 }) { Text("确定") }
             }
         }
