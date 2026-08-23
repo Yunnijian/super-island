@@ -26,6 +26,8 @@ import java.util.HashMap;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.HashSet;
 import java.util.WeakHashMap;
 
 /**
@@ -260,23 +262,78 @@ final class LyricIslandNativeRenderer {
     }
 
     private static Bundle extractExtras(Object data) {
-        if (data instanceof Bundle) return (Bundle) data;
-        Object extras = invokeNoArg(data, "getExtras");
-        return extras instanceof Bundle ? (Bundle) extras : null;
+        if (data == null) return null;
+        Bundle result = new Bundle();
+        collectIslandData(data, 0, new HashSet<>(), result);
+        return result.isEmpty() ? null : result;
+    }
+
+    /**
+     * MIUI has shipped the media island payload as both a Bundle and a Kotlin data object. The
+     * latter exposes tickerData/bigIslandData through getters, so accepting only getExtras() made
+     * the native renderer silently fall back on recent OS3 builds. Walk only the audited carrier
+     * getters and copy package/pending-intent fields into one local Bundle; arbitrary object graph
+     * traversal is intentionally excluded.
+     */
+    private static void collectIslandData(
+            Object value, int depth, Set<Object> seen, Bundle out) {
+        if (value == null || depth > 3 || seen.contains(value)) return;
+        seen.add(value);
+        if (value instanceof Bundle) {
+            Bundle bundle = (Bundle) value;
+            for (String key : new String[] {
+                    "miui.pkg.name", "pkgName", "packageName", "package", "pkg",
+                    "miui.pending.intent", "pendingIntent", "pending"
+            }) {
+                if (bundle.containsKey(key)) {
+                    try {
+                        Object item = bundle.get(key);
+                        if (item instanceof String) out.putString(key, (String) item);
+                        else if (item instanceof Parcelable) out.putParcelable(key, (Parcelable) item);
+                    } catch (Throwable ignored) { }
+                }
+            }
+            return;
+        }
+        if (value instanceof Parcelable) {
+            // Parcelable carrier objects are handled through their public getters below; do not
+            // attempt to unparcel arbitrary private state.
+        }
+        String[] getters = new String[] {
+                "getExtras", "getTickerData", "getBigIslandData", "getIslandData",
+                "getDynamicIslandData", "getData", "getPayload", "getParam",
+                "getPkgName", "getPackageName", "getPackage", "getPkg",
+                "getPendingIntent", "getPending"
+        };
+        for (String name : getters) {
+            Object child = invokeNoArg(value, name);
+            if (child == null) continue;
+            if (child instanceof String) {
+                if (name.toLowerCase().contains("pkg") || name.toLowerCase().contains("package")) {
+                    out.putString("miui.pkg.name", (String) child);
+                }
+            } else if (child instanceof Parcelable &&
+                    (name.toLowerCase().contains("pending") || child instanceof PendingIntent)) {
+                out.putParcelable("miui.pending.intent", (Parcelable) child);
+            } else {
+                collectIslandData(child, depth + 1, seen, out);
+            }
+        }
     }
 
     @SuppressWarnings("deprecation")
     private static boolean hasPendingIntent(Bundle extras) {
-        try {
-            Parcelable value = extras.getParcelable("miui.pending.intent");
-            return value instanceof PendingIntent;
-        } catch (Throwable ignored) {
+        for (String key : new String[] {"miui.pending.intent", "pendingIntent", "pending"}) {
             try {
-                return extras.getParcelable("miui.pending.intent", PendingIntent.class) != null;
-            } catch (Throwable ignoredAgain) {
-                return false;
+                Parcelable value = extras.getParcelable(key);
+                if (value instanceof PendingIntent) return true;
+            } catch (Throwable ignored) {
+                try {
+                    if (extras.getParcelable(key, PendingIntent.class) != null) return true;
+                } catch (Throwable ignoredAgain) { }
             }
         }
+        return false;
     }
 
     private static Object invokeNoArg(Object receiver, String name) {

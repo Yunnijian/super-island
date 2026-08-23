@@ -95,12 +95,26 @@ class LyricCanvasView @JvmOverloads constructor(
             }
         }
         val signature = lineSignature(renderedLine)
+        val onWidthPreflight: ((Float) -> Boolean)? = if (normalizedConfig.widthMode != 0) {
+            { candidateWidth ->
+                applyDynamicWidthFromContent(candidateWidth, normalizedConfig)
+            }
+        } else {
+            null
+        }
         val apply = {
             metadataSnapshot = null
             lastMetadataSourceSignature = 0
             lastMetadataPositionSignature = Long.MIN_VALUE
             metadataPlaybackActive = null
-            richView.line = renderedLine
+            if (onWidthPreflight == null) {
+                richView.line = renderedLine
+            } else {
+                richView.setLineWithCallbacks(
+                    renderedLine,
+                    onMainLineWillApply = onWidthPreflight,
+                )
+            }
             richView.setPlaybackActive(snapshot.playback.isPlaying)
             richView.setPosition(snapshot.playback.positionMs, snapshot.playback.speed)
             if (normalizedConfig.marqueeMode) richView.post { richView.requestStartMarquee() }
@@ -242,6 +256,13 @@ class LyricCanvasView @JvmOverloads constructor(
         }
         metadataSnapshot = snapshot
         val signature = lineSignature(metadataLine)
+        val onWidthPreflight: ((Float) -> Boolean)? = if (normalizedConfig.widthMode != 0) {
+            { candidateWidth ->
+                applyDynamicWidthFromContent(candidateWidth, normalizedConfig)
+            }
+        } else {
+            null
+        }
         if (hadMetadataLine && signature == lastContentSignature) {
             lastMetadataSourceSignature = sourceSignature
             lastMetadataPositionSignature = positionSignature
@@ -263,7 +284,16 @@ class LyricCanvasView @JvmOverloads constructor(
                 previous.album != snapshot.album
         } ?: true
         val applyMetadata = {
-            if (hadMetadataLine) richView.updateMetadataLine(metadataLine) else richView.line = metadataLine
+            if (hadMetadataLine) {
+                richView.updateMetadataLine(metadataLine)
+            } else if (onWidthPreflight == null) {
+                richView.line = metadataLine
+            } else {
+                richView.setLineWithCallbacks(
+                    metadataLine,
+                    onMainLineWillApply = onWidthPreflight,
+                )
+            }
             richView.setPlaybackActive(snapshot.playback.isPlaying)
             richView.setPosition(snapshot.playback.positionMs, snapshot.playback.speed)
             metadataPlaybackActive = snapshot.playback.isPlaying
@@ -431,6 +461,40 @@ class LyricCanvasView @JvmOverloads constructor(
             setPadding(leftPx, paddingTop, rightPx, paddingBottom)
             requestLayout()
         }
+    }
+
+    /**
+     * Commits a measured HyperLyric width before the OEM island width pass. Returning true lets
+     * RichLyricLineView defer its line commit by one frame when the parent needs a new measure;
+     * this removes the old post-render race where the OEM had already cached the previous width.
+     */
+    private fun applyDynamicWidthFromContent(contentWidthPx: Float, config: LyricIslandConfig): Boolean {
+        if (config.widthMode == 0 || !contentWidthPx.isFinite()) return false
+        val density = resources.displayMetrics.density
+        val isRight = tag == "SUPER_ISLAND_LYRIC_RIGHT"
+        val paddingDp = if (isRight) {
+            config.rightPaddingLeft.coerceAtLeast(0) + config.rightPaddingRight.coerceAtLeast(0)
+        } else {
+            config.leftPaddingLeft.coerceAtLeast(0) + config.leftPaddingRight.coerceAtLeast(0)
+        }
+        val targetDp = ((contentWidthPx / density) + paddingDp)
+            .coerceIn(config.dynamicMinWidth.toFloat(), config.dynamicMaxWidth.toFloat())
+        val minWidth = LyricIslandWidthPolicy.minIslandWidth(
+            LyricIslandWidthPolicy.isAlbumCoverVisible(config.albumCoverStyle),
+            LyricIslandWidthPolicy.isMusicWaveVisible(config.musicWaveStyle),
+        )
+        val maxWidth = LyricIslandWidthPolicy.maxIslandWidth(
+            LyricIslandWidthPolicy.isMusicWaveVisible(config.musicWaveStyle),
+            config.disableWidthLimit,
+        ).coerceAtLeast(minWidth)
+        val targetPx = (targetDp.toInt().coerceIn(minWidth, maxWidth) * density)
+            .toInt().coerceAtLeast(1)
+        val params = layoutParams ?: return false
+        if (params.width == targetPx) return false
+        params.width = targetPx
+        setLayoutParams(params)
+        parent?.requestLayout()
+        return true
     }
 
     private fun lineSignature(line: RichLyricLine?): Int = line?.let {
