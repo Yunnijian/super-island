@@ -4,6 +4,8 @@
 
 ## 2026-08-23 歌词配置与渲染回归
 
+- 本轮修复普通歌词槽位与 fallback 语义：普通模式历史的左右双 `LYRIC` 配置会按 HyperLyric 默认收敛为左 `MUSIC_INFO(8)`、右 `LYRIC(7)`；Focus fallback 仅在显式 `MEDIA_FALLBACK` 源模式发布，LYRICON/SUPER_LYRIC/LYRIC_INFO 缺少原生槽时不再自动降级。歌曲信息滚动入口已从 Miuix/Material 删除，旧字段仅保留 codec 兼容且运行时静态显示。
+
 - `d73b18a`：原生 Kotlin 岛载体兼容与动态长度预检，宽度在歌词测量前提交。
 - `c06fd27`：普通模式只渲染一条主歌词；仅分离模式分配主句/副句到两侧；历史双歌词槽位按配置单侧收敛。
 - Miuix/Material 滑块统一为“标题/数值一行、滑块下一行”，保留 HyperLyric 关键点，不再把滑块挤在功能项右侧。

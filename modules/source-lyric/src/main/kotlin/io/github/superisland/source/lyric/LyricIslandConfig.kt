@@ -308,6 +308,19 @@ data class LyricIslandConfig(
             contentLeft == IslandContentMode.LYRIC || contentRight == IslandContentMode.LYRIC
 
     fun normalized(): LyricIslandConfig {
+        // HyperLyric's ordinary-mode default is metadata on the left and lyric on the right.
+        // Older Super Island builds accidentally persisted LYRIC in both slots; converge that
+        // stale state before it reaches either the Focus fallback or the native renderer.
+        val ordinaryMode = lyricMode.coerceIn(0, 1) == 0
+        val migratedContentLeft = if (
+            ordinaryMode &&
+                contentLeft == IslandContentMode.LYRIC &&
+                contentRight == IslandContentMode.LYRIC
+        ) {
+            IslandContentMode.MUSIC_INFO
+        } else {
+            contentLeft
+        }
         val normalizedAlbumCoverStyle = albumCoverStyle.coerceIn(0, 4)
         val normalizedMusicWaveStyle = musicWaveStyle.coerceIn(0, 3)
         val showAlbum = LyricIslandWidthPolicy.isAlbumCoverVisible(normalizedAlbumCoverStyle)
@@ -324,7 +337,7 @@ data class LyricIslandConfig(
                 .filter { it.key.isNotBlank() }
                 .take(64)
                 .associate { it.key.trim().take(128) to it.value.coerceIn(-5000, 5000) },
-            contentLeft = contentLeft,
+            contentLeft = migratedContentLeft,
             contentRight = contentRight,
             musicInfoFirstLine = LyricMusicInfoLayout.normalizeFields(musicInfoFirstLine, LyricMusicInfoLayout.FIELD_TITLE)
                 .take(64),

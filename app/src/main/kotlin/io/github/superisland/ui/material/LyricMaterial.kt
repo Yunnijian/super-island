@@ -517,17 +517,6 @@ private fun LyricMaterialDetail(
                     { switch("结束时在末尾停止", "", config.marqueeStopEnd, config.marqueeMode) { set(config.copy(marqueeStopEnd = it)) } },
                 ))
             }
-            if (config.lyricMode == 0) {
-                item {
-                    SegmentedColumn(Modifier.fillMaxWidth(), title = "歌曲信息滚动", content = listOf(
-                        { switch("歌曲信息滚动", "针对歌曲信息", config.metadataMarqueeMode, true) { set(config.copy(metadataMarqueeMode = it)) } },
-                        { MaterialInlineSliderItem("滚动速度", config.metadataMarqueeSpeed.toFloat(), 5f..100f, 18, config.enabled && config.metadataMarqueeMode, config.metadataMarqueeSpeed.toString(), { set(config.copy(metadataMarqueeSpeed = it.toInt())) }) },
-                        { MaterialInlineSliderItem("初始滚动延迟", config.metadataMarqueeDelay.toFloat(), 0f..10000f, 9, config.enabled && config.metadataMarqueeMode, "${config.metadataMarqueeDelay}ms", { set(config.copy(metadataMarqueeDelay = it.toInt())) }) },
-                        { switch("无限循环", "", config.metadataMarqueeInfinite, config.metadataMarqueeMode) { set(config.copy(metadataMarqueeInfinite = it)) } },
-                        { MaterialInlineSliderItem("循环间隔", config.metadataMarqueeLoopDelay.toFloat(), 0f..10000f, 9, config.enabled && config.metadataMarqueeMode, "${config.metadataMarqueeLoopDelay}ms", { set(config.copy(metadataMarqueeLoopDelay = it.toInt())) }) },
-                    ))
-                }
-            }
             }
             if (section == LyricConfigSection.VERBATIM) {
             item {

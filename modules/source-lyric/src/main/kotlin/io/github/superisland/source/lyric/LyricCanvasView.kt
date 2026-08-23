@@ -196,7 +196,6 @@ class LyricCanvasView @JvmOverloads constructor(
     /** Renders HyperLyric's configurable two-row music metadata in a native island slot. */
     fun setMetadata(snapshot: LyricSnapshot, config: LyricIslandConfig = currentConfig) {
         val normalizedConfig = config.normalized()
-        val metadataMarqueeWasEnabled = currentConfig.metadataMarqueeMode
         val hadMetadataLine = metadataSnapshot != null
         val previousMetadataSnapshot = metadataSnapshot
         applySlotPadding(normalizedConfig)
@@ -270,11 +269,6 @@ class LyricCanvasView @JvmOverloads constructor(
                 richView.setPlaybackActive(snapshot.playback.isPlaying)
                 metadataPlaybackActive = snapshot.playback.isPlaying
             }
-            // Clearing the metadata override also clears RichLyricLineView's pending request.
-            // Re-arm it only for a false -> true transition; position ticks must stay cheap.
-            if (!metadataMarqueeWasEnabled && normalizedConfig.metadataMarqueeMode) {
-                richView.post { richView.requestStartMarquee() }
-            }
             return
         }
         // Position-derived metadata (elapsed/progress) can change every clock tick. Preserve the
@@ -297,7 +291,6 @@ class LyricCanvasView @JvmOverloads constructor(
             richView.setPlaybackActive(snapshot.playback.isPlaying)
             richView.setPosition(snapshot.playback.positionMs, snapshot.playback.speed)
             metadataPlaybackActive = snapshot.playback.isPlaying
-            if (normalizedConfig.metadataMarqueeMode) richView.post { richView.requestStartMarquee() }
         }
         if (metadataContentChanged && normalizedConfig.animEnabled) {
             runCatching {
@@ -387,7 +380,9 @@ class LyricCanvasView @JvmOverloads constructor(
         }
         // HyperLyric builds styles per slot mode. Applying the metadata override to every
         // canvas made its settings overwrite (or clear) the separate lyric marquee settings.
-        val marqueeEnabled = if (metadataMode) config.metadataMarqueeMode else config.marqueeMode
+        // Song metadata is intentionally static in Super Island. The upstream metadata-marquee
+        // fields remain codec-compatible but are not part of this module's feature surface.
+        val marqueeEnabled = if (metadataMode) false else config.marqueeMode
         val marqueeSpeed = if (metadataMode) config.metadataMarqueeSpeed else config.marqueeSpeed
         val marqueeDelay = if (metadataMode) config.metadataMarqueeDelay else config.marqueeDelay
         val marqueeLoopDelay = if (metadataMode) {

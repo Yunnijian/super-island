@@ -51,12 +51,12 @@ class LyricPayloadBuilderTest {
         val payload = Json.parseToJsonElement(
             LyricPayloadBuilder.buildFocusLyricJson(snapshot, LyricIslandConfig(showProgress = false)),
         ).jsonObject
-        val left = payload.getValue("param_v2").jsonObject
+        val right = payload.getValue("param_v2").jsonObject
             .getValue("param_island").jsonObject
             .getValue("bigIslandArea").jsonObject
-            .getValue("imageTextInfoLeft").jsonObject
+            .getValue("imageTextInfoRight").jsonObject
             .getValue("textInfo").jsonObject
-        assertEquals("主行", left.getValue("title").jsonPrimitive.content)
+        assertEquals("主行", right.getValue("title").jsonPrimitive.content)
         assertTrue(
             LyricPayloadBuilder.buildFocusLyricJson(
                 LyricSnapshot("player"),
@@ -120,11 +120,13 @@ class LyricPayloadBuilderTest {
     }
 
     @Test
-    fun ordinaryModeDoesNotPublishDuplicateLyricSlots() {
+    fun ordinaryModeMigratesStaleDuplicateLyricSlotsToMetadataAndLyric() {
         val snapshot = LyricSnapshot(
             publisher = "player",
             line = LyricLine("原词", 0L, 1_000L),
             secondary = LyricLine("下一句", 1_000L, 2_000L),
+            title = "歌曲",
+            artist = "歌手",
         )
         val payload = LyricPayloadBuilder.buildFocusLyricJson(
             snapshot,
@@ -136,8 +138,20 @@ class LyricPayloadBuilderTest {
                 showProgress = false,
             ),
         )
-        assertEquals("原词", slotTitle(payload, "imageTextInfoLeft"))
-        assertEquals("", slotTitle(payload, "imageTextInfoRight"))
+        assertEquals("歌曲", slotTitle(payload, "imageTextInfoLeft"))
+        assertEquals("原词", slotTitle(payload, "imageTextInfoRight"))
+    }
+
+    @Test
+    fun ordinaryModeNormalizationUsesHyperLyricDefaultSlots() {
+        val normalized = LyricIslandConfig(
+            lyricMode = 0,
+            contentLeft = IslandContentMode.LYRIC,
+            contentRight = IslandContentMode.LYRIC,
+        ).normalized()
+
+        assertEquals(IslandContentMode.MUSIC_INFO, normalized.contentLeft)
+        assertEquals(IslandContentMode.LYRIC, normalized.contentRight)
     }
 
     @Test

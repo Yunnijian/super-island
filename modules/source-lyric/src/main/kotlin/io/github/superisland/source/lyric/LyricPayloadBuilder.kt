@@ -72,7 +72,7 @@ object LyricPayloadBuilder {
             leftResolved
         } else {
             leftResolved.ifBlank {
-                if (leftMode == IslandContentMode.NONE || !hasLyricMode) ""
+                if (leftMode != IslandContentMode.LYRIC || !hasLyricMode) ""
                 else if (value.slot == LyricSlot.RIGHT) secondary else primary
             }
         }
@@ -80,7 +80,7 @@ object LyricPayloadBuilder {
             rightResolved
         } else {
             rightResolved.ifBlank {
-                if (rightMode == IslandContentMode.NONE || !hasLyricMode) ""
+                if (rightMode != IslandContentMode.LYRIC || !hasLyricMode) ""
                 else if (value.slot == LyricSlot.RIGHT) primary else secondary
             }
         }

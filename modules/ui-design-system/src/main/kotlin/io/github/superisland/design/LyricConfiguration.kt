@@ -586,16 +586,6 @@ fun LyricConfigurationMiuix(
             LyricInlineSliderRow("循环间隔", config.marqueeLoopDelay.toFloat(), 0f..10000f, 9, enabled && config.marqueeMode, "${config.marqueeLoopDelay}ms") { set(config.copy(marqueeLoopDelay = it.toInt())) }
             SwitchPreference(title = "结束时在末尾停止", enabled = enabled && config.marqueeMode, checked = config.marqueeStopEnd, onCheckedChange = { set(config.copy(marqueeStopEnd = it)) })
         }
-        if (config.lyricMode == 0) {
-            SmallTitle(text = "歌曲信息滚动")
-            Card {
-                SwitchPreference(title = "歌曲信息滚动", summary = "针对歌曲信息", checked = config.metadataMarqueeMode, enabled = enabled, onCheckedChange = { set(config.copy(metadataMarqueeMode = it)) })
-                LyricInlineSliderRow("滚动速度", config.metadataMarqueeSpeed.toFloat(), 5f..100f, 18, enabled && config.metadataMarqueeMode, config.metadataMarqueeSpeed.toString()) { set(config.copy(metadataMarqueeSpeed = it.toInt())) }
-                LyricInlineSliderRow("初始滚动延迟", config.metadataMarqueeDelay.toFloat(), 0f..10000f, 9, enabled && config.metadataMarqueeMode, "${config.metadataMarqueeDelay}ms") { set(config.copy(metadataMarqueeDelay = it.toInt())) }
-                SwitchPreference(title = "无限循环", enabled = enabled && config.metadataMarqueeMode, checked = config.metadataMarqueeInfinite, onCheckedChange = { set(config.copy(metadataMarqueeInfinite = it)) })
-                LyricInlineSliderRow("循环间隔", config.metadataMarqueeLoopDelay.toFloat(), 0f..10000f, 9, enabled && config.metadataMarqueeMode, "${config.metadataMarqueeLoopDelay}ms") { set(config.copy(metadataMarqueeLoopDelay = it.toInt())) }
-            }
-        }
         }
 
         if (section == null || section == LyricConfigSection.VERBATIM) {

@@ -140,7 +140,7 @@ public final class LyricIslandSystemUiHost {
                 // OEM tree again. Content changes still arrive through onSnapshot; ticks only
                 // advance the in-place rich renderer and keep shade scrolling responsive.
                 boolean nativeAttached = LyricIslandNativeRenderer.hasAttachedSlot();
-                if (!nativeAttached) {
+                if (!nativeAttached && config.getSourceMode() == LyricSourceMode.MEDIA_FALLBACK) {
                     publishIfNeeded(true);
                 }
                 if (nativeAttached) LyricIslandNativeRenderer.updatePositions();
@@ -604,46 +604,12 @@ public final class LyricIslandSystemUiHost {
             boolean showProgress = currentConfig.getShowProgress() && progress != null;
             int progressValue = progress == null ? 0 : progress;
             boolean nativeAttached = LyricIslandNativeRenderer.hasAttachedSlot();
-            if (!nativeAttached) {
-                // FocusNotificationRequest intentionally requires both text fields to be
-                // non-blank. A native lyric canvas can render a main line plus translation in
-                // one slot, while the Focus fallback has one line per module. Never replace the
-                // main lyric with a translation/next line there: a one-lyric layout gets the
-                // main lyric first and preserves the opposite music-info slot; split lyrics keep
-                // their main/secondary pair.
-                boolean leftLyric = currentConfig.getContentLeft()
-                        == io.github.superisland.source.lyric.IslandContentMode.LYRIC;
-                boolean rightLyric = currentConfig.getContentRight()
-                        == io.github.superisland.source.lyric.IslandContentMode.LYRIC;
-                String fallbackLeft;
-                String fallbackRight;
-                if (currentConfig.getLyricMode() == 1 || (leftLyric && rightLyric)) {
-                    fallbackLeft = LyricPayloadBuilder.INSTANCE.contentFor(
-                            snapshot,
-                            currentConfig,
-                            io.github.superisland.source.lyric.IslandContentMode.LYRIC,
-                            true);
-                    fallbackRight = LyricPayloadBuilder.INSTANCE.contentFor(
-                            snapshot,
-                            currentConfig,
-                            io.github.superisland.source.lyric.IslandContentMode.LYRIC,
-                            false);
-                } else if (leftLyric || rightLyric) {
-                    fallbackLeft = LyricPayloadBuilder.INSTANCE.contentFor(
-                            snapshot,
-                            currentConfig,
-                            io.github.superisland.source.lyric.IslandContentMode.LYRIC,
-                            true);
-                    fallbackRight = leftLyric ? secondary : primary;
-                } else {
-                    fallbackLeft = primary;
-                    fallbackRight = secondary;
-                }
-                // Keep this compatibility fill local to the fallback request: the native
-                // renderer still receives its original slot values, so an explicit NONE slot is
-                // never turned into a duplicate lyric on the player's own island.
-                if (fallbackLeft.isBlank()) fallbackLeft = fallbackRight;
-                if (fallbackRight.isBlank()) fallbackRight = fallbackLeft;
+            boolean fallbackMode = currentConfig.getSourceMode() == LyricSourceMode.MEDIA_FALLBACK;
+            if (fallbackMode) {
+                // Keep the fallback's two lines identical to the resolved native slot contract.
+                // A configured MUSIC_INFO slot must never be filled with lyric text.
+                String fallbackLeft = primary;
+                String fallbackRight = secondary;
                 if (fallbackLeft.isBlank() || fallbackRight.isBlank()) {
                     cancelNotification();
                     LyricIslandNativeRenderer.clearAll();
@@ -680,9 +646,14 @@ public final class LyricIslandSystemUiHost {
                         Log.e(TAG, "Could not publish lyric island", error);
                     }
                 });
-            } else {
-                // The player's own island is the primary surface while a native slot is attached.
+            } else if (nativeAttached) {
+                // HyperLyric sources are rendered in the player's own island. The Focus payload
+                // is not a default fallback when the native resource binding is absent.
                 enqueueNotificationCancel(context);
+            } else {
+                cancelNotification();
+                LyricIslandNativeRenderer.clearAll();
+                return;
             }
             lastPublishElapsed = android.os.SystemClock.elapsedRealtime();
             lastPublishedPosition = position;
@@ -709,7 +680,8 @@ public final class LyricIslandSystemUiHost {
                 && nativeActiveEnabled == enabled) {
             return nativeActiveResult;
         }
-        boolean active = enabled && snapshot != null && !snapshot.getStopped()
+        boolean active = enabled && currentConfig.getSourceMode() != LyricSourceMode.MEDIA_FALLBACK
+                && snapshot != null && !snapshot.getStopped()
                 && currentConfig.getEnabled();
         if (active) {
             String left;
