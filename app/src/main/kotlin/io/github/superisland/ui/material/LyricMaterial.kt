@@ -346,57 +346,61 @@ private fun LyricMaterialDetail(
                     { dropdown("超级岛长度模式", listOf("固定长度", "动态长度"), config.widthMode) { set(config.copy(widthMode = it)) } },
                     { if (config.widthMode == 1) dropdown("动态长度判断基准", listOf("综合判断", "仅歌词"), config.dynamicWidthBasis) { set(config.copy(dynamicWidthBasis = it)) } },
                     {
-                        Column {
-                            SegmentedListItem(
-                                onClick = { if (config.enabled && config.widthMode == 0) showIslandWidthDialog = true },
-                                enabled = config.enabled,
-                                headlineContent = { Text("超级岛长度") },
-                                trailingContent = {
-                                    Text(
-                                        if (config.widthMode == 1) {
-                                            "${dynamicWidthRange.start.toInt()}~${dynamicWidthRange.endInclusive.toInt()}"
-                                        } else {
-                                            config.rightContentMaxWidth.toString()
-                                        },
-                                        color = MaterialTheme.colorScheme.primary,
-                                    )
-                                },
-                            )
-                            if (config.widthMode == 1) {
-                                RangeSlider(
-                                    value = dynamicWidthRange,
-                                    enabled = config.enabled,
-                                    onValueChange = { value ->
-                                        val start = value.start.toInt().coerceIn(islandWidthMin, islandWidthMax)
-                                        val end = value.endInclusive.toInt().coerceIn(start, islandWidthMax)
-                                        dynamicWidthRange = start.toFloat()..end.toFloat()
+                        SegmentedListItem(
+                            onClick = { if (config.enabled && config.widthMode == 0) showIslandWidthDialog = true },
+                            enabled = config.enabled,
+                            headlineContent = { Text("超级岛长度") },
+                            trailingContent = {
+                                Text(
+                                    if (config.widthMode == 1) {
+                                        "${dynamicWidthRange.start.toInt()}~${dynamicWidthRange.endInclusive.toInt()}"
+                                    } else {
+                                        config.rightContentMaxWidth.toString()
                                     },
-                                    valueRange = islandWidthMin.toFloat()..islandWidthMax.toFloat(),
-                                    steps = 0,
-                                    onValueChangeFinished = {
-                                        set(
-                                            config.copy(
-                                                dynamicMinWidth = dynamicWidthRange.start.toInt(),
-                                                dynamicMaxWidth = dynamicWidthRange.endInclusive.toInt(),
-                                            ),
+                                    color = MaterialTheme.colorScheme.primary,
+                                )
+                            },
+                            supportingContent = {
+                                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    if (config.widthMode == 1) {
+                                        RangeSlider(
+                                            value = dynamicWidthRange,
+                                            enabled = config.enabled,
+                                            onValueChange = { value ->
+                                                val start = value.start.toInt().coerceIn(islandWidthMin, islandWidthMax)
+                                                val end = value.endInclusive.toInt().coerceIn(start, islandWidthMax)
+                                                dynamicWidthRange = start.toFloat()..end.toFloat()
+                                            },
+                                            valueRange = islandWidthMin.toFloat()..islandWidthMax.toFloat(),
+                                            steps = 0,
+                                            onValueChangeFinished = {
+                                                set(
+                                                    config.copy(
+                                                        dynamicMinWidth = dynamicWidthRange.start.toInt(),
+                                                        dynamicMaxWidth = dynamicWidthRange.endInclusive.toInt(),
+                                                    ),
+                                                )
+                                            },
+                                            modifier = Modifier.fillMaxWidth(),
                                         )
-                                    },
-                                )
-                            } else {
-                                Slider(
-                                    value = fixedIslandWidth,
-                                    enabled = config.enabled,
-                                    onValueChange = { value ->
-                                        fixedIslandWidth = value.coerceIn(islandWidthMin.toFloat(), islandWidthMax.toFloat())
-                                    },
-                                    valueRange = islandWidthMin.toFloat()..islandWidthMax.toFloat(),
-                                    steps = 0,
-                                    onValueChangeFinished = {
-                                        set(config.copy(rightContentMaxWidth = fixedIslandWidth.toInt()))
-                                    },
-                                )
-                            }
-                        }
+                                    } else {
+                                        Slider(
+                                            value = fixedIslandWidth,
+                                            enabled = config.enabled,
+                                            onValueChange = { value ->
+                                                fixedIslandWidth = value.coerceIn(islandWidthMin.toFloat(), islandWidthMax.toFloat())
+                                            },
+                                            valueRange = islandWidthMin.toFloat()..islandWidthMax.toFloat(),
+                                            steps = 0,
+                                            onValueChangeFinished = {
+                                                set(config.copy(rightContentMaxWidth = fixedIslandWidth.toInt()))
+                                            },
+                                            modifier = Modifier.fillMaxWidth(),
+                                        )
+                                    }
+                                }
+                            },
+                        )
                     },
                     { switch("解除超级岛最大长度限制", "", config.disableWidthLimit, true) { set(config.copy(disableWidthLimit = it)) } },
                     {
