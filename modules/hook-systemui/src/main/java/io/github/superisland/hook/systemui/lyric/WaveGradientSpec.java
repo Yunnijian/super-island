@@ -15,11 +15,15 @@ final class WaveGradientSpec {
     }
 
     static WaveGradientSpec from(LyricIslandConfig config, List<Integer> colors) {
-        if (config == null || config.getMusicWaveStyle() != 2 || colors == null || colors.isEmpty()) {
+        if (config == null || (config.getMusicWaveStyle() != 1
+                && config.getMusicWaveStyle() != 2)
+                || colors == null || colors.isEmpty()) {
             return null;
         }
         int first = withNativeAlpha(colors.get(0));
-        int second = withNativeAlpha(colors.size() > 1 ? colors.get(1) : colors.get(0));
+        int second = withNativeAlpha(config.getMusicWaveStyle() == 1
+                ? colors.get(0)
+                : (colors.size() > 1 ? colors.get(1) : colors.get(0)));
         return new WaveGradientSpec(first, second);
     }
 

@@ -30,7 +30,6 @@ fun SuperIslandMiuix(
         onEntrySelected = { entryId ->
             when (entryId) {
                 "smart_capsule" -> onOpenSmartCapsule()
-                "media_island" -> onOpenMediaIsland()
                 "monitor" -> onOpenBatteryMonitor()
                 "capsule_appearance" -> onOpenCapsuleAppearance()
                 "lyric" -> onOpenLyric()

@@ -196,6 +196,7 @@ final class LyricIslandNativeRenderer {
         if (state == null) return false;
         // Restore the shared OEM Lottie colors before its view becomes visible again. Other
         // attached roots in the same plugin ClassLoader retain the requested override.
+        WAVE_GRADIENTS.invalidateRoot(root);
         refreshWaveGradientsLocked(java.util.Collections.singletonList(state));
         restore(state);
         return true;
@@ -367,6 +368,8 @@ final class LyricIslandNativeRenderer {
         final ViewGroup root;
         final Map<Integer, SlotState> slots = new HashMap<>();
         private int contentSignature;
+        private LyricSnapshot signatureSnapshot;
+        private LyricIslandConfig signatureConfig;
         private String desiredSlotKey = "";
         private boolean hasRendered;
         private WaveGradientSpec waveGradient;
@@ -381,7 +384,14 @@ final class LyricIslandNativeRenderer {
                 LyricSnapshot snapshot,
                 LyricIslandConfig config,
                 boolean activate) {
-            int nextSignature = contentSignature(snapshot, config);
+            int nextSignature;
+            if (signatureSnapshot == snapshot && signatureConfig == config) {
+                nextSignature = contentSignature;
+            } else {
+                nextSignature = contentSignature(snapshot, config);
+                signatureSnapshot = snapshot;
+                signatureConfig = config;
+            }
             String nextSlotKey = slotKey(desiredSlots);
             if (hasRendered
                     && contentSignature == nextSignature
@@ -390,12 +400,15 @@ final class LyricIslandNativeRenderer {
                 if (activate) {
                     for (SlotState state : slots.values()) state.frozen = false;
                 }
-                updatePosition(
-                        LyricIslandSystemUiHost.nativePosition(),
-                        LyricIslandSystemUiHost.nativePlaybackSpeed(),
-                        LyricIslandSystemUiHost.nativeIsPlaying());
+                // Playback position is advanced by POSITION_TICK. Re-reading the interpolated
+                // clock and driving the rich renderer from every OEM island callback makes shade
+                // expansion compete with the lyric animation on the same main looper.
                 return true;
             }
+            // The OEM may have replaced descendants without changing the root identity. Make the
+            // next wave reconciliation walk the rebuilt tree instead of trusting its old holder
+            // cache. This is also used when a content/config signature changes.
+            WAVE_GRADIENTS.invalidateRoot(root);
             Map<Integer, ViewGroup> containers = new HashMap<>();
             for (int slot : desiredSlots) {
                 ViewGroup container = findTextContainer(root, slot);
@@ -492,6 +505,11 @@ final class LyricIslandNativeRenderer {
         final Map<ImageView, ImageView.ScaleType> nativeScaleTypes = new IdentityHashMap<>();
         final Map<ImageView, ViewOutlineProvider> nativeOutlineProviders = new IdentityHashMap<>();
         final Map<ImageView, Boolean> nativeClipToOutlines = new IdentityHashMap<>();
+        int lastStatusBarColor = Integer.MIN_VALUE;
+        long lastPosition = Long.MIN_VALUE;
+        float lastSpeed = Float.NaN;
+        boolean lastPlaying;
+        boolean hasPosition;
 
         SlotState(ViewGroup root, ViewGroup container, int slot) {
             this.root = root;
@@ -516,6 +534,8 @@ final class LyricIslandNativeRenderer {
                         ViewGroup.LayoutParams.WRAP_CONTENT);
                 container.addView(canvas, params);
                 created = true;
+                lastStatusBarColor = Integer.MIN_VALUE;
+                hasPosition = false;
             }
             if (config.getLyricMode() == 1 ||
                     (slot == 0 && config.getContentLeft() == IslandContentMode.LYRIC) ||
@@ -526,20 +546,39 @@ final class LyricIslandNativeRenderer {
                 metadataMode = true;
                 canvas.setMetadata(snapshot, config);
             }
+            applyCanvasWidth(config);
+            // HyperLyric measures the new line before committing dynamic island geometry. The
+            // copied renderer may finish its text measurement one frame after setSnapshot(), so
+            // re-evaluate once on the view queue instead of waiting for another OEM media event.
+            if (config.getWidthMode() != 0) {
+                canvas.post(() -> {
+                    if (canvas.getParent() == container && currentConfig == config) {
+                        applyCanvasWidth(config);
+                    }
+                });
+            }
+            updateStatusBarTextColor();
+            long position = LyricIslandSystemUiHost.nativePosition();
+            float speed = LyricIslandSystemUiHost.nativePlaybackSpeed();
+            boolean playing = frozen ? false : LyricIslandSystemUiHost.nativeIsPlaying();
+            canvas.setPosition(position, speed);
+            canvas.setPlaybackActive(playing);
+            lastPosition = position;
+            lastSpeed = speed;
+            lastPlaying = playing;
+            hasPosition = true;
+            if (created || activate) frozen = false;
+        }
+
+        private void applyCanvasWidth(LyricIslandConfig config) {
+            if (canvas == null || canvas.getParent() != container) return;
             ViewGroup.LayoutParams canvasParams = canvas.getLayoutParams();
             int targetWidth = canvas.configuredWidthPx(config);
             if (canvasParams != null && canvasParams.width != targetWidth) {
                 canvasParams.width = targetWidth;
                 canvas.setLayoutParams(canvasParams);
+                container.requestLayout();
             }
-            int statusBarColor = (root.getSystemUiVisibility() & View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR) != 0
-                    ? 0xFF000000 : 0xFFFFFFFF;
-            canvas.setStatusBarTextColor(statusBarColor);
-            canvas.setPosition(
-                    LyricIslandSystemUiHost.nativePosition(),
-                    LyricIslandSystemUiHost.nativePlaybackSpeed());
-            canvas.setPlaybackActive(LyricIslandSystemUiHost.nativeIsPlaying());
-            if (created || activate) frozen = false;
         }
 
         void hideNativeChildren() {
@@ -695,15 +734,28 @@ final class LyricIslandNativeRenderer {
 
         void updatePosition(long position, float speed, boolean playing) {
             if (canvas == null || canvas.getParent() != container) return;
+            boolean effectivePlaying = frozen ? false : playing;
+            if (hasPosition && lastPosition == position && lastSpeed == speed
+                    && lastPlaying == effectivePlaying) return;
+            updateStatusBarTextColor();
+            if (metadataMode) {
+                canvas.updateMetadataPosition(position, speed, effectivePlaying);
+            } else {
+                canvas.setPosition(position, speed);
+                canvas.setPlaybackActive(effectivePlaying);
+            }
+            lastPosition = position;
+            lastSpeed = speed;
+            lastPlaying = effectivePlaying;
+            hasPosition = true;
+        }
+
+        private void updateStatusBarTextColor() {
             int statusBarColor = (root.getSystemUiVisibility() & View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR) != 0
                     ? 0xFF000000 : 0xFFFFFFFF;
-            canvas.setStatusBarTextColor(statusBarColor);
-            if (metadataMode) {
-                canvas.updateMetadataPosition(position, speed);
-                return;
-            }
-            canvas.setPosition(position, speed);
-            canvas.setPlaybackActive(frozen ? false : playing);
+            if (lastStatusBarColor == statusBarColor) return;
+            lastStatusBarColor = statusBarColor;
+            if (canvas != null) canvas.setStatusBarTextColor(statusBarColor);
         }
 
         int childStructureSignature() {
@@ -720,6 +772,10 @@ final class LyricIslandNativeRenderer {
             frozen = true;
             canvas.setPosition(position, 0f);
             canvas.setPlaybackActive(false);
+            lastPosition = position;
+            lastSpeed = 0f;
+            lastPlaying = false;
+            hasPosition = true;
         }
     }
 
@@ -775,7 +831,7 @@ final class LyricIslandNativeRenderer {
         private static final long DURATION_MS = 20_000L;
         private static final Handler HANDLER = new Handler(Looper.getMainLooper());
         private static final Map<ImageView, RotationState> STATES = new WeakHashMap<>();
-        private static boolean playbackActive = true;
+        private static volatile boolean playbackActive = true;
 
         private static final View.OnAttachStateChangeListener ATTACH_LISTENER =
                 new View.OnAttachStateChangeListener() {
@@ -828,7 +884,9 @@ final class LyricIslandNativeRenderer {
         }
 
         static void setPlaybackActive(boolean active) {
+            if (playbackActive == active) return;
             runOnMain(() -> {
+                if (playbackActive == active) return;
                 playbackActive = active;
                 for (Map.Entry<ImageView, RotationState> entry :
                         new ArrayList<>(STATES.entrySet())) {

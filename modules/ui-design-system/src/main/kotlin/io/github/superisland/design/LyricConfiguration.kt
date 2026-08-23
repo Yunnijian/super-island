@@ -593,10 +593,13 @@ fun LyricConfigurationMiuix(
             SmallTitle(text = "字体样式")
             OverlayDropdownPreference(
                 title = "字体",
-                items = listOf(if (config.customFontPath.isBlank()) "默认" else config.customFontPath),
-                selectedIndex = 0,
+                items = listOf("默认", "自定义"),
+                selectedIndex = if (config.customFontPath.isBlank()) 0 else 1,
                 enabled = enabled,
-                onSelectedIndexChange = { if (enabled) showFontDialog = true },
+                onSelectedIndexChange = {
+                    if (!enabled) return@OverlayDropdownPreference
+                    if (it == 0) set(config.copy(customFontPath = "")) else showFontDialog = true
+                },
             )
             SwitchPreference(title = "英数窄字体", checked = config.narrowLatinFont, enabled = enabled, onCheckedChange = { set(config.copy(narrowLatinFont = it)) })
             ArrowPreference(
@@ -842,22 +845,21 @@ private fun NumberInputDialog(
     onConfirm: (Int) -> Unit,
 ) {
     if (!show) return
-    var inputValue by remember(initialValue) { mutableStateOf(initialValue.toString()) }
+    var sliderValue by remember(initialValue, min, max) {
+        mutableFloatStateOf(initialValue.coerceIn(min, max).toFloat())
+    }
     OverlayDialog(
         title = title,
         show = true,
         onDismissRequest = onDismiss,
     ) {
         Column(modifier = Modifier.fillMaxWidth()) {
-            TextField(
-                value = inputValue,
-                onValueChange = { newValue ->
-                    if (newValue.all(Char::isDigit)) inputValue = newValue
-                },
-                label = label,
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+            Text("${sliderValue.toInt()}  $label")
+            Slider(
+                value = sliderValue,
+                onValueChange = { sliderValue = it.coerceIn(min.toFloat(), max.toFloat()) },
+                valueRange = min.toFloat()..max.toFloat(),
                 modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
-                maxLines = 1,
             )
             Row(modifier = Modifier.fillMaxWidth()) {
                 Button(
@@ -870,7 +872,7 @@ private fun NumberInputDialog(
                 Button(
                     modifier = Modifier.weight(1f),
                     onClick = {
-                        inputValue.toIntOrNull()?.let { onConfirm(it.coerceIn(min, max)) }
+                        onConfirm(sliderValue.toInt().coerceIn(min, max))
                     },
                 ) {
                     Text("确定")
@@ -893,29 +895,28 @@ private fun FloatInputDialog(
     onConfirm: (Float) -> Unit,
 ) {
     if (!show) return
-    var inputValue by remember(initialValue) { mutableStateOf(initialValue.toString()) }
+    var sliderValue by remember(initialValue, min, max) {
+        mutableFloatStateOf(initialValue.coerceIn(min, max))
+    }
     OverlayDialog(
         title = title,
         show = true,
         onDismissRequest = onDismiss,
     ) {
         Column(modifier = Modifier.fillMaxWidth()) {
-            TextField(
-                value = inputValue,
-                onValueChange = { newValue ->
-                    if (newValue.all { it.isDigit() || it == '.' }) inputValue = newValue
-                },
-                label = label,
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+            Text("%.2f  %s".format(java.util.Locale.ROOT, sliderValue, label))
+            Slider(
+                value = sliderValue,
+                onValueChange = { sliderValue = it.coerceIn(min, max) },
+                valueRange = min..max,
                 modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
-                maxLines = 1,
             )
             Row(modifier = Modifier.fillMaxWidth()) {
                 Button(onClick = onDismiss, modifier = Modifier.weight(1f)) { Text("取消") }
                 Spacer(modifier = Modifier.weight(0.1f))
                 Button(
                     onClick = {
-                        inputValue.toFloatOrNull()?.let { onConfirm(it.coerceIn(min, max)) }
+                        onConfirm(sliderValue.coerceIn(min, max))
                     },
                     modifier = Modifier.weight(1f),
                 ) { Text("确定") }
@@ -992,8 +993,8 @@ private fun PaddingEditorDialog(
     onConfirm: (Int, Int) -> Unit,
 ) {
     if (!show) return
-    var left by remember(title, initialLeft) { mutableStateOf(TextFieldValue(initialLeft.toString())) }
-    var right by remember(title, initialRight) { mutableStateOf(TextFieldValue(initialRight.toString())) }
+    var left by remember(title, initialLeft) { mutableFloatStateOf(initialLeft.coerceIn(-50, 100).toFloat()) }
+    var right by remember(title, initialRight) { mutableFloatStateOf(initialRight.coerceIn(-50, 100).toFloat()) }
     OverlayDialog(
         title = title,
         summary = "分别设置左、右内边距（dp）",
@@ -1001,29 +1002,17 @@ private fun PaddingEditorDialog(
         onDismissRequest = onDismiss,
     ) {
         Column(modifier = Modifier.fillMaxWidth()) {
-            TextField(
-                value = left,
-                onValueChange = { left = it },
-                modifier = Modifier.fillMaxWidth(),
-                label = "左侧",
-                useLabelAsPlaceholder = true,
-                singleLine = true,
-            )
-            TextField(
-                value = right,
-                onValueChange = { right = it },
-                modifier = Modifier.fillMaxWidth(),
-                label = "右侧",
-                useLabelAsPlaceholder = true,
-                singleLine = true,
-            )
+            Text("左侧：${left.toInt()}dp")
+            Slider(value = left, onValueChange = { left = it }, valueRange = -50f..100f)
+            Text("右侧：${right.toInt()}dp")
+            Slider(value = right, onValueChange = { right = it }, valueRange = -50f..100f)
             Row(modifier = Modifier.fillMaxWidth()) {
                 Button(onClick = onDismiss) { Text("取消") }
                 Spacer(modifier = Modifier.weight(1f))
                 Button(onClick = {
                     onConfirm(
-                        left.text.toIntOrNull()?.coerceIn(-50, 100) ?: initialLeft,
-                        right.text.toIntOrNull()?.coerceIn(-50, 100) ?: initialRight,
+                        left.toInt().coerceIn(-50, 100),
+                        right.toInt().coerceIn(-50, 100),
                     )
                 }) { Text("确定") }
             }

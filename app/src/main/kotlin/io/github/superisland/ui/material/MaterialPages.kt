@@ -203,7 +203,6 @@ private fun MaterialSuperIslandDirectory(
             when (entryId) {
                 "monitor" -> onOpenDestination(AppDestination.BATTERY_CONFIGURATION)
                 "smart_capsule" -> onOpenDestination(AppDestination.SMART_CAPSULE_APPS)
-                "media_island" -> onOpenDestination(AppDestination.MEDIA)
                 "capsule_appearance" -> onOpenDestination(AppDestination.CAPSULE_APPEARANCE)
                 "lyric" -> onOpenDestination(AppDestination.LYRIC)
             }

@@ -679,8 +679,9 @@ public final class SuperIslandXposedModule extends XposedModule {
                                 io.github.libxposed.api.XposedInterface.ExceptionMode.PROTECTIVE)
                         .intercept(chain -> {
                             // Width is calculated from the current children. Inject once before
-                            // OEM measurement, then refresh after it in case the ROM rebuilt the
-                            // slot during the call.
+                            // OEM measurement. The normal updateBigIslandView callback performs
+                            // the post-rebuild reconciliation; dispatching both sides here made
+                            // shade expansion enqueue two full SystemUI renders per width pass.
                             try {
                                 ViewGroup root = chain.getThisObject() instanceof ViewGroup
                                         ? (ViewGroup) chain.getThisObject() : null;
@@ -691,15 +692,6 @@ public final class SuperIslandXposedModule extends XposedModule {
                                         "Native lyric pre-width render failed", error);
                             }
                             Object result = chain.proceed();
-                            try {
-                                ViewGroup root = chain.getThisObject() instanceof ViewGroup
-                                        ? (ViewGroup) chain.getThisObject() : null;
-                                Object data = currentIslandData(root);
-                                if (data != null) dispatchNativeIslandUpdate(root, data);
-                            } catch (Throwable error) {
-                                log(Log.WARN, TAG,
-                                        "Native lyric post-width render failed", error);
-                            }
                             return result;
                         }));
             }
@@ -886,7 +878,7 @@ public final class SuperIslandXposedModule extends XposedModule {
                             // status-bar transition; the lifecycle hooks above already schedule
                             // the one freeze bind needed when the fake surface starts.
                             Object result = chain.proceed();
-                            if (visibility != android.view.View.VISIBLE
+                            if (visibility == android.view.View.INVISIBLE
                                     && chain.getThisObject() instanceof ViewGroup) {
                                 io.github.superisland.hook.systemui.lyric.LyricIslandSystemUiHost
                                         .clearNative((ViewGroup) chain.getThisObject());

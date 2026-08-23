@@ -44,7 +44,10 @@ public final class LyricIslandSystemUiHost {
     private static final String CHANNEL_NAME = "超级岛歌词";
     private static final String MODULE_PACKAGE = "io.github.superisland";
     private static final long PUBLISH_INTERVAL_MS = 120L;
-    private static final long POSITION_TICK_MS = 50L;
+    // RichLyricLineView advances its visual animation from Choreographer frames. SystemUI only
+    // needs a fresh playback anchor here; 100ms matches HyperLyric's progress sampling cadence
+    // and leaves the shade gesture more frame budget than a 20Hz Binder/renderer tick.
+    private static final long POSITION_TICK_MS = 100L;
     private static final long FALLBACK_TICK_MS = 250L;
     private static final long PLAYBACK_RESOLVE_INTERVAL_MS = 400L;
     private static final long ARTWORK_RESOLVE_INTERVAL_MS = 1_000L;
@@ -55,6 +58,10 @@ public final class LyricIslandSystemUiHost {
     private static volatile boolean enabled;
     private static volatile LyricIslandConfig config = new LyricIslandConfig();
     private static volatile LyricSnapshot latestSnapshot;
+    private static volatile LyricSnapshot nativeActiveSnapshot;
+    private static volatile LyricIslandConfig nativeActiveConfig;
+    private static volatile boolean nativeActiveEnabled;
+    private static volatile boolean nativeActiveResult;
     private static volatile long lastPublishElapsed;
     private static volatile long lastPublishedPosition = Long.MIN_VALUE;
     private static volatile int lastPublishedContentHash;
@@ -375,7 +382,8 @@ public final class LyricIslandSystemUiHost {
 
     /**
      * Returns the latest cached MediaSession state and schedules a refresh when it is stale.
-     * MediaSessionManager.getActiveSessions() is a Binder call and must never run from a 50 ms
+     * MediaSessionManager.getActiveSessions() is a Binder call and must never run from the
+     * high-frequency SystemUI animation tick
      * SystemUI animation tick.
      */
     private static io.github.superisland.source.lyric.LyricPlayback resolvePlaybackForSource(
@@ -446,11 +454,17 @@ public final class LyricIslandSystemUiHost {
         final io.github.superisland.source.lyric.LyricPlayback fallback = snapshot.getPlayback();
         MEDIA_EXECUTOR.execute(() -> {
             io.github.superisland.source.lyric.LyricPlayback resolved;
+            io.github.superisland.source.lyric.LyricPlaybackResolution mediaState;
             try {
-                resolved = LyricPlaybackResolver.INSTANCE.resolve(context, publisher, fallback);
+                mediaState = LyricPlaybackResolver.INSTANCE.resolveWithMetadata(
+                        context, publisher, fallback);
+                resolved = mediaState.getPlayback();
             } catch (Throwable error) {
                 resolved = fallback;
+                mediaState = new io.github.superisland.source.lyric.LyricPlaybackResolution(
+                        fallback, null, null, null);
             }
+            final io.github.superisland.source.lyric.LyricPlaybackResolution resolvedMediaState = mediaState;
             final io.github.superisland.source.lyric.LyricPlayback result = resolved;
             MAIN_HANDLER.post(() -> {
                 PLAYBACK_QUERY_RUNNING.set(false);
@@ -467,14 +481,23 @@ public final class LyricIslandSystemUiHost {
                 playbackCacheKey = key;
                 playbackCache = result;
                 playbackCacheElapsed = android.os.SystemClock.elapsedRealtime();
+                String title = current.getTitle();
+                String artist = current.getArtist();
+                String album = current.getAlbum();
+                // SuperLyric publishers do not always include title/artist/album in the Binder
+                // callback. HyperLyric reads the same public MediaSession metadata for its info
+                // row, so fill only missing fields and preserve an explicit provider value.
+                if (isBlank(title)) title = resolvedMediaState.getTitle();
+                if (isBlank(artist)) artist = resolvedMediaState.getArtist();
+                if (isBlank(album)) album = resolvedMediaState.getAlbum();
                 latestSnapshot = current.copy(
                         current.getPublisher(),
                         current.getLine(),
                         current.getSecondary(),
                         current.getTranslation(),
-                        current.getTitle(),
-                        current.getArtist(),
-                        current.getAlbum(),
+                        title,
+                        artist,
+                        album,
                         current.getArtworkColors(),
                         result,
                         current.getStopped());
@@ -487,6 +510,10 @@ public final class LyricIslandSystemUiHost {
                 }
             });
         });
+    }
+
+    private static boolean isBlank(String value) {
+        return value == null || value.trim().isEmpty();
     }
 
     private static void scheduleArtworkResolve(
@@ -677,18 +704,31 @@ public final class LyricIslandSystemUiHost {
     /** True only while a module-owned lyric snapshot is eligible for native slot rendering. */
     public static boolean isNativeRendererActive() {
         LyricSnapshot snapshot = latestSnapshot;
-        if (!enabled || snapshot == null || snapshot.getStopped() || !config.getEnabled()) return false;
-        String left = LyricPayloadBuilder.INSTANCE.contentFor(
-                snapshot, config,
-                config.getLyricMode() == 1
-                        ? io.github.superisland.source.lyric.IslandContentMode.LYRIC
-                        : config.getContentLeft(), true);
-        String right = LyricPayloadBuilder.INSTANCE.contentFor(
-                snapshot, config,
-                config.getLyricMode() == 1
-                        ? io.github.superisland.source.lyric.IslandContentMode.LYRIC
-                        : config.getContentRight(), false);
-        return !left.isBlank() || !right.isBlank();
+        LyricIslandConfig currentConfig = config;
+        if (snapshot == nativeActiveSnapshot && currentConfig == nativeActiveConfig
+                && nativeActiveEnabled == enabled) {
+            return nativeActiveResult;
+        }
+        boolean active = enabled && snapshot != null && !snapshot.getStopped()
+                && currentConfig.getEnabled();
+        if (active) {
+            String left = LyricPayloadBuilder.INSTANCE.contentFor(
+                    snapshot, currentConfig,
+                    currentConfig.getLyricMode() == 1
+                            ? io.github.superisland.source.lyric.IslandContentMode.LYRIC
+                            : currentConfig.getContentLeft(), true);
+            String right = LyricPayloadBuilder.INSTANCE.contentFor(
+                    snapshot, currentConfig,
+                    currentConfig.getLyricMode() == 1
+                            ? io.github.superisland.source.lyric.IslandContentMode.LYRIC
+                            : currentConfig.getContentRight(), false);
+            active = !left.isBlank() || !right.isBlank();
+        }
+        nativeActiveSnapshot = snapshot;
+        nativeActiveConfig = currentConfig;
+        nativeActiveEnabled = enabled;
+        nativeActiveResult = active;
+        return active;
     }
 
     public static LyricSnapshot nativeSnapshot() {

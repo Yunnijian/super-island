@@ -464,7 +464,15 @@ private fun LyricMaterialDetail(
             item {
                 SegmentedColumn(Modifier.fillMaxWidth(), title = "文字样式", content = listOf(
                     { dropdown("文字颜色", listOf("默认", "封面色", "封面渐变色", "跟随状态栏颜色"), config.textColorStyle) { set(config.copy(textColorStyle = it)) } },
-                    { dropdown("字体", listOf(if (config.customFontPath.isBlank()) "默认" else config.customFontPath), 0) { showFontDialog = true } },
+                    {
+                        dropdown(
+                            "字体",
+                            listOf("默认", "自定义"),
+                            if (config.customFontPath.isBlank()) 0 else 1,
+                        ) { index ->
+                            if (index == 0) set(config.copy(customFontPath = "")) else showFontDialog = true
+                        }
+                    },
                     { switch("英数窄字体", "", config.narrowLatinFont, true) { set(config.copy(narrowLatinFont = it)) } },
                     {
                         materialFieldRow("字重", config.fontWeight.toString()) {
@@ -871,26 +879,27 @@ private fun MaterialNumberInputDialog(
     onConfirm: (Int) -> Unit,
 ) {
     if (!show) return
-    var inputValue by remember(initialValue) { mutableStateOf(initialValue.toString()) }
+    var sliderValue by remember(initialValue, min, max) {
+        mutableFloatStateOf(initialValue.coerceIn(min, max).toFloat())
+    }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(title) },
         text = {
-            OutlinedTextField(
-                value = inputValue,
-                onValueChange = { newValue ->
-                    if (newValue.all(Char::isDigit)) inputValue = newValue
-                },
-                label = { Text(label) },
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                singleLine = true,
-            )
+            Column {
+                Text("${sliderValue.toInt()}  $label")
+                Slider(
+                    value = sliderValue,
+                    onValueChange = { sliderValue = it.coerceIn(min.toFloat(), max.toFloat()) },
+                    valueRange = min.toFloat()..max.toFloat(),
+                )
+            }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } },
         confirmButton = {
             TextButton(
                 onClick = {
-                    inputValue.toIntOrNull()?.let { onConfirm(it.coerceIn(min, max)) }
+                    onConfirm(sliderValue.toInt().coerceIn(min, max))
                 },
             ) {
                 Text("确定")
@@ -912,27 +921,26 @@ private fun MaterialFloatInputDialog(
     onConfirm: (Float) -> Unit,
 ) {
     if (!show) return
-    var inputValue by remember(initialValue) { mutableStateOf(initialValue.toString()) }
+    var sliderValue by remember(initialValue, min, max) {
+        mutableFloatStateOf(initialValue.coerceIn(min, max))
+    }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(title) },
         text = {
-            OutlinedTextField(
-                value = inputValue,
-                onValueChange = { newValue ->
-                    if (newValue.isEmpty() || (newValue.count { it == '.' } <= 1 && newValue.all { it.isDigit() || it == '.' })) {
-                        inputValue = newValue
-                    }
-                },
-                label = { Text(label) },
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                singleLine = true,
-            )
+            Column {
+                Text("%.2f  %s".format(Locale.ROOT, sliderValue, label))
+                Slider(
+                    value = sliderValue,
+                    onValueChange = { sliderValue = it.coerceIn(min, max) },
+                    valueRange = min..max,
+                )
+            }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } },
         confirmButton = {
             TextButton(onClick = {
-                inputValue.toFloatOrNull()?.let { onConfirm(it.coerceIn(min, max)) }
+                onConfirm(sliderValue.coerceIn(min, max))
             }) { Text("确定") }
         },
     )
@@ -948,21 +956,23 @@ private fun MaterialPaddingDialog(
     onConfirm: (Int, Int) -> Unit,
 ) {
     if (!show) return
-    var left by remember(title, initialLeft) { mutableStateOf(initialLeft.toString()) }
-    var right by remember(title, initialRight) { mutableStateOf(initialRight.toString()) }
+    var left by remember(title, initialLeft) { mutableFloatStateOf(initialLeft.coerceIn(-50, 100).toFloat()) }
+    var right by remember(title, initialRight) { mutableFloatStateOf(initialRight.coerceIn(-50, 100).toFloat()) }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(title) },
         text = {
-            Column {
-                OutlinedTextField(value = left, onValueChange = { left = it }, label = { Text("左侧") }, singleLine = true)
-                OutlinedTextField(value = right, onValueChange = { right = it }, label = { Text("右侧") }, singleLine = true)
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("左侧：${left.toInt()}dp")
+                Slider(value = left, onValueChange = { left = it }, valueRange = -50f..100f)
+                Text("右侧：${right.toInt()}dp")
+                Slider(value = right, onValueChange = { right = it }, valueRange = -50f..100f)
             }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } },
         confirmButton = {
             TextButton(onClick = {
-                onConfirm(left.toIntOrNull()?.coerceIn(-50, 100) ?: initialLeft, right.toIntOrNull()?.coerceIn(-50, 100) ?: initialRight)
+                onConfirm(left.toInt().coerceIn(-50, 100), right.toInt().coerceIn(-50, 100))
             }) { Text("确定") }
         },
     )

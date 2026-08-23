@@ -15,6 +15,7 @@ import java.util.WeakHashMap;
 final class WaveGradientController {
     private static final String HOLDER = "miui.systemui.dynamicisland.module.IslandIconViewHolder";
     private final Map<Object, Original> originals = new WeakHashMap<>();
+    private final Map<ViewGroup, AppliedRoot> appliedRoots = new WeakHashMap<>();
 
     void reconcile(
             Map<ClassLoader, WaveGradientSpec> desired,
@@ -22,9 +23,20 @@ final class WaveGradientController {
         for (Map.Entry<ClassLoader, List<ViewGroup>> entry : rootsByLoader.entrySet()) {
             WaveGradientSpec spec = desired.get(entry.getKey());
             for (ViewGroup root : entry.getValue()) {
-                if (root != null) applyTree(root, spec);
+                if (root == null) continue;
+                AppliedRoot previous = appliedRoots.get(root);
+                if (previous != null && java.util.Objects.equals(previous.spec, spec)) {
+                    continue;
+                }
+                applyTree(root, spec);
+                appliedRoots.put(root, new AppliedRoot(spec));
             }
         }
+    }
+
+    /** Forces the next reconciliation to inspect a root after the OEM rebuilt its children. */
+    void invalidateRoot(ViewGroup root) {
+        if (root != null) appliedRoots.remove(root);
     }
 
     void restoreAll(List<?> ignored) {
@@ -32,6 +44,7 @@ final class WaveGradientController {
             restore(entry.getKey(), entry.getValue());
         }
         originals.clear();
+        appliedRoots.clear();
     }
 
     private void applyTree(View view, WaveGradientSpec spec) {
@@ -90,6 +103,14 @@ final class WaveGradientController {
         Original(int top, int bottom) {
             this.top = top;
             this.bottom = bottom;
+        }
+    }
+
+    private static final class AppliedRoot {
+        final WaveGradientSpec spec;
+
+        AppliedRoot(WaveGradientSpec spec) {
+            this.spec = spec;
         }
     }
 }

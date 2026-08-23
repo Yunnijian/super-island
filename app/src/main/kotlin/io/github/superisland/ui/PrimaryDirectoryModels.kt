@@ -13,7 +13,6 @@ fun superIslandDirectoryGroups(): List<DirectoryGroupUi> =
                 listOf(
                     DirectoryEntryUi("monitor", "常驻超级岛", "通过超级岛常驻显示设备实时状态", DirectoryIcon.MONITOR, showChevron = false),
                     DirectoryEntryUi("smart_capsule", "超级岛通知", "将你允许的应用通知显示到超级岛", DirectoryIcon.NOTIFICATION, showChevron = false),
-                    DirectoryEntryUi("media_island", "超级岛音乐", "管理已允许播放器的媒体会话与歌词入口", DirectoryIcon.MEDIA, showChevron = false),
                     DirectoryEntryUi(
                         "lyric",
                         "小米超级岛歌词",

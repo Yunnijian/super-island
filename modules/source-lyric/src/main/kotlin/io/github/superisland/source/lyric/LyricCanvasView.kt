@@ -38,6 +38,9 @@ class LyricCanvasView @JvmOverloads constructor(
     private var statusBarTextColor: Int = Color.WHITE
     private var metadataSnapshot: LyricSnapshot? = null
     private var lastContentSignature: Int? = null
+    private var lastMetadataSourceSignature: Int = 0
+    private var lastMetadataPositionSignature: Long = Long.MIN_VALUE
+    private var metadataPlaybackActive: Boolean? = null
 
     init {
         clipChildren = false
@@ -94,9 +97,13 @@ class LyricCanvasView @JvmOverloads constructor(
         val signature = lineSignature(renderedLine)
         val apply = {
             metadataSnapshot = null
+            lastMetadataSourceSignature = 0
+            lastMetadataPositionSignature = Long.MIN_VALUE
+            metadataPlaybackActive = null
             richView.line = renderedLine
             richView.setPlaybackActive(snapshot.playback.isPlaying)
             richView.setPosition(snapshot.playback.positionMs, snapshot.playback.speed)
+            if (normalizedConfig.marqueeMode) richView.post { richView.requestStartMarquee() }
         }
         val animate = currentConfig.animEnabled || currentConfig.animation == LyricAnimation.SMOOTH
         if (animate &&
@@ -177,6 +184,7 @@ class LyricCanvasView @JvmOverloads constructor(
         val normalizedConfig = config.normalized()
         val metadataMarqueeWasEnabled = currentConfig.metadataMarqueeMode
         val hadMetadataLine = metadataSnapshot != null
+        val previousMetadataSnapshot = metadataSnapshot
         applySlotPadding(normalizedConfig)
         if (normalizedConfig != currentConfig || snapshot.artworkColors != currentArtworkColors) {
             currentConfig = normalizedConfig
@@ -195,6 +203,22 @@ class LyricCanvasView @JvmOverloads constructor(
                 centerOverride = normalizedConfig.centerMusicInfo,
                 metadataMode = true,
             )
+        }
+        val sourceSignature = metadataSourceSignature(snapshot, normalizedConfig)
+        val positionSignature = metadataPositionSignature(snapshot.playback, normalizedConfig)
+        if (metadataSnapshot != null &&
+            sourceSignature == lastMetadataSourceSignature &&
+            positionSignature == lastMetadataPositionSignature
+        ) {
+            // Position ticks often arrive faster than the displayed metadata can change. Keep the
+            // cached line and marquee state intact; only a play/pause edge needs to reach the
+            // renderer here.
+            if (metadataPlaybackActive != snapshot.playback.isPlaying) {
+                richView.setPlaybackActive(snapshot.playback.isPlaying)
+                metadataPlaybackActive = snapshot.playback.isPlaying
+            }
+            metadataSnapshot = snapshot
+            return
         }
         val first = metadataFields(normalizedConfig.musicInfoFirstLine)
             .mapNotNull { metadataValue(it, snapshot) }
@@ -218,7 +242,13 @@ class LyricCanvasView @JvmOverloads constructor(
         }
         metadataSnapshot = snapshot
         val signature = lineSignature(metadataLine)
-        if (signature == lastContentSignature) {
+        if (hadMetadataLine && signature == lastContentSignature) {
+            lastMetadataSourceSignature = sourceSignature
+            lastMetadataPositionSignature = positionSignature
+            if (metadataPlaybackActive != snapshot.playback.isPlaying) {
+                richView.setPlaybackActive(snapshot.playback.isPlaying)
+                metadataPlaybackActive = snapshot.playback.isPlaying
+            }
             // Clearing the metadata override also clears RichLyricLineView's pending request.
             // Re-arm it only for a false -> true transition; position ticks must stay cheap.
             if (!metadataMarqueeWasEnabled && normalizedConfig.metadataMarqueeMode) {
@@ -228,29 +258,53 @@ class LyricCanvasView @JvmOverloads constructor(
         }
         // Position-derived metadata (elapsed/progress) can change every clock tick. Preserve the
         // current marquee/scroll state instead of rebuilding the line as a fresh lyric each time.
-        if (hadMetadataLine) {
-            richView.updateMetadataLine(metadataLine)
-        } else {
-            richView.line = metadataLine
+        val metadataContentChanged = !hadMetadataLine || previousMetadataSnapshot?.let { previous ->
+            previous.title != snapshot.title || previous.artist != snapshot.artist ||
+                previous.album != snapshot.album
+        } ?: true
+        val applyMetadata = {
+            if (hadMetadataLine) richView.updateMetadataLine(metadataLine) else richView.line = metadataLine
+            richView.setPlaybackActive(snapshot.playback.isPlaying)
+            richView.setPosition(snapshot.playback.positionMs, snapshot.playback.speed)
+            metadataPlaybackActive = snapshot.playback.isPlaying
+            if (normalizedConfig.metadataMarqueeMode) richView.post { richView.requestStartMarquee() }
         }
-        richView.setPlaybackActive(false)
-        richView.setPosition(0L, 1f)
-        if (normalizedConfig.metadataMarqueeMode) richView.post { richView.requestStartMarquee() }
+        if (metadataContentChanged && normalizedConfig.animEnabled) {
+            runCatching {
+                richView.animateUpdate(
+                    YoYoPresets.getById(normalizedConfig.animId) ?: YoYoPresets.Default,
+                ) { applyMetadata() }
+            }.onFailure { applyMetadata() }
+        } else {
+            applyMetadata()
+        }
+        lastMetadataSourceSignature = sourceSignature
+        lastMetadataPositionSignature = positionSignature
         lastContentSignature = signature
     }
 
     /** Refreshes elapsed/remaining/progress fields without disturbing an active lyric line. */
-    fun updateMetadataPosition(positionMs: Long, playbackSpeed: Float = 1f) {
+    fun updateMetadataPosition(
+        positionMs: Long,
+        playbackSpeed: Float = 1f,
+        playing: Boolean = metadataSnapshot?.playback?.isPlaying ?: false,
+    ) {
         val snapshot = metadataSnapshot ?: return
-        setMetadata(
-            snapshot.copy(
-                playback = snapshot.playback.copy(
-                    positionMs = positionMs.coerceAtLeast(0L),
-                    speed = playbackSpeed,
-                ),
-            ),
-            currentConfig,
+        val nextPlayback = snapshot.playback.copy(
+            positionMs = positionMs.coerceAtLeast(0L),
+            speed = playbackSpeed,
+            isPlaying = playing,
         )
+        val nextPositionSignature = metadataPositionSignature(nextPlayback, currentConfig)
+        if (nextPositionSignature == lastMetadataPositionSignature) {
+            if (snapshot.playback.isPlaying != nextPlayback.isPlaying) {
+                richView.setPlaybackActive(nextPlayback.isPlaying)
+                metadataPlaybackActive = nextPlayback.isPlaying
+                metadataSnapshot = snapshot.copy(playback = nextPlayback)
+            }
+            return
+        }
+        setMetadata(snapshot.copy(playback = nextPlayback), currentConfig)
     }
 
     private fun applyConfig(
@@ -450,6 +504,48 @@ class LyricCanvasView @JvmOverloads constructor(
     private fun metadataFields(raw: String): List<String> = raw.split(',')
         .map(String::trim)
         .filter { it.isNotEmpty() }
+
+    private fun metadataSourceSignature(
+        snapshot: LyricSnapshot,
+        config: LyricIslandConfig,
+    ): Int {
+        var result = 17
+        result = 31 * result + (snapshot.title?.hashCode() ?: 0)
+        result = 31 * result + (snapshot.artist?.hashCode() ?: 0)
+        result = 31 * result + (snapshot.album?.hashCode() ?: 0)
+        result = 31 * result + snapshot.playback.durationMs.hashCode()
+        result = 31 * result + config.hashCode()
+        result = 31 * result + snapshot.artworkColors.hashCode()
+        return result
+    }
+
+    /** Returns a stable key for the smallest position change visible in metadata text. */
+    private fun metadataPositionSignature(
+        playback: LyricPlayback,
+        config: LyricIslandConfig,
+    ): Long {
+        val first = config.musicInfoFirstLine
+        val second = config.musicInfoSecondLine
+        val hasTime = first.contains(LyricMusicInfoLayout.FIELD_ELAPSED) ||
+            first.contains(LyricMusicInfoLayout.FIELD_REMAINING) ||
+            second.contains(LyricMusicInfoLayout.FIELD_ELAPSED) ||
+            second.contains(LyricMusicInfoLayout.FIELD_REMAINING)
+        val hasPercent = first.contains(LyricMusicInfoLayout.FIELD_PROGRESS_PERCENT) ||
+            second.contains(LyricMusicInfoLayout.FIELD_PROGRESS_PERCENT)
+        var result = if (hasTime) playback.positionMs.coerceAtLeast(0L) / 1_000L else 0L
+        if (hasPercent) {
+            val duration = playback.durationMs
+            val percent = if (duration > 0L) {
+                kotlin.math.round(
+                    (playback.positionMs.coerceAtLeast(0L).toDouble() / duration) * 100.0,
+                ).toLong().coerceIn(0L, 100L)
+            } else {
+                -1L
+            }
+            result = result * 101L + percent + 1L
+        }
+        return result
+    }
 
     private fun metadataValue(field: String, snapshot: LyricSnapshot): String? {
         val playback = snapshot.playback
