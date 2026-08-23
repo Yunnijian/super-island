@@ -859,33 +859,6 @@ public final class SuperIslandXposedModule extends XposedModule {
                             return result;
                         }));
             }
-            for (Method method : fake.getDeclaredMethods()) {
-                if (!"setVisibility".equals(method.getName())
-                        || method.getParameterTypes().length != 1
-                        || method.getParameterTypes()[0] != Integer.TYPE
-                        || method.getDeclaringClass() != fake) {
-                    continue;
-                }
-                method.setAccessible(true);
-                deoptimize(method);
-                optional.add(hook(method)
-                        .setExceptionMode(
-                                io.github.libxposed.api.XposedInterface.ExceptionMode.PROTECTIVE)
-                        .intercept(chain -> {
-                            int visibility = ((Number) chain.getArg(0)).intValue();
-                            // Visibility is called repeatedly for every shade-animation frame on
-                            // some HyperOS builds. Rendering here made each frame compete with the
-                            // status-bar transition; the lifecycle hooks above already schedule
-                            // the one freeze bind needed when the fake surface starts.
-                            Object result = chain.proceed();
-                            if (visibility == android.view.View.INVISIBLE
-                                    && chain.getThisObject() instanceof ViewGroup) {
-                                io.github.superisland.hook.systemui.lyric.LyricIslandSystemUiHost
-                                        .clearNative((ViewGroup) chain.getThisObject());
-                            }
-                            return result;
-                        }));
-            }
             if (!optional.isEmpty()) {
                 log(Log.INFO, TAG, "Installed native lyric fake-transition hooks=" + optional.size());
             }
