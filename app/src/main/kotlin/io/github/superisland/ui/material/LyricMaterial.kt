@@ -372,7 +372,7 @@ private fun LyricMaterialDetail(
                                                 dynamicWidthRange = start.toFloat()..end.toFloat()
                                             },
                                             valueRange = islandWidthMin.toFloat()..islandWidthMax.toFloat(),
-                                            steps = 0,
+                                            steps = (islandWidthMax - islandWidthMin - 1).coerceAtLeast(0),
                                             onValueChangeFinished = {
                                                 set(
                                                     config.copy(
@@ -391,7 +391,7 @@ private fun LyricMaterialDetail(
                                                 fixedIslandWidth = value.coerceIn(islandWidthMin.toFloat(), islandWidthMax.toFloat())
                                             },
                                             valueRange = islandWidthMin.toFloat()..islandWidthMax.toFloat(),
-                                            steps = 0,
+                                            steps = (islandWidthMax - islandWidthMin - 1).coerceAtLeast(0),
                                             onValueChangeFinished = {
                                                 set(config.copy(rightContentMaxWidth = fixedIslandWidth.toInt()))
                                             },
