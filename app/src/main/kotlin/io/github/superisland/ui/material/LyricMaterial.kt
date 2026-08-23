@@ -698,6 +698,12 @@ private fun LyricMaterialDirectory(
                         enabled = true,
                         onCheckedChange = onEnabledChange,
                     )
+                },
+            )
+            SegmentedColumn(
+                modifier = Modifier.fillMaxWidth(),
+                title = "",
+                content = listOf {
                     SegmentedDropdownItem(
                         title = "歌词模式",
                         items = lyricModeLabels,
@@ -707,6 +713,12 @@ private fun LyricMaterialDirectory(
                             onConfigChange(config.copy(lyricMode = mode).normalized())
                         },
                     )
+                },
+            )
+            SegmentedColumn(
+                modifier = Modifier.fillMaxWidth(),
+                title = "",
+                content = listOf {
                     SegmentedDropdownItem(
                         title = "歌词源",
                         items = sourceLabels,
