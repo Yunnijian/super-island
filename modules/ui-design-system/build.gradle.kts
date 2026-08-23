@@ -29,6 +29,7 @@ android {
 
 dependencies {
     implementation(project(":core-model"))
+    implementation(project(":source-lyric"))
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.compose.material.icons.extended)
     // Non-visual dependencies used by the verbatim KernelSU Miuix theme adapter: dynamic

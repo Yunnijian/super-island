@@ -317,7 +317,8 @@ final class SystemUiResidentIslandHost {
                     contentFor(snapshot),
                     snapshot.levelPercent >= 0 ? snapshot.levelPercent : 0,
                     false,
-                    shortStatusFor(snapshot, rightTitleMetric)
+                    shortStatusFor(snapshot, rightTitleMetric),
+                    false
             );
             NotificationManager notificationManager = context.getSystemService(NotificationManager.class);
             if (notificationManager == null) return;
@@ -357,7 +358,8 @@ final class SystemUiResidentIslandHost {
         if (title.isEmpty() || text.isEmpty()) return;
         if (shortStatus.isEmpty()) shortStatus = "系统状态";
         try {
-            FocusNotificationRequest request = new FocusNotificationRequest(title, text, 0, false, shortStatus);
+            FocusNotificationRequest request = new FocusNotificationRequest(
+                    title, text, 0, false, shortStatus, false);
             NotificationManager notificationManager = context.getSystemService(NotificationManager.class);
             if (notificationManager == null) return;
             FocusNotificationPublisher publisher = new FocusNotificationPublisher(context, CHANNEL_NAME);

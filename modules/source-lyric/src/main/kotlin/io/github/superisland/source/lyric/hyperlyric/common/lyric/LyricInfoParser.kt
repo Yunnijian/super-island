@@ -3,27 +3,31 @@ package io.github.superisland.source.lyric.hyperlyric.common.lyric
 import io.github.superisland.source.lyric.hyperlyric.model.LyricWord
 import io.github.superisland.source.lyric.hyperlyric.model.RichLyricLine
 import io.github.superisland.source.lyric.hyperlyric.model.Song
-import org.json.JSONObject
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonPrimitive
 import java.util.regex.Pattern
 
 object LyricInfoParser {
 
     private val LRC_TIME_RE = Pattern.compile("\\[(\\d{2}):(\\d{2})\\.(\\d{2,3})]")
+    private val JSON = Json { ignoreUnknownKeys = true; isLenient = true }
 
     fun parse(json: String): Song? = parsePayload(json)?.song
 
     fun parsePayload(json: String): LyricInfoPayload? {
         return try {
-            val obj = JSONObject(json)
-            val lyricRaw = obj.optString("lyric", "").trim()
-            val format = obj.optString("format", "").trim()
-            val translationFormat = obj.optString("translation", "").trim()
+            val obj = JSON.parseToJsonElement(json) as? JsonObject ?: return null
+            val lyricRaw = obj.stringValue("lyric").orEmpty().trim()
+            val format = obj.stringValue("format").orEmpty().trim()
+            val translationFormat = obj.stringValue("translation").orEmpty().trim()
             if (lyricRaw.isBlank()) return null
 
-            val title = obj.optionalText("songName")
-            val artist = obj.optionalText("artist")
-            val album = obj.optionalText("album")
-            val songId = obj.optionalText("songId")
+            val title = obj.stringValue("songName")
+            val artist = obj.stringValue("artist")
+            val album = obj.stringValue("album")
+            val songId = obj.stringValue("songId")
 
             val hasTranslation = translationFormat.isNotBlank()
             val allLines = lyricRaw.lines().filter { it.isNotBlank() }
@@ -198,23 +202,27 @@ object LyricInfoParser {
 
     fun diagnose(json: String): LyricInfoDiagnosis? {
         return try {
-            val obj = JSONObject(json)
+            val obj = JSON.parseToJsonElement(json) as? JsonObject ?: return null
             LyricInfoDiagnosis(
-                songName = obj.optString("songName", ""),
-                artist = obj.optString("artist", ""),
-                songId = obj.optString("songId", ""),
-                format = obj.optString("format", ""),
-                translationFormat = obj.optString("translation", ""),
-                lyricLength = obj.optString("lyric", "").length,
-                lyricPreview = obj.optString("lyric", "").lines().filter { it.isNotBlank() }.drop(3).take(10)
+                songName = obj.stringValue("songName").orEmpty(),
+                artist = obj.stringValue("artist").orEmpty(),
+                songId = obj.stringValue("songId").orEmpty(),
+                format = obj.stringValue("format").orEmpty(),
+                translationFormat = obj.stringValue("translation").orEmpty(),
+                lyricLength = obj.stringValue("lyric").orEmpty().length,
+                lyricPreview = obj.stringValue("lyric").orEmpty().lines()
+                    .filter { it.isNotBlank() }.drop(3).take(10)
             )
         } catch (_: Exception) {
             null
         }
     }
 
-    private fun JSONObject.optionalText(key: String): String? =
-        optString(key, "").trim().takeIf { it.isNotEmpty() }
+    private fun JsonObject.stringValue(key: String): String? = this[key]
+        ?.jsonPrimitive
+        ?.contentOrNull
+        ?.trim()
+        ?.takeIf { it.isNotEmpty() }
 }
 
 private data class ParsedLine(val timeMs: Long, val raw: String)

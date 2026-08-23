@@ -102,16 +102,18 @@ class FocusNotificationPublisher(
         ongoing: Boolean = true,
         timeoutAfterMillis: Long? = null,
         islandPriority: IslandPriority = IslandPriority.MEDIUM,
+        channelId: String = CHANNEL_ID,
+        focusBusiness: String = BUSINESS_SUPER_ISLAND,
     ): Notification {
         require(timeoutAfterMillis == null || timeoutAfterMillis > 0L) {
             "timeoutAfterMillis must be positive"
         }
-        ensureChannel()
+        ensureChannel(channelId)
         val smallIcon = sourceSmallIcon ?: IconCompat.createWithResource(appContext, smallIconResId)
         val effectiveLeftIslandIcon = leftIslandIcon ?: smallIcon
         val effectiveRightIslandIcon = rightIslandIcon ?: effectiveLeftIslandIcon
         val builder =
-            NotificationCompat.Builder(appContext, CHANNEL_ID)
+            NotificationCompat.Builder(appContext, channelId)
                 .setContentTitle(request.title)
                 .setContentText(request.text)
                 .setCategory(NotificationCompat.CATEGORY_STATUS)
@@ -149,6 +151,7 @@ class FocusNotificationPublisher(
                         showLeftIslandIcon = showLeftIslandIcon,
                         showRightIslandIcon = showRightIslandIcon,
                         islandPriority = islandPriority,
+                        focusBusiness = focusBusiness,
                     ),
                 )
             } else {
@@ -160,6 +163,7 @@ class FocusNotificationPublisher(
                         showLeftIslandIcon = showLeftIslandIcon,
                         showRightIslandIcon = showRightIslandIcon,
                         islandPriority = islandPriority,
+                        focusBusiness = focusBusiness,
                     ),
                 )
                 putParcelable(EXTRA_FOCUS_REMOTE_VIEW, customRemoteViews.day)
@@ -224,6 +228,35 @@ class FocusNotificationPublisher(
             targetPackage = targetPackage,
         )
 
+    /** Builds a SystemUI-owned lyric notification with a separately authorized identity. */
+    fun buildSystemUiLyricNotification(
+        request: FocusNotificationRequest,
+        smallIconResId: Int,
+        leftModuleIcon: Icon? = null,
+        rightModuleIcon: Icon? = null,
+        showLeftIslandIcon: Boolean = true,
+        showRightIslandIcon: Boolean = false,
+        customRemoteViews: FocusCustomRemoteViews? = null,
+        targetPackage: String? = null,
+    ): Notification =
+        buildNotification(
+            request = request,
+            smallIconResId = smallIconResId,
+            // Lyric surfaces are display-only and must never open an app task.
+            contentIntent = null,
+            sourceSmallIcon = leftModuleIcon?.let { IconCompat.createFromIcon(appContext, it) },
+            leftIslandIcon = leftModuleIcon?.let { IconCompat.createFromIcon(appContext, it) },
+            rightIslandIcon = rightModuleIcon?.let { IconCompat.createFromIcon(appContext, it) },
+            visibility = NotificationCompat.VISIBILITY_SECRET,
+            showInNotificationShade = false,
+            showLeftIslandIcon = showLeftIslandIcon,
+            showRightIslandIcon = showRightIslandIcon,
+            customRemoteViews = customRemoteViews,
+            targetPackage = targetPackage,
+            channelId = LyricIslandContract.CHANNEL_ID,
+            focusBusiness = LyricIslandContract.FOCUS_BUSINESS,
+        )
+
     fun cancel(notificationId: Int = DEFAULT_NOTIFICATION_ID) {
         notificationManager.cancel(notificationId)
     }
@@ -260,6 +293,7 @@ class FocusNotificationPublisher(
         showLeftIslandIcon: Boolean,
         showRightIslandIcon: Boolean,
         islandPriority: IslandPriority,
+        focusBusiness: String,
     ): String {
         val paramIsland =
             islandParam(
@@ -274,7 +308,7 @@ class FocusNotificationPublisher(
                 .put("enableFloat", false)
                 .put("isFirstFloat", false)
                 .put("updatable", true)
-                .put("business", BUSINESS_SUPER_ISLAND)
+                .put("business", focusBusiness)
                 .put("sequence", sequence)
                 .put("isShowNotification", showInNotificationShade)
                 .put("showSmallIcon", showLeftIslandIcon)
@@ -291,9 +325,17 @@ class FocusNotificationPublisher(
         showLeftIslandIcon: Boolean,
         showRightIslandIcon: Boolean,
         islandPriority: IslandPriority,
+        focusBusiness: String,
     ): String {
         val payload =
             JSONObject()
+                .apply {
+                    // Keep the audited resident custom schema unchanged; lyric identity carries
+                    // its marker explicitly so the SystemUI boundary can distinguish it.
+                    if (focusBusiness == LyricIslandContract.FOCUS_BUSINESS) {
+                        put("business", focusBusiness)
+                    }
+                }
                 .put("ticker", request.shortStatus)
                 .put("tickerPic", FOCUS_TICKER_ICON_KEY)
                 .put("tickerPicDark", FOCUS_TICKER_ICON_KEY)
@@ -336,7 +378,7 @@ class FocusNotificationPublisher(
                 ),
             ).put(
                 "smallIslandArea",
-                smallIslandArea(request.shortStatus, showLeftIslandIcon),
+                smallIslandArea(request, showLeftIslandIcon),
             )
 
     private fun bigIslandArea(
@@ -375,14 +417,40 @@ class FocusNotificationPublisher(
                     ),
             )
 
-    private fun smallIslandArea(status: String, showLeftIslandIcon: Boolean): JSONObject =
-        JSONObject()
-            .apply {
-                if (showLeftIslandIcon) {
-                    put("picInfo", JSONObject().put("type", 1).put("pic", FOCUS_LEFT_ICON_KEY))
+    private fun smallIslandArea(request: FocusNotificationRequest, showLeftIslandIcon: Boolean): JSONObject =
+        if (request.showProgress && !request.progressIndeterminate) {
+            // Dynamic-island's SmallIslandArea model only exposes combinePicInfo/picInfo.
+            // HyperLyric's determinate ring is consumed from combinePicInfo.progressInfo;
+            // putting progressInfo directly on smallIslandArea is silently ignored by the ROM.
+            JSONObject().put(
+                "combinePicInfo",
+                JSONObject()
+                    .apply {
+                        if (showLeftIslandIcon) {
+                            put(
+                                "picInfo",
+                                JSONObject().put("type", 1).put("pic", FOCUS_LEFT_ICON_KEY),
+                            )
+                        }
+                    }
+                    .put(
+                        "progressInfo",
+                        JSONObject()
+                            .put("progress", request.progress)
+                            .put("colorReach", PROGRESS_REACH_COLOR)
+                            .put("colorUnReach", PROGRESS_UNREACH_COLOR)
+                            .put("isCCW", true),
+                    ),
+            )
+        } else {
+            JSONObject()
+                .apply {
+                    if (showLeftIslandIcon) {
+                        put("picInfo", JSONObject().put("type", 1).put("pic", FOCUS_LEFT_ICON_KEY))
+                    }
                 }
-            }
-            .put("textInfo", JSONObject().put("title", status))
+                .put("textInfo", JSONObject().put("title", request.shortStatus))
+        }
 
     private fun iconTextInfo(request: FocusNotificationRequest): JSONObject =
         JSONObject()
@@ -405,11 +473,13 @@ class FocusNotificationPublisher(
             result?.getBoolean("canShowFocus", false) == true
         }.getOrDefault(false)
 
-    private fun ensureChannel() {
-        if (notificationManager.getNotificationChannel(CHANNEL_ID) != null) return
+    private fun ensureChannel() = ensureChannel(CHANNEL_ID)
+
+    private fun ensureChannel(channelId: String) {
+        if (notificationManager.getNotificationChannel(channelId) != null) return
         notificationManager.createNotificationChannel(
             NotificationChannel(
-                CHANNEL_ID,
+                channelId,
                 channelName,
                 NotificationManager.IMPORTANCE_DEFAULT,
             ).apply {
@@ -449,6 +519,8 @@ class FocusNotificationPublisher(
         const val FOCUS_REOPEN_CLOSE = "close"
         const val CUSTOM_FOCUS_TIMEOUT_MINUTES = 720
         const val FOCUS_BLUE = 0xff3482ff.toInt()
+        const val PROGRESS_REACH_COLOR = "#3482FF"
+        const val PROGRESS_UNREACH_COLOR = "#333333"
         val SEQUENCE_LOCK = Any()
     }
 }

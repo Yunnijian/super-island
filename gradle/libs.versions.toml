@@ -22,6 +22,7 @@ daimajia-animations = "2.4"
 daimajia-easing = "2.4"
 androidx-interpolator = "1.0.0"
 superlyric-api = "3.4"
+lyricon-subscriber = "0.1.70"
 
 [libraries]
 androidx-activity-compose = { module = "androidx.activity:activity-compose", version.ref = "activity" }
@@ -54,6 +55,7 @@ daimajia-animations = { group = "com.daimajia.androidanimations", name = "librar
 daimajia-easing = { group = "com.daimajia.easing", name = "library", version.ref = "daimajia-easing" }
 androidx-interpolator = { module = "androidx.interpolator:interpolator", version.ref = "androidx-interpolator" }
 superlyric-api = { module = "com.github.HChenX:SuperLyricApi", version.ref = "superlyric-api" }
+lyricon-subscriber = { module = "io.github.proify.lyricon:subscriber", version.ref = "lyricon-subscriber" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

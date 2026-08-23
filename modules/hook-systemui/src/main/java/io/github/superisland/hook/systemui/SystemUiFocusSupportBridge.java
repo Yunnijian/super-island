@@ -17,6 +17,7 @@ import io.github.libxposed.api.XposedInterface.HookHandle;
 import io.github.superisland.model.AppRule;
 import io.github.superisland.model.ChannelSelection;
 import io.github.superisland.model.SystemUiSmartCapsuleContract;
+import io.github.superisland.publisher.focus.LyricIslandContract;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -33,18 +34,22 @@ import java.util.concurrent.atomic.AtomicLong;
  *
  * <p>Third-party smart capsules do not pass through this class. They keep their source identity and
  * use the SystemUI notification mapper plus the scoped XMSF adapter. This bridge only preserves the
- * exact authorization required by module-owned/resident Focus notifications and the optional
+ * exact authorization required by module-owned/resident/lyric Focus notifications and the optional
  * notification-Channel catalog used by the editor.
  */
 final class SystemUiFocusSupportBridge {
     private static final String TAG = "SuperIslandFocusSupport";
     private static final String MODULE_PACKAGE = SystemUiSmartCapsuleContract.MODULE_PACKAGE;
     private static final String SYSTEM_UI_PACKAGE = SystemUiSmartCapsuleContract.SYSTEM_UI_PACKAGE;
-    private static final Uri REPORT_URI =
-            Uri.parse("content://" + SystemUiSmartCapsuleContract.REPORT_PROVIDER_AUTHORITY);
     private static final int MAX_CHANNELS = 128;
     private static final int MAX_CHANNEL_NAME_CODE_UNITS = 160;
+    private static final int MAX_FOCUS_BUSINESS_PAYLOAD_CODE_UNITS = 16_384;
+    private static final int MAX_FOCUS_BUSINESS_CODE_UNITS = 96;
     private static final int ANDROID_UIDS_PER_USER = 100_000;
+
+    private static Uri reportUri() {
+        return Uri.parse("content://" + SystemUiSmartCapsuleContract.REPORT_PROVIDER_AUTHORITY);
+    }
 
     private static final ThreadPoolExecutor REPORT_EXECUTOR = new ThreadPoolExecutor(
             1,
@@ -219,6 +224,7 @@ final class SystemUiFocusSupportBridge {
             String standard = extras != null ? extras.getString("miui.focus.param") : null;
             String custom = extras != null ? extras.getString("miui.focus.param.custom") : null;
             boolean hasFocusPayload = nonBlank(standard) || nonBlank(custom);
+            String focusBusiness = focusBusiness(standard, custom);
             String channelId = notification != null ? notification.getChannelId() : null;
 
             LauncherApps launcherApps = Objects.requireNonNull(
@@ -240,16 +246,110 @@ final class SystemUiFocusSupportBridge {
                     moduleUid,
                     systemUiUid,
                     sbn.getPostTime(),
-                    hasFocusPayload)) {
+                    hasFocusPayload,
+                    focusBusiness)) {
                 return false;
             }
             callbackOnAuthSuccess.invoke(callback, sbn.getKey(), targetPackage);
             return true;
         } catch (Throwable error) {
-            Log.w(TAG, "Exact module/resident Focus authorization failed closed", error);
+            Log.w(TAG, "Exact module/resident/lyric Focus authorization failed closed", error);
             return false;
         }
     }
+
+    /** Extracts only the bounded business marker used by the notification identity boundary. */
+    static String focusBusiness(String standard, String custom) {
+        String[] payloads = {standard, custom};
+        String firstBusiness = null;
+        for (String payload : payloads) {
+            if (!nonBlank(payload) || payload.length() > MAX_FOCUS_BUSINESS_PAYLOAD_CODE_UNITS) {
+                continue;
+            }
+            String business = extractBusinessString(payload);
+            if (!nonBlank(business) || business.length() > MAX_FOCUS_BUSINESS_CODE_UNITS) {
+                continue;
+            }
+            // Prefer the dedicated lyric marker when both OEM fields are present.
+            if (LyricIslandContract.FOCUS_BUSINESS.equals(business)) return business;
+            if (firstBusiness == null) firstBusiness = business;
+        }
+        return firstBusiness;
+    }
+
+    /**
+     * Extracts one JSON string value without touching Android's org.json stubs. The scanner only
+     * accepts a real string token followed by a colon and another string token, so text embedded
+     * inside a payload value cannot be mistaken for the business key. Malformed input fails closed.
+     */
+    private static String extractBusinessString(String payload) {
+        int length = payload.length();
+        int cursor = 0;
+        while (cursor < length) {
+            int quote = payload.indexOf('"', cursor);
+            if (quote < 0) return null;
+            StringToken key = readJsonString(payload, quote);
+            if (key == null) return null;
+            cursor = skipWhitespace(payload, key.end);
+            if (!"business".equals(key.value) || cursor >= length || payload.charAt(cursor) != ':') {
+                cursor = key.end;
+                continue;
+            }
+            cursor = skipWhitespace(payload, cursor + 1);
+            if (cursor >= length || payload.charAt(cursor) != '"') return null;
+            StringToken value = readJsonString(payload, cursor);
+            return value == null ? null : value.value;
+        }
+        return null;
+    }
+
+    private static int skipWhitespace(String text, int start) {
+        int cursor = start;
+        while (cursor < text.length() && Character.isWhitespace(text.charAt(cursor))) cursor++;
+        return cursor;
+    }
+
+    private static StringToken readJsonString(String text, int quote) {
+        StringBuilder value = new StringBuilder();
+        boolean escaped = false;
+        for (int cursor = quote + 1; cursor < text.length(); cursor++) {
+            char character = text.charAt(cursor);
+            if (escaped) {
+                switch (character) {
+                    case '"': value.append('"'); break;
+                    case '\\': value.append('\\'); break;
+                    case '/': value.append('/'); break;
+                    case 'b': value.append('\b'); break;
+                    case 'f': value.append('\f'); break;
+                    case 'n': value.append('\n'); break;
+                    case 'r': value.append('\r'); break;
+                    case 't': value.append('\t'); break;
+                    case 'u':
+                        if (cursor + 4 >= text.length()) return null;
+                        int codePoint = 0;
+                        for (int offset = 1; offset <= 4; offset++) {
+                            int digit = Character.digit(text.charAt(cursor + offset), 16);
+                            if (digit < 0) return null;
+                            codePoint = (codePoint << 4) | digit;
+                        }
+                        value.append((char) codePoint);
+                        cursor += 4;
+                        break;
+                    default: return null;
+                }
+                escaped = false;
+            } else if (character == '\\') {
+                escaped = true;
+            } else if (character == '"') {
+                return new StringToken(value.toString(), cursor + 1);
+            } else {
+                value.append(character);
+            }
+        }
+        return null;
+    }
+
+    private record StringToken(String value, int end) {}
 
     private boolean channelCatalogAvailable() {
         return notificationManagerGetService != null
@@ -323,7 +423,7 @@ final class SystemUiFocusSupportBridge {
         for (int attempt = 0; attempt < 2; attempt++) {
             try {
                 Bundle result = runtimeContext.getContentResolver().call(
-                        REPORT_URI,
+                        reportUri(),
                         method,
                         null,
                         extras);

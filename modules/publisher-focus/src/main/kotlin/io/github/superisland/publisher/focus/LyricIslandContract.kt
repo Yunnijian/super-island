@@ -5,6 +5,9 @@ object LyricIslandContract {
     const val SYSTEM_UI_PACKAGE = "com.android.systemui"
     const val LYRIC_NOTIFICATION_ID = 0x4C5952 // "LYR"
 
+    /** Focus business marker required for the SystemUI-owned lyric notification identity. */
+    const val FOCUS_BUSINESS = "super_island_lyric"
+
     /** libxposed RemotePreferences name for the lyric host. */
     const val REMOTE_PREFERENCES = "SuperIslandLyricHost"
     const val KEY_ENABLED = "enabled"

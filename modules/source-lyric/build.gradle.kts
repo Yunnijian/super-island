@@ -13,7 +13,10 @@ android {
         }
     }
 
-    defaultConfig { minSdk = 36 }
+    defaultConfig {
+        minSdk = 36
+        consumerProguardFiles("consumer-rules.pro")
+    }
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_21
@@ -29,4 +32,6 @@ dependencies {
     implementation(libs.daimajia.easing) { artifact { type = "aar" } }
     implementation(libs.androidx.interpolator)
     implementation(libs.superlyric.api)
+    implementation(libs.lyricon.subscriber)
+    testImplementation(libs.junit4)
 }

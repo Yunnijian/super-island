@@ -1,0 +1,11 @@
+HyperLyric lyric renderer attribution
+
+The io.github.superisland.source.lyric.hyperlyric model and view implementation is adapted from
+HyperLyric by Proify and Tomakino (upstream repository: HyperLyric, source checkout pinned by the
+Super Island development workspace). The copied lyric model/view files retain their original
+Apache License, Version 2.0 headers. The surrounding HyperLyric project is distributed under the
+GNU General Public License, Version 3; this distribution keeps the repository GPL-3.0 license at
+the project root and provides the adapted source in this module.
+
+Original source: https://github.com/limczhh/HyperLyric
+Apache License 2.0: https://www.apache.org/licenses/LICENSE-2.0

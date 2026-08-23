@@ -12,7 +12,18 @@ data class FocusNotificationRequest(
     val progress: Int = 0,
     val progressIndeterminate: Boolean = false,
     val shortStatusText: String? = null,
+    /** Whether the island payload should render a progress ring for this event. */
+    val showProgress: Boolean = false,
 ) {
+    /** Java/Xposed callers compiled against the pre-progress constructor. */
+    constructor(
+        title: String,
+        text: String,
+        progress: Int,
+        progressIndeterminate: Boolean,
+        shortStatusText: String?,
+    ) : this(title, text, progress, progressIndeterminate, shortStatusText, false)
+
     init {
         require(title.isNotBlank()) { "title must not be blank" }
         require(text.isNotBlank()) { "text must not be blank" }

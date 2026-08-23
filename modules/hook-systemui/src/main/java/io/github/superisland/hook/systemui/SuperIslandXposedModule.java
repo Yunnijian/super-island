@@ -15,6 +15,7 @@ import android.os.IBinder;
 import android.os.Looper;
 import android.service.notification.StatusBarNotification;
 import android.util.Log;
+import android.view.ViewGroup;
 import io.github.libxposed.api.XposedInterface.HookHandle;
 import io.github.libxposed.api.XposedModule;
 import io.github.libxposed.api.XposedModuleInterface;
@@ -53,6 +54,14 @@ public final class SuperIslandXposedModule extends XposedModule {
             "com.android.systemui.plugins.miui.notification.FocusNotificationContent";
     private static final String FOCUS_PLUGIN_CLASS =
             "miui.systemui.notification.FocusNotificationPluginImpl";
+    private static final String DYNAMIC_ISLAND_CONTENT_VIEW_CLASS =
+            "miui.systemui.dynamicisland.window.content.DynamicIslandContentView";
+    private static final String DYNAMIC_ISLAND_CONTENT_FAKE_VIEW_CLASS =
+            "miui.systemui.dynamicisland.window.content.DynamicIslandContentFakeView";
+    private static final String ISLAND_TEMPLATE_BUILDER_CLASS =
+            "miui.systemui.dynamicisland.template.IslandTemplateBuilder";
+    private static final String ISLAND_MODULE_ADAPTER_CLASS =
+            "miui.systemui.dynamicisland.module.IslandModuleViewHolderAdapter";
 
     /**
      * HyperOS loads the focus plugin with a separate ClassLoader. A hook installed only in the
@@ -64,6 +73,15 @@ public final class SuperIslandXposedModule extends XposedModule {
             new WeakHashMap<>();
     private final Map<Object, SystemUiFocusSupportBridge> focusPluginInstances =
             new WeakHashMap<>();
+    /**
+     * Dynamic Island may be loaded by the SystemUI loader or by the MIUI plugin loader. Keep one
+     * bounded hook set per loader so a plugin reload cannot stack duplicate lyric render passes.
+     */
+    private final Map<ClassLoader, List<HookHandle>> installedLyricNativeHooks =
+            new WeakHashMap<>();
+    private final Map<Object, ClassLoader> lyricNativePluginLoaders =
+            new WeakHashMap<>();
+    private volatile ClassLoader systemUiLyricNativeLoader;
     private final AtomicLong pluginEpochs = new AtomicLong();
     private volatile HookHandle xmsfFocusAuthHook;
     private volatile HookHandle xmsfRuntimeAttachHook;
@@ -114,6 +132,14 @@ public final class SuperIslandXposedModule extends XposedModule {
                         + adapter.getFailure());
             }
             installResidentIslandHost(defaultClassLoader);
+            try {
+                installLyricNativeRendererHook(defaultClassLoader, "SystemUI default loader");
+                systemUiLyricNativeLoader = defaultClassLoader;
+            } catch (Throwable error) {
+                // Dynamic Island is an optional ROM surface. A missing/drifted class leaves the
+                // audited Focus fallback untouched and must not disable the other SystemUI hooks.
+                log(Log.WARN, TAG, "Native lyric Dynamic Island hook unavailable", error);
+            }
             installPluginLoadHook(defaultClassLoader);
             installFocusHooksIfPresent(defaultClassLoader, "SystemUI default loader");
             log(Log.INFO, TAG, "Installed scoped HyperOS focus-notification bridge");
@@ -576,6 +602,432 @@ public final class SuperIslandXposedModule extends XposedModule {
         log(Log.INFO, TAG, "Installed screen-recording QS stopped-package guard");
     }
 
+    /**
+     * Installs the narrow Dynamic Island content hook used by HyperLyric's native-player path.
+     *
+     * <p>The renderer is deliberately called only after the OEM has rebuilt its island layout.
+     * The first argument of {@code updateBigIslandView} is treated as opaque and inspected only
+     * for the audited media package/pending-intent extras. Unknown signatures or layouts fail
+     * closed, leaving the normal Focus notification path available.
+     */
+    private synchronized void installLyricNativeRendererHook(
+            ClassLoader classLoader,
+            String loaderLabel) throws ReflectiveOperationException {
+        if (classLoader == null) {
+            throw new ReflectiveOperationException("Dynamic Island class loader is null");
+        }
+        synchronized (installedLyricNativeHooks) {
+            if (installedLyricNativeHooks.containsKey(classLoader)) return;
+        }
+
+        Class<?> contentViewClass = Class.forName(
+                DYNAMIC_ISLAND_CONTENT_VIEW_CLASS,
+                false,
+                classLoader);
+        List<Method> updateMethods = new ArrayList<>();
+        List<Method> visibilityMethods = new ArrayList<>();
+        List<Method> widthMethods = new ArrayList<>();
+        for (Method method : contentViewClass.getMethods()) {
+            String name = method.getName();
+            if ("updateBigIslandView".equals(name)
+                    && isSupportedDynamicIslandUpdateSignature(method)) {
+                addUniqueMethod(updateMethods, method);
+            } else if (("calculateBigIslandWidth".equals(name)
+                    || "updateBigIslandViewWidth".equals(name))
+                    && method.getParameterTypes().length == 0) {
+                addUniqueMethod(widthMethods, method);
+            } else if (("hideIslandLayout".equals(name) || "showIslandLayout".equals(name))
+                    && method.getParameterTypes().length == 0) {
+                addUniqueMethod(visibilityMethods, method);
+            }
+        }
+        if (updateMethods.isEmpty()) {
+            throw new ReflectiveOperationException(
+                    "DynamicIslandContentView.updateBigIslandView is unavailable");
+        }
+
+        List<HookHandle> handles = new ArrayList<>();
+        try {
+            for (Method method : updateMethods) {
+                deoptimize(method);
+                handles.add(hook(method)
+                        .setExceptionMode(
+                                io.github.libxposed.api.XposedInterface.ExceptionMode.PROTECTIVE)
+                        .intercept(chain -> {
+                            Object result = chain.proceed();
+                            try {
+                                Object data = method.getParameterTypes().length == 0
+                                        ? null
+                                        : chain.getArg(0);
+                                dispatchNativeIslandUpdate(chain.getThisObject(), data);
+                            } catch (Throwable error) {
+                                // Renderer failures must never alter the OEM update result.
+                                log(Log.WARN, TAG,
+                                        "Native lyric render after update failed", error);
+                            }
+                            return result;
+                        }));
+            }
+            for (Method method : widthMethods) {
+                deoptimize(method);
+                handles.add(hook(method)
+                        .setExceptionMode(
+                                io.github.libxposed.api.XposedInterface.ExceptionMode.PROTECTIVE)
+                        .intercept(chain -> {
+                            // Width is calculated from the current children. Inject once before
+                            // OEM measurement, then refresh after it in case the ROM rebuilt the
+                            // slot during the call.
+                            try {
+                                ViewGroup root = chain.getThisObject() instanceof ViewGroup
+                                        ? (ViewGroup) chain.getThisObject() : null;
+                                Object data = currentIslandData(root);
+                                if (data != null) dispatchNativeIslandUpdate(root, data);
+                            } catch (Throwable error) {
+                                log(Log.WARN, TAG,
+                                        "Native lyric pre-width render failed", error);
+                            }
+                            Object result = chain.proceed();
+                            try {
+                                ViewGroup root = chain.getThisObject() instanceof ViewGroup
+                                        ? (ViewGroup) chain.getThisObject() : null;
+                                Object data = currentIslandData(root);
+                                if (data != null) dispatchNativeIslandUpdate(root, data);
+                            } catch (Throwable error) {
+                                log(Log.WARN, TAG,
+                                        "Native lyric post-width render failed", error);
+                            }
+                            return result;
+                        }));
+            }
+            for (Method method : visibilityMethods) {
+                deoptimize(method);
+                boolean show = "showIslandLayout".equals(method.getName());
+                handles.add(hook(method)
+                        .setExceptionMode(
+                                io.github.libxposed.api.XposedInterface.ExceptionMode.PROTECTIVE)
+                        .intercept(chain -> {
+                            Object result = chain.proceed();
+                            try {
+                                Object receiver = chain.getThisObject();
+                                if (!(receiver instanceof ViewGroup)) return result;
+                                ViewGroup root = (ViewGroup) receiver;
+                                if (show) {
+                                    Object data = currentIslandData(root);
+                                    if (data != null) dispatchNativeIslandUpdate(root, data);
+                                } else {
+                                    io.github.superisland.hook.systemui.lyric
+                                            .LyricIslandSystemUiHost.clearNative(root);
+                                }
+                            } catch (Throwable error) {
+                                log(Log.WARN, TAG,
+                                        "Native lyric render after visibility change failed", error);
+                            }
+                            return result;
+                        }));
+            }
+            installLyricModuleRestoreHooks(classLoader, handles);
+            installLyricFakeTransitionHooks(classLoader, handles);
+        } catch (Throwable error) {
+            unhookAll(handles, "native lyric hook installation");
+            if (error instanceof ReflectiveOperationException) {
+                throw (ReflectiveOperationException) error;
+            }
+            throw new ReflectiveOperationException(
+                    "Could not install native lyric Dynamic Island hooks", error);
+        }
+
+        synchronized (installedLyricNativeHooks) {
+            if (installedLyricNativeHooks.containsKey(classLoader)) {
+                unhookAll(handles, "duplicate native lyric hook installation");
+                return;
+            }
+            installedLyricNativeHooks.put(classLoader, List.copyOf(handles));
+        }
+        log(Log.INFO, TAG, "Installed native lyric Dynamic Island hooks: " + loaderLabel
+                + " updateMethods=" + updateMethods.size()
+                + " widthMethods=" + widthMethods.size()
+                + " visibilityMethods=" + visibilityMethods.size());
+    }
+
+    /** Re-applies the renderer after OEM module holders are rebound during an island update. */
+    private void installLyricModuleRestoreHooks(
+            ClassLoader classLoader,
+            List<HookHandle> destination) {
+        List<HookHandle> optional = new ArrayList<>();
+        try {
+            Class<?> builder = Class.forName(ISLAND_TEMPLATE_BUILDER_CLASS, false, classLoader);
+            List<Method> methods = new ArrayList<>();
+            for (Method method : builder.getMethods()) {
+                if ("updateModuleView".equals(method.getName())
+                        && method.getParameterTypes().length == 3) {
+                    addUniqueMethod(methods, method);
+                }
+            }
+            for (Method method : methods) {
+                method.setAccessible(true);
+                deoptimize(method);
+                optional.add(hook(method)
+                        .setExceptionMode(
+                                io.github.libxposed.api.XposedInterface.ExceptionMode.PROTECTIVE)
+                        .intercept(chain -> {
+                            Object result = chain.proceed();
+                            dispatchModuleRestore(
+                                    chain.getThisObject(),
+                                    chain.getArg(0),
+                                    chain.getArg(2),
+                                    true);
+                            return result;
+                        }));
+            }
+            if (!methods.isEmpty()) {
+                log(Log.INFO, TAG, "Installed native lyric template-builder hooks=" + methods.size());
+            }
+        } catch (ClassNotFoundException ignored) {
+            // This ROM keeps module rebuilding in the adapter; absence is an expected variant.
+        } catch (Throwable error) {
+            unhookAll(optional, "optional lyric template-builder hook failure");
+            log(Log.WARN, TAG, "Native lyric template-builder hook unavailable", error);
+            optional.clear();
+        }
+        destination.addAll(optional);
+
+        optional = new ArrayList<>();
+        try {
+            Class<?> adapter = Class.forName(ISLAND_MODULE_ADAPTER_CLASS, false, classLoader);
+            List<Method> methods = new ArrayList<>();
+            for (Method method : adapter.getMethods()) {
+                if ("updateView".equals(method.getName())
+                        && method.getParameterTypes().length == 3) {
+                    addUniqueMethod(methods, method);
+                }
+            }
+            for (Method method : methods) {
+                method.setAccessible(true);
+                deoptimize(method);
+                optional.add(hook(method)
+                        .setExceptionMode(
+                                io.github.libxposed.api.XposedInterface.ExceptionMode.PROTECTIVE)
+                        .intercept(chain -> {
+                            Object result = chain.proceed();
+                            dispatchModuleRestore(
+                                    chain.getThisObject(),
+                                    chain.getArg(0),
+                                    chain.getArg(2),
+                                    false);
+                            return result;
+                        }));
+            }
+            if (!methods.isEmpty()) {
+                log(Log.INFO, TAG, "Installed native lyric module-adapter hooks=" + methods.size());
+            }
+        } catch (ClassNotFoundException ignored) {
+            // Optional on older Dynamic Island builds.
+        } catch (Throwable error) {
+            unhookAll(optional, "optional lyric module-adapter hook failure");
+            log(Log.WARN, TAG, "Native lyric module-adapter hook unavailable", error);
+            optional.clear();
+        }
+        destination.addAll(optional);
+    }
+
+    /** Keeps the copied lyric canvas in sync with Dynamic Island's fake transition surface. */
+    private void installLyricFakeTransitionHooks(
+            ClassLoader classLoader,
+            List<HookHandle> destination) {
+        List<HookHandle> optional = new ArrayList<>();
+        try {
+            Class<?> fake = Class.forName(DYNAMIC_ISLAND_CONTENT_FAKE_VIEW_CLASS, false, classLoader);
+            List<Method> lifecycle = new ArrayList<>();
+            for (Method method : fake.getDeclaredMethods()) {
+                if (("onTrackingFakeViewStart".equals(method.getName())
+                        || "updateViewStateWhenOpenAnimStart".equals(method.getName()))
+                        && method.getParameterTypes().length == 0) {
+                    addUniqueMethod(lifecycle, method);
+                }
+            }
+            for (Method method : lifecycle) {
+                method.setAccessible(true);
+                deoptimize(method);
+                optional.add(hook(method)
+                        .setExceptionMode(
+                                io.github.libxposed.api.XposedInterface.ExceptionMode.PROTECTIVE)
+                        .intercept(chain -> {
+                            Object result = chain.proceed();
+                            Object receiver = chain.getThisObject();
+                            if (receiver instanceof ViewGroup) {
+                                ViewGroup fakeRoot = (ViewGroup) receiver;
+                                Object data = currentIslandData(fakeRoot);
+                                io.github.superisland.hook.systemui.lyric.LyricIslandSystemUiHost
+                                        .renderAndFreezeNative(fakeRoot, data);
+                            }
+                            return result;
+                        }));
+            }
+            for (Method method : fake.getDeclaredMethods()) {
+                if (!"setVisibility".equals(method.getName())
+                        || method.getParameterTypes().length != 1
+                        || method.getParameterTypes()[0] != Integer.TYPE
+                        || method.getDeclaringClass() != fake) {
+                    continue;
+                }
+                method.setAccessible(true);
+                deoptimize(method);
+                optional.add(hook(method)
+                        .setExceptionMode(
+                                io.github.libxposed.api.XposedInterface.ExceptionMode.PROTECTIVE)
+                        .intercept(chain -> {
+                            int visibility = ((Number) chain.getArg(0)).intValue();
+                            if (visibility == android.view.View.VISIBLE) {
+                                Object receiver = chain.getThisObject();
+                                if (receiver instanceof ViewGroup) {
+                                    ViewGroup fakeRoot = (ViewGroup) receiver;
+                                    Object data = currentIslandData(fakeRoot);
+                                    io.github.superisland.hook.systemui.lyric.LyricIslandSystemUiHost
+                                            .renderAndFreezeNative(fakeRoot, data);
+                                }
+                            }
+                            Object result = chain.proceed();
+                            if (visibility != android.view.View.VISIBLE
+                                    && chain.getThisObject() instanceof ViewGroup) {
+                                io.github.superisland.hook.systemui.lyric.LyricIslandSystemUiHost
+                                        .clearNative((ViewGroup) chain.getThisObject());
+                            }
+                            return result;
+                        }));
+            }
+            if (!optional.isEmpty()) {
+                log(Log.INFO, TAG, "Installed native lyric fake-transition hooks=" + optional.size());
+            }
+        } catch (ClassNotFoundException ignored) {
+            // Fake transition view is not present on compact/older ROM variants.
+        } catch (Throwable error) {
+            unhookAll(optional, "optional lyric fake-transition hook failure");
+            log(Log.WARN, TAG, "Native lyric fake-transition hooks unavailable", error);
+            optional.clear();
+        }
+        destination.addAll(optional);
+    }
+
+    private static void dispatchModuleRestore(
+            Object owner,
+            Object moduleTypeObject,
+            Object islandData,
+            boolean templateBuilder) {
+        if (!(moduleTypeObject instanceof String)) return;
+        String moduleType = (String) moduleTypeObject;
+        if (!moduleType.endsWith("_1") && !moduleType.endsWith("_2")) return;
+        Object adapter = templateBuilder ? readField(owner, "islandAdapter") : owner;
+        Object holder = findHolder(adapter, moduleType);
+        ViewGroup root = findHolderRoot(holder);
+        if (root == null) {
+            io.github.superisland.hook.systemui.lyric.LyricIslandSystemUiHost.refreshNativeAll();
+            return;
+        }
+        dispatchNativeIslandUpdate(root, islandData);
+    }
+
+    private static Object findHolder(Object adapter, String moduleType) {
+        if (adapter == null || moduleType == null) return null;
+        Object holders = readField(adapter, "holders");
+        if (holders instanceof Map<?, ?>) return ((Map<?, ?>) holders).get(moduleType);
+        return null;
+    }
+
+    private static ViewGroup findHolderRoot(Object holder) {
+        if (holder == null) return null;
+        try {
+            Method getter = holder.getClass().getMethod("getRootView");
+            Object value = getter.invoke(holder);
+            return value instanceof ViewGroup ? (ViewGroup) value : null;
+        } catch (Throwable ignored) {
+            return null;
+        }
+    }
+
+    private static Object readField(Object receiver, String name) {
+        if (receiver == null || name == null) return null;
+        Class<?> current = receiver.getClass();
+        while (current != null) {
+            try {
+                java.lang.reflect.Field field = current.getDeclaredField(name);
+                field.setAccessible(true);
+                return field.get(receiver);
+            } catch (NoSuchFieldException ignored) {
+                current = current.getSuperclass();
+            } catch (Throwable ignored) {
+                return null;
+            }
+        }
+        return null;
+    }
+
+    private static void addUniqueMethod(List<Method> methods, Method candidate) {
+        for (Method existing : methods) {
+            if (existing.getName().equals(candidate.getName())
+                    && java.util.Arrays.equals(
+                            existing.getParameterTypes(), candidate.getParameterTypes())) {
+                return;
+            }
+        }
+        methods.add(candidate);
+    }
+
+    /** Accepts only the audited Kotlin-suspend Dynamic Island update contract. */
+    private static boolean isSupportedDynamicIslandUpdateSignature(Method method) {
+        Class<?>[] parameters = method.getParameterTypes();
+        if (parameters.length != 3 || parameters[1] != Boolean.TYPE) return false;
+        Class<?> continuation = null;
+        try {
+            continuation = Class.forName(
+                    "kotlin.coroutines.Continuation",
+                    false,
+                    method.getDeclaringClass().getClassLoader());
+        } catch (Throwable ignored) {
+            // Fall through to the stable obfuscated descriptor used by MIUI's plugin APK.
+        }
+        if (continuation != null && continuation.isAssignableFrom(parameters[2])) return true;
+        String name = parameters[2].getName();
+        return name.equals("kotlin.coroutines.Continuation")
+                || name.equals("kotlin.coroutines.ContinuationImpl")
+                || name.equals("K0.d");
+    }
+
+    private static void dispatchNativeIslandUpdate(Object receiver, Object data) {
+        if (!(receiver instanceof ViewGroup)) return;
+        ViewGroup root = (ViewGroup) receiver;
+        Runnable update = () -> {
+            try {
+                // LyricIslandNativeRenderer owns the complete media/pending-intent gate. Keeping
+                // the decision in one place avoids an asynchronous stale-data precheck clearing
+                // a newer player root.
+                io.github.superisland.hook.systemui.lyric.LyricIslandSystemUiHost
+                        .renderNative(root, data);
+            } catch (Throwable error) {
+                // Renderer/runtime drift must restore OEM children and never escape a hook.
+                io.github.superisland.hook.systemui.lyric.LyricIslandSystemUiHost.clearNative(root);
+                Log.w(TAG, "Native lyric render failed closed", error);
+            }
+        };
+        try {
+            if (Looper.myLooper() == Looper.getMainLooper()) {
+                update.run();
+            } else {
+                root.post(update);
+            }
+        } catch (Throwable error) {
+            Log.w(TAG, "Could not dispatch native lyric render", error);
+        }
+    }
+
+    private static Object currentIslandData(ViewGroup root) {
+        try {
+            Method getter = root.getClass().getMethod("getCurrentIslandData");
+            return getter.invoke(root);
+        } catch (Throwable ignored) {
+            return null;
+        }
+    }
+
     private void installPluginLoadHook(ClassLoader classLoader) throws ReflectiveOperationException {
         Class<?> pluginInstance = Class.forName(PLUGIN_INSTANCE_CLASS, false, classLoader);
         Method loadPlugin = pluginInstance.getDeclaredMethod("loadPlugin");
@@ -616,6 +1068,19 @@ public final class SuperIslandXposedModule extends XposedModule {
             Context pluginContext = getPluginContext(focusPlugin, pluginInstance);
             Context systemUiContext = getSystemUiContext(focusPlugin);
             ClassLoader pluginClassLoader = pluginContext.getClassLoader();
+            boolean nativeHookInstalled = false;
+            try {
+                installLyricNativeRendererHook(pluginClassLoader, "MIUI SystemUI plugin loader");
+                nativeHookInstalled = true;
+            } catch (Throwable error) {
+                // Focus auth hooks remain useful when this ROM does not expose Dynamic Island.
+                log(Log.WARN, TAG, "Native lyric hook unavailable in plugin loader", error);
+            }
+            if (nativeHookInstalled) {
+                synchronized (lyricNativePluginLoaders) {
+                    lyricNativePluginLoaders.put(pluginInstance, pluginClassLoader);
+                }
+            }
             installFocusHooksIfPresent(pluginClassLoader, "MIUI SystemUI plugin loader");
             SystemUiFocusSupportBridge bridge =
                     installFocusSupportBridge(pluginClassLoader, systemUiContext);
@@ -682,25 +1147,45 @@ public final class SuperIslandXposedModule extends XposedModule {
     }
 
     private void deactivateFocusPluginInstance(Object pluginInstance) {
+        ClassLoader nativePluginLoader;
+        synchronized (lyricNativePluginLoaders) {
+            nativePluginLoader = lyricNativePluginLoaders.remove(pluginInstance);
+        }
         SystemUiFocusSupportBridge bridge;
         synchronized (focusPluginInstances) {
             bridge = focusPluginInstances.remove(pluginInstance);
         }
-        if (bridge == null) return;
-        bridge.deactivate("plugin_unloaded");
+        if (bridge != null) bridge.deactivate("plugin_unloaded");
         ClassLoader pluginLoader = null;
-        synchronized (focusSupportBridges) {
-            Iterator<Map.Entry<ClassLoader, SystemUiFocusSupportBridge>> iterator =
-                    focusSupportBridges.entrySet().iterator();
-            while (iterator.hasNext()) {
-                Map.Entry<ClassLoader, SystemUiFocusSupportBridge> entry = iterator.next();
-                if (entry.getValue() == bridge) {
-                    pluginLoader = entry.getKey();
-                    iterator.remove();
+        if (bridge != null) {
+            synchronized (focusSupportBridges) {
+                Iterator<Map.Entry<ClassLoader, SystemUiFocusSupportBridge>> iterator =
+                        focusSupportBridges.entrySet().iterator();
+                while (iterator.hasNext()) {
+                    Map.Entry<ClassLoader, SystemUiFocusSupportBridge> entry = iterator.next();
+                    if (entry.getValue() == bridge) {
+                        pluginLoader = entry.getKey();
+                        iterator.remove();
+                    }
                 }
             }
         }
         if (pluginLoader != null) uninstallFocusNotificationGateHooks(pluginLoader);
+        if (nativePluginLoader != null
+                && nativePluginLoader != systemUiLyricNativeLoader
+                && !hasOtherLyricNativePluginOwner(nativePluginLoader)) {
+            uninstallLyricNativeRendererHooks(nativePluginLoader);
+            io.github.superisland.hook.systemui.lyric.LyricIslandSystemUiHost.clearNativeAll();
+        }
+    }
+
+    private boolean hasOtherLyricNativePluginOwner(ClassLoader classLoader) {
+        synchronized (lyricNativePluginLoaders) {
+            for (ClassLoader owner : lyricNativePluginLoaders.values()) {
+                if (owner == classLoader) return true;
+            }
+        }
+        return false;
     }
 
     private void installFocusHooksIfPresent(ClassLoader classLoader, String loaderLabel) {
@@ -742,6 +1227,15 @@ public final class SuperIslandXposedModule extends XposedModule {
             handles = installedFocusLoaderHooks.remove(classLoader);
         }
         unhookAll(handles, "focus gate uninstall");
+    }
+
+    private void uninstallLyricNativeRendererHooks(ClassLoader classLoader) {
+        if (classLoader == null) return;
+        List<HookHandle> handles;
+        synchronized (installedLyricNativeHooks) {
+            handles = installedLyricNativeHooks.remove(classLoader);
+        }
+        unhookAll(handles, "native lyric hook uninstall");
     }
 
     private SystemUiFocusSupportBridge installFocusSupportBridge(

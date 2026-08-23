@@ -1,0 +1,219 @@
+package io.github.superisland.source.lyric
+
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.int
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
+import org.junit.Test
+
+class LyricPayloadBuilderTest {
+    private fun island(payload: String) = Json.parseToJsonElement(payload)
+        .jsonObject.getValue("param_v2").jsonObject
+        .getValue("param_island").jsonObject
+
+    private fun slotTitle(payload: String, slot: String): String = island(payload)
+        .getValue("bigIslandArea").jsonObject
+        .getValue(slot).jsonObject
+        .getValue("textInfo").jsonObject
+        .getValue("title").jsonPrimitive.content
+
+    @Test
+    fun emitsAuditedNestedProgressShape() {
+        val line = LyricLine("hello", 1_000L, 2_000L)
+        val payload = Json.parseToJsonElement(
+            LyricPayloadBuilder.buildFocusLyricJson(
+                LyricSnapshot(
+                    publisher = "player",
+                    line = line,
+                    playback = LyricPlayback(positionMs = 1_500L, isPlaying = true),
+                ),
+            ),
+        ).jsonObject
+        val paramV2 = payload.getValue("param_v2").jsonObject
+        val island = paramV2.getValue("param_island").jsonObject
+        val small = island.getValue("smallIslandArea").jsonObject
+        val combine = small.getValue("combinePicInfo").jsonObject
+        assertEquals("super_island_lyric", paramV2.getValue("business").jsonPrimitive.content)
+        assertEquals(50, combine.getValue("progressInfo").jsonObject.getValue("progress").jsonPrimitive.int)
+        assertFalse(payload.containsKey("island_param"))
+    }
+
+    @Test
+    fun supportsTranslationAndEmptyPlaceholderFailClosed() {
+        val snapshot = LyricSnapshot(
+            publisher = "player",
+            line = LyricLine("主行", 0L, 0L),
+            translation = LyricLine("译文", 0L, 0L),
+        )
+        val payload = Json.parseToJsonElement(
+            LyricPayloadBuilder.buildFocusLyricJson(snapshot, LyricIslandConfig(showProgress = false)),
+        ).jsonObject
+        val left = payload.getValue("param_v2").jsonObject
+            .getValue("param_island").jsonObject
+            .getValue("bigIslandArea").jsonObject
+            .getValue("imageTextInfoLeft").jsonObject
+            .getValue("textInfo").jsonObject
+        assertEquals("主行", left.getValue("title").jsonPrimitive.content)
+        assertTrue(
+            LyricPayloadBuilder.buildFocusLyricJson(
+                LyricSnapshot("player"),
+                LyricIslandConfig(placeholder = LyricPlaceholder.NONE),
+            ).isEmpty(),
+        )
+    }
+
+    @Test
+    fun metadataOnlyLayoutPublishesWithoutLyricText() {
+        val snapshot = LyricSnapshot(
+            publisher = "player",
+            title = "Song",
+            artist = "Artist",
+            playback = LyricPlayback(positionMs = 1_000L, durationMs = 120_000L),
+        )
+        val payload = LyricPayloadBuilder.buildFocusLyricJson(
+            snapshot,
+            LyricIslandConfig(
+                contentLeft = IslandContentMode.MUSIC_INFO,
+                contentRight = IslandContentMode.NONE,
+                musicInfoFirstLine = LyricMusicInfoLayout.FIELD_TITLE,
+                placeholder = LyricPlaceholder.NONE,
+                showProgress = false,
+            ),
+        )
+
+        assertTrue(payload.isNotEmpty())
+        assertEquals("Song", slotTitle(payload, "imageTextInfoLeft"))
+        assertEquals("", slotTitle(payload, "imageTextInfoRight"))
+    }
+
+    @Test
+    fun noneSlotsStayEmptyInsteadOfFallingBackToLyric() {
+        val snapshot = LyricSnapshot(
+            publisher = "player",
+            line = LyricLine("原词", 0L, 1_000L),
+        )
+        val noSlots = LyricPayloadBuilder.buildFocusLyricJson(
+            snapshot,
+            LyricIslandConfig(
+                contentLeft = IslandContentMode.NONE,
+                contentRight = IslandContentMode.NONE,
+                placeholder = LyricPlaceholder.NONE,
+                showProgress = false,
+            ),
+        )
+        assertTrue(noSlots.isEmpty())
+
+        val rightLyric = LyricPayloadBuilder.buildFocusLyricJson(
+            snapshot,
+            LyricIslandConfig(
+                contentLeft = IslandContentMode.NONE,
+                contentRight = IslandContentMode.LYRIC,
+                placeholder = LyricPlaceholder.NONE,
+                showProgress = false,
+            ),
+        )
+        assertEquals("", slotTitle(rightLyric, "imageTextInfoLeft"))
+        assertEquals("原词", slotTitle(rightLyric, "imageTextInfoRight"))
+    }
+
+    @Test
+    fun translationModesMatchHyperLyricPrecedence() {
+        val snapshot = LyricSnapshot(
+            publisher = "player",
+            line = LyricLine("原词", 0L, 1_000L),
+            translation = LyricLine("译文", 0L, 1_000L),
+        )
+        fun config(transform: LyricIslandConfig.() -> LyricIslandConfig) = LyricIslandConfig(
+            contentLeft = IslandContentMode.LYRIC,
+            contentRight = IslandContentMode.LYRIC,
+            placeholder = LyricPlaceholder.NONE,
+            showProgress = false,
+        ).transform()
+
+        assertEquals(
+            "译文",
+            LyricPayloadBuilder.contentFor(snapshot, config { copy(translationOnly = true) }, IslandContentMode.LYRIC, true),
+        )
+        assertEquals(
+            "原词",
+            LyricPayloadBuilder.contentFor(snapshot, config { copy(swapTranslation = true) }, IslandContentMode.LYRIC, false),
+        )
+        assertEquals(
+            "原词",
+            LyricPayloadBuilder.contentFor(
+                snapshot,
+                config { copy(disableTranslation = true, translationOnly = true) },
+                IslandContentMode.LYRIC,
+                true,
+            ),
+        )
+    }
+
+    @Test
+    fun nextLyricPreviewSuppressesTranslationUntilAutoSwitch() {
+        val snapshot = LyricSnapshot(
+            publisher = "player",
+            line = LyricLine("原词", 0L, 1_000L),
+            translation = LyricLine("译文", 0L, 1_000L),
+            secondary = LyricLine("下一句", 1_000L, 2_000L),
+        )
+        val nextConfig = LyricIslandConfig(
+            sourceMode = LyricSourceMode.LYRICON,
+            contentLeft = IslandContentMode.LYRIC,
+            contentRight = IslandContentMode.LYRIC,
+            nextLyricLine = true,
+            placeholder = LyricPlaceholder.NONE,
+            showProgress = false,
+        )
+        assertEquals("原词", LyricPayloadBuilder.contentFor(snapshot, nextConfig, IslandContentMode.LYRIC, true))
+        assertEquals("下一句", LyricPayloadBuilder.contentFor(snapshot, nextConfig, IslandContentMode.LYRIC, false))
+
+        val autoConfig = nextConfig.copy(autoSwitchTranslation = true)
+        // HyperLyric disables the next-line preview once a translation is available, then
+        // resumes the normal two-line layout: original lyric first, translation second.
+        assertEquals("原词", LyricPayloadBuilder.contentFor(snapshot, autoConfig, IslandContentMode.LYRIC, true))
+        assertEquals("译文", LyricPayloadBuilder.contentFor(snapshot, autoConfig, IslandContentMode.LYRIC, false))
+    }
+
+    @Test
+    fun metadataTimeUsesHoursAndRoundedPercent() {
+        val long = LyricSnapshot(
+            publisher = "player",
+            playback = LyricPlayback(positionMs = 61_234L, durationMs = 3_661_234L),
+        )
+        val longText = LyricPayloadBuilder.contentFor(
+            long,
+            LyricIslandConfig(
+                contentLeft = IslandContentMode.MUSIC_INFO,
+                musicInfoFirstLine = "duration,elapsed,remaining,progress_percent",
+                musicInfoSeparator = LyricMusicInfoLayout.SEPARATOR_COMMA,
+                placeholder = LyricPlaceholder.NONE,
+                showProgress = false,
+            ),
+            IslandContentMode.MUSIC_INFO,
+            true,
+        )
+        assertEquals("01:01:01, 00:01:01, 01:00:00, 2%", longText)
+
+        val short = LyricSnapshot(
+            publisher = "player",
+            playback = LyricPlayback(positionMs = 61_000L, durationMs = 123_000L),
+        )
+        val shortText = LyricPayloadBuilder.contentFor(
+            short,
+            LyricIslandConfig(
+                contentLeft = IslandContentMode.MUSIC_INFO,
+                musicInfoFirstLine = "duration,elapsed,progress_percent",
+                musicInfoSeparator = LyricMusicInfoLayout.SEPARATOR_COMMA,
+                placeholder = LyricPlaceholder.NONE,
+                showProgress = false,
+            ),
+            IslandContentMode.MUSIC_INFO,
+            true,
+        )
+        assertEquals("02:03, 01:01, 50%", shortText)
+    }
+}

@@ -7,6 +7,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import io.github.superisland.LyricIslandHostConfigSync
+import io.github.superisland.source.lyric.LyricIslandConfig
 import io.github.superisland.ui.material.LyricMaterial
 import me.weishu.kernelsu.ui.LocalUiMode
 import me.weishu.kernelsu.ui.UiMode
@@ -15,24 +16,30 @@ import me.weishu.kernelsu.ui.UiMode
 @Composable
 fun LyricScreen(onBack: () -> Unit) {
     val context = LocalContext.current
-    // Persisted echo: survives page exit and process restart.
-    var enabled by remember { mutableStateOf(LyricIslandHostConfigSync.isEnabled()) }
-    val setEnabled: (Boolean) -> Unit = { next ->
-        enabled = next
+    // Persisted rich config: survives page exit and process restart.
+    LyricIslandHostConfigSync.start(context)
+    var config by remember { mutableStateOf(LyricIslandHostConfigSync.loadConfig()) }
+    val setConfig: (LyricIslandConfig) -> Unit = { next ->
+        val previous = config
+        val normalized = next.normalized()
         LyricIslandHostConfigSync.start(context)
-        LyricIslandHostConfigSync.sync(next)
+        if (LyricIslandHostConfigSync.sync(normalized).isSuccess) {
+            config = normalized
+        } else {
+            config = previous
+        }
     }
     when (LocalUiMode.current) {
         UiMode.Miuix ->
             LyricMiuix(
-                enabled = enabled,
-                onEnabledChange = setEnabled,
+                config = config,
+                onConfigChange = setConfig,
                 onBack = onBack,
             )
         UiMode.Material ->
             LyricMaterial(
-                enabled = enabled,
-                onEnabledChange = setEnabled,
+                config = config,
+                onConfigChange = setConfig,
                 onBack = onBack,
             )
     }
