@@ -815,11 +815,11 @@ private fun HomeServiceStatus(
                 InformationEntryUi("运行路径", "LSPosed 产品路径 · Root allowlist 增强"),
                 InformationEntryUi(
                     "媒体通知访问",
-                    if (snapshot.notificationAccessGranted) "已允许" else "未允许；超级岛音乐不可用",
+                    if (snapshot.notificationAccessGranted) "已允许" else "未允许；歌词媒体读取不可用",
                 ),
                 InformationEntryUi(
                     "媒体监听服务",
-                    if (snapshot.listenerConnected) "已连接" else "未连接；可在超级岛音乐的通知访问与连接中处理",
+                    if (snapshot.listenerConnected) "已连接" else "未连接；请在系统通知访问设置中处理",
                 ),
             ),
         backLabel = "返回首页",
@@ -838,7 +838,7 @@ private fun HomeUsageGuide(
         entries =
             listOf(
                 InformationEntryUi("1. 确认模块状态", "需要 Root、已激活的 LSPosed 模块与 SystemUI 作用域；首页状态卡会显示当前状态。"),
-                InformationEntryUi("2. 配置上岛来源", "在超级岛中进入超级岛通知或超级岛音乐，只允许你主动选择的来源。"),
+                InformationEntryUi("2. 配置上岛来源", "在超级岛中进入超级岛通知，只允许你主动选择的来源；歌词按已配置的媒体源读取。"),
                 InformationEntryUi("3. 检查系统权限", "通知权限、通知访问与焦点通知状态均在对应功能详情中处理。"),
                 InformationEntryUi("4. 使用持续监控", "常驻超级岛可细拆显示指标；Root 增强只在已验证设备上按需读取。"),
             ),
