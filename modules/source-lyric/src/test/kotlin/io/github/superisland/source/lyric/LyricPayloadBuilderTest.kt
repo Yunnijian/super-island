@@ -120,6 +120,27 @@ class LyricPayloadBuilderTest {
     }
 
     @Test
+    fun ordinaryModeDoesNotPublishDuplicateLyricSlots() {
+        val snapshot = LyricSnapshot(
+            publisher = "player",
+            line = LyricLine("原词", 0L, 1_000L),
+            secondary = LyricLine("下一句", 1_000L, 2_000L),
+        )
+        val payload = LyricPayloadBuilder.buildFocusLyricJson(
+            snapshot,
+            LyricIslandConfig(
+                lyricMode = 0,
+                contentLeft = IslandContentMode.LYRIC,
+                contentRight = IslandContentMode.LYRIC,
+                placeholder = LyricPlaceholder.NONE,
+                showProgress = false,
+            ),
+        )
+        assertEquals("原词", slotTitle(payload, "imageTextInfoLeft"))
+        assertEquals("", slotTitle(payload, "imageTextInfoRight"))
+    }
+
+    @Test
     fun translationModesMatchHyperLyricPrecedence() {
         val snapshot = LyricSnapshot(
             publisher = "player",
@@ -127,6 +148,7 @@ class LyricPayloadBuilderTest {
             translation = LyricLine("译文", 0L, 1_000L),
         )
         fun config(transform: LyricIslandConfig.() -> LyricIslandConfig) = LyricIslandConfig(
+            lyricMode = 1,
             contentLeft = IslandContentMode.LYRIC,
             contentRight = IslandContentMode.LYRIC,
             placeholder = LyricPlaceholder.NONE,
@@ -161,6 +183,7 @@ class LyricPayloadBuilderTest {
             secondary = LyricLine("下一句", 1_000L, 2_000L),
         )
         val nextConfig = LyricIslandConfig(
+            lyricMode = 1,
             sourceMode = LyricSourceMode.LYRICON,
             contentLeft = IslandContentMode.LYRIC,
             contentRight = IslandContentMode.LYRIC,

@@ -161,12 +161,20 @@ class LyricIslandConfigCodecTest {
     fun freshConfigUsesHyperLyricMarqueeAndWordMotionDefaults() {
         val config = LyricIslandConfig()
 
-        assertEquals(25, config.metadataMarqueeSpeed)
-        assertEquals(1_000, config.metadataMarqueeDelay)
-        assertEquals(0, config.metadataMarqueeLoopDelay)
+        assertEquals(0.85f, config.textSizeRatio)
+        assertEquals(10, config.fadingEdgeLengthDp)
+        assertEquals(LyricPlaceholder.NAME_ARTIST, config.placeholder)
+        assertEquals(40, config.marqueeSpeed)
+        assertEquals(300, config.marqueeDelay)
+        assertEquals(700, config.marqueeLoopDelay)
+        assertTrue(config.marqueeInfinite)
+        assertFalse(config.marqueeStopEnd)
+        assertEquals(40, config.metadataMarqueeSpeed)
+        assertEquals(300, config.metadataMarqueeDelay)
+        assertEquals(700, config.metadataMarqueeLoopDelay)
         assertTrue(config.metadataMarqueeInfinite)
-        assertEquals(0.06f, config.wordMotionLatinLift)
-        assertEquals(3.6f, config.wordMotionLatinWave)
+        assertEquals(0.08f, config.wordMotionLatinLift)
+        assertEquals(2.0f, config.wordMotionLatinWave)
     }
 
     @Test

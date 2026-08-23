@@ -239,7 +239,7 @@ data class LyricIslandConfig(
 
     // Text/style
     val textSizeSp: Float = 12f,
-    val textSizeRatio: Float = 0.7f,
+    val textSizeRatio: Float = 0.85f,
     val textColorStyle: Int = 0,
     val textColor: Int = Color.WHITE,
     val highlightColor: Int = Color.WHITE,
@@ -247,33 +247,33 @@ data class LyricIslandConfig(
     val fontWeight: Int = 600,
     val fontItalic: Boolean = false,
     val narrowLatinFont: Boolean = false,
-    val fadingEdgeLengthDp: Int = 15,
+    val fadingEdgeLengthDp: Int = 10,
     val gradientProgressStyle: Boolean = true,
-    val placeholder: LyricPlaceholder = LyricPlaceholder.COUNTDOWN,
+    val placeholder: LyricPlaceholder = LyricPlaceholder.NAME_ARTIST,
 
     // Lyric scrolling
     val marqueeMode: Boolean = false,
-    val marqueeSpeed: Int = 30,
-    val marqueeDelay: Int = 1500,
-    val marqueeLoopDelay: Int = 1000,
-    val marqueeInfinite: Boolean = false,
-    val marqueeStopEnd: Boolean = true,
+    val marqueeSpeed: Int = 40,
+    val marqueeDelay: Int = 300,
+    val marqueeLoopDelay: Int = 700,
+    val marqueeInfinite: Boolean = true,
+    val marqueeStopEnd: Boolean = false,
     val metadataMarqueeMode: Boolean = true,
-    val metadataMarqueeSpeed: Int = 25,
-    val metadataMarqueeDelay: Int = 1000,
-    val metadataMarqueeLoopDelay: Int = 0,
+    val metadataMarqueeSpeed: Int = 40,
+    val metadataMarqueeDelay: Int = 300,
+    val metadataMarqueeLoopDelay: Int = 700,
     val metadataMarqueeInfinite: Boolean = true,
 
     // Verbatim lyrics
-    val syllableRelative: Boolean = true,
+    val syllableRelative: Boolean = false,
     val syllableHighlight: Boolean = false,
     val syllableLineDisplay: Boolean = false,
-    val wordMotionEnabled: Boolean = false,
+    val wordMotionEnabled: Boolean = true,
     val wordMotionLatinByCharacter: Boolean = false,
-    val wordMotionCjkLift: Float = 0.05f,
+    val wordMotionCjkLift: Float = 0.055f,
     val wordMotionCjkWave: Float = 2.8f,
-    val wordMotionLatinLift: Float = 0.06f,
-    val wordMotionLatinWave: Float = 3.6f,
+    val wordMotionLatinLift: Float = 0.08f,
+    val wordMotionLatinWave: Float = 2.0f,
 
     // Double-line content
     val disableTranslation: Boolean = false,
@@ -289,7 +289,8 @@ data class LyricIslandConfig(
 
     // Compatibility fields for old payload callers. They are not separate UI features.
     val showProgress: Boolean = true,
-    val secondaryTextSizeSp: Float = 8.4f,
+    /** HyperLyric SecondaryTextConfig defaults to 10sp. */
+    val secondaryTextSizeSp: Float = 10f,
     val secondaryTextColor: Int = 0xB3FFFFFF.toInt(),
     val displayTranslation: Boolean = true,
     val bold: Boolean = false,
@@ -343,9 +344,9 @@ data class LyricIslandConfig(
             albumCoverStyle = normalizedAlbumCoverStyle,
             musicWaveStyle = normalizedMusicWaveStyle,
             textSizeSp = textSizeSp.takeIf { it.isFinite() }?.coerceIn(8f, 16f) ?: 12f,
-            textSizeRatio = textSizeRatio.takeIf { it.isFinite() }?.coerceIn(0.1f, 1f) ?: 0.7f,
+            textSizeRatio = textSizeRatio.takeIf { it.isFinite() }?.coerceIn(0.1f, 1f) ?: 0.85f,
             textColorStyle = textColorStyle.coerceIn(0, 3),
-            secondaryTextSizeSp = secondaryTextSizeSp.takeIf { it.isFinite() }?.coerceIn(6f, 16f) ?: 8.4f,
+            secondaryTextSizeSp = secondaryTextSizeSp.takeIf { it.isFinite() }?.coerceIn(6f, 16f) ?: 10f,
             fontWeight = fontWeight.coerceIn(100, 900),
             fadingEdgeLengthDp = fadingEdgeLengthDp.coerceIn(0, 100),
             marqueeSpeed = marqueeSpeed.coerceIn(5, 100),
@@ -363,10 +364,10 @@ data class LyricIslandConfig(
             // Song-level automatic translation switching is deliberately outside the basic
             // Super Island lyric scope. Retire a persisted legacy value without rejecting it.
             autoSwitchTranslation = false,
-            wordMotionCjkLift = wordMotionCjkLift.takeIf { it.isFinite() }?.coerceIn(0f, 0.2f) ?: 0.05f,
+            wordMotionCjkLift = wordMotionCjkLift.takeIf { it.isFinite() }?.coerceIn(0f, 0.2f) ?: 0.055f,
             wordMotionCjkWave = wordMotionCjkWave.takeIf { it.isFinite() }?.coerceIn(0f, 8f) ?: 2.8f,
-            wordMotionLatinLift = wordMotionLatinLift.takeIf { it.isFinite() }?.coerceIn(0f, 0.2f) ?: 0.06f,
-            wordMotionLatinWave = wordMotionLatinWave.takeIf { it.isFinite() }?.coerceIn(0f, 8f) ?: 3.6f,
+            wordMotionLatinLift = wordMotionLatinLift.takeIf { it.isFinite() }?.coerceIn(0f, 0.2f) ?: 0.08f,
+            wordMotionLatinWave = wordMotionLatinWave.takeIf { it.isFinite() }?.coerceIn(0f, 8f) ?: 2.0f,
             customFontPath = customFontPath.take(512),
             animId = animId.takeIf { it.isNotBlank() }?.take(64) ?: "default",
             // HyperLyric accepts -50..100 in the editor; the SystemUI geometry layer clamps

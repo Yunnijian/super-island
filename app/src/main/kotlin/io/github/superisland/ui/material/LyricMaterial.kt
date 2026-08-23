@@ -1,6 +1,7 @@
 package io.github.superisland.ui.material
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.ui.Alignment
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -114,13 +115,16 @@ private fun MaterialInlineSliderItem(
         modifier = modifier,
         onClick = {},
         enabled = enabled,
-        headlineContent = { Text(title) },
-        trailingContent = {
-            Row(
-                modifier = Modifier.width(220.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                Text(valueLabel, modifier = Modifier.width(48.dp), maxLines = 1)
+        headlineContent = {
+            Column(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(title)
+                    Text(valueLabel, maxLines = 1)
+                }
                 Slider(
                     value = sliderValue,
                     onValueChange = { sliderValue = it },
@@ -128,7 +132,7 @@ private fun MaterialInlineSliderItem(
                     valueRange = valueRange,
                     steps = steps,
                     enabled = enabled,
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier.fillMaxWidth(),
                 )
             }
         },
@@ -148,13 +152,33 @@ private fun MaterialInlineDualSliderItem(
     SegmentedListItem(
         onClick = {},
         enabled = enabled,
-        headlineContent = { Text(title) },
-        trailingContent = {
-            Row(modifier = Modifier.width(220.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text(firstValue.toInt().toString(), modifier = Modifier.width(28.dp))
-                Slider(value = firstValue, onValueChange = { firstValue = it }, valueRange = -50f..100f, steps = 14, enabled = enabled, modifier = Modifier.weight(1f), onValueChangeFinished = { onValueChangeFinished(firstValue.toInt(), secondValue.toInt()) })
-                Text(secondValue.toInt().toString(), modifier = Modifier.width(28.dp))
-                Slider(value = secondValue, onValueChange = { secondValue = it }, valueRange = -50f..100f, steps = 14, enabled = enabled, modifier = Modifier.weight(1f), onValueChangeFinished = { onValueChangeFinished(firstValue.toInt(), secondValue.toInt()) })
+        headlineContent = {
+            Column(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+                Text(title)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(firstValue.toInt().toString(), modifier = Modifier.width(32.dp))
+                    Slider(
+                        value = firstValue,
+                        onValueChange = { firstValue = it },
+                        valueRange = -50f..100f,
+                        steps = 14,
+                        enabled = enabled,
+                        modifier = Modifier.weight(1f),
+                        onValueChangeFinished = { onValueChangeFinished(firstValue.toInt(), secondValue.toInt()) },
+                    )
+                }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(secondValue.toInt().toString(), modifier = Modifier.width(32.dp))
+                    Slider(
+                        value = secondValue,
+                        onValueChange = { secondValue = it },
+                        valueRange = -50f..100f,
+                        steps = 14,
+                        enabled = enabled,
+                        modifier = Modifier.weight(1f),
+                        onValueChangeFinished = { onValueChangeFinished(firstValue.toInt(), secondValue.toInt()) },
+                    )
+                }
             }
         },
     )
@@ -370,41 +394,48 @@ private fun LyricMaterialDetail(
                             onClick = {},
                             enabled = config.enabled,
                             headlineContent = {
-                                Text(
+                                Column(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically,
+                                    ) {
+                                        Text("超级岛长度")
+                                        Text(
+                                            if (config.widthMode == 1) {
+                                                "${dynamicWidthRange.start.toInt()}~${dynamicWidthRange.endInclusive.toInt()}"
+                                            } else {
+                                                config.rightContentMaxWidth.toString()
+                                            },
+                                        )
+                                    }
                                     if (config.widthMode == 1) {
-                                        "超级岛长度 ${dynamicWidthRange.start.toInt()}~${dynamicWidthRange.endInclusive.toInt()}"
+                                        RangeSlider(
+                                            value = dynamicWidthRange,
+                                            enabled = config.enabled,
+                                            onValueChange = { value ->
+                                                val start = value.start.toInt().coerceIn(islandWidthMin, islandWidthMax)
+                                                val end = value.endInclusive.toInt().coerceIn(start, islandWidthMax)
+                                                dynamicWidthRange = start.toFloat()..end.toFloat()
+                                            },
+                                            valueRange = islandWidthMin.toFloat()..islandWidthMax.toFloat(),
+                                            steps = 3,
+                                            onValueChangeFinished = {
+                                                set(config.copy(dynamicMinWidth = dynamicWidthRange.start.toInt(), dynamicMaxWidth = dynamicWidthRange.endInclusive.toInt()))
+                                            },
+                                            modifier = Modifier.fillMaxWidth(),
+                                        )
                                     } else {
-                                        "超级岛长度 ${config.rightContentMaxWidth}"
-                                    },
-                                )
-                            },
-                            trailingContent = {
-                                if (config.widthMode == 1) {
-                                    RangeSlider(
-                                        value = dynamicWidthRange,
-                                        enabled = config.enabled,
-                                        onValueChange = { value ->
-                                            val start = value.start.toInt().coerceIn(islandWidthMin, islandWidthMax)
-                                            val end = value.endInclusive.toInt().coerceIn(start, islandWidthMax)
-                                            dynamicWidthRange = start.toFloat()..end.toFloat()
-                                        },
-                                        valueRange = islandWidthMin.toFloat()..islandWidthMax.toFloat(),
-                                        steps = 3,
-                                        onValueChangeFinished = {
-                                            set(config.copy(dynamicMinWidth = dynamicWidthRange.start.toInt(), dynamicMaxWidth = dynamicWidthRange.endInclusive.toInt()))
-                                        },
-                                        modifier = Modifier.width(170.dp),
-                                    )
-                                } else {
-                                    Slider(
-                                        value = fixedIslandWidth,
-                                        enabled = config.enabled,
-                                        onValueChange = { fixedIslandWidth = it.coerceIn(islandWidthMin.toFloat(), islandWidthMax.toFloat()) },
-                                        valueRange = islandWidthMin.toFloat()..islandWidthMax.toFloat(),
-                                        steps = 3,
-                                        onValueChangeFinished = { set(config.copy(rightContentMaxWidth = fixedIslandWidth.toInt())) },
-                                        modifier = Modifier.width(170.dp),
-                                    )
+                                        Slider(
+                                            value = fixedIslandWidth,
+                                            enabled = config.enabled,
+                                            onValueChange = { fixedIslandWidth = it.coerceIn(islandWidthMin.toFloat(), islandWidthMax.toFloat()) },
+                                            valueRange = islandWidthMin.toFloat()..islandWidthMax.toFloat(),
+                                            steps = 3,
+                                            onValueChangeFinished = { set(config.copy(rightContentMaxWidth = fixedIslandWidth.toInt())) },
+                                            modifier = Modifier.fillMaxWidth(),
+                                        )
+                                    }
                                 }
                             },
                         )

@@ -361,7 +361,13 @@ class LyricCanvasView @JvmOverloads constructor(
             Typeface.create(primaryTypeface, config.fontWeight, config.fontItalic)
         }.getOrDefault(primaryTypeface)
         val primarySize = config.textSizeSp * scaledDensity
-        val secondarySize = primarySize * config.textSizeRatio
+        // HyperLyric uses a dedicated 10sp secondary style for metadata's second row. The
+        // multiline lyric ratio remains independent and is applied only to lyric translations.
+        val secondarySize = if (metadataMode) {
+            config.secondaryTextSizeSp * scaledDensity
+        } else {
+            primarySize * config.textSizeRatio
+        }
         val coverColors = artworkColors
             .ifEmpty { listOf(config.textColor) }
             .take(4)

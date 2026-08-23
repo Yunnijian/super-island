@@ -39,13 +39,20 @@ object LyricPayloadBuilder {
         val value = config.normalized()
         val leftMode = if (value.lyricMode == 1) IslandContentMode.LYRIC else value.contentLeft
         val rightMode = if (value.lyricMode == 1) IslandContentMode.LYRIC else value.contentRight
+        val duplicateLyricSlots = value.lyricMode == 0 &&
+            value.contentLeft == IslandContentMode.LYRIC &&
+            value.contentRight == IslandContentMode.LYRIC
         val leftResolved = if (value.lyricMode == 1) {
             contentFor(snapshot, value, IslandContentMode.LYRIC, true)
+        } else if (duplicateLyricSlots && value.slot == LyricSlot.RIGHT) {
+            ""
         } else {
             contentFor(snapshot, value, value.contentLeft, true)
         }
         val rightResolved = if (value.lyricMode == 1) {
             contentFor(snapshot, value, IslandContentMode.LYRIC, false)
+        } else if (duplicateLyricSlots && value.slot != LyricSlot.RIGHT) {
+            ""
         } else {
             contentFor(snapshot, value, value.contentRight, false)
         }
@@ -61,13 +68,21 @@ object LyricPayloadBuilder {
                 if (usesNextLyricPreview(snapshot, value)) "" else primary
             }
         } else ""
-        val left = leftResolved.ifBlank {
-            if (leftMode == IslandContentMode.NONE || !hasLyricMode) ""
-            else if (value.slot == LyricSlot.RIGHT) secondary else primary
+        val left = if (duplicateLyricSlots) {
+            leftResolved
+        } else {
+            leftResolved.ifBlank {
+                if (leftMode == IslandContentMode.NONE || !hasLyricMode) ""
+                else if (value.slot == LyricSlot.RIGHT) secondary else primary
+            }
         }
-        val right = rightResolved.ifBlank {
-            if (rightMode == IslandContentMode.NONE || !hasLyricMode) ""
-            else if (value.slot == LyricSlot.RIGHT) primary else secondary
+        val right = if (duplicateLyricSlots) {
+            rightResolved
+        } else {
+            rightResolved.ifBlank {
+                if (rightMode == IslandContentMode.NONE || !hasLyricMode) ""
+                else if (value.slot == LyricSlot.RIGHT) primary else secondary
+            }
         }
         // A metadata-only layout is valid even when no lyric line has arrived. Decide whether
         // there is anything to publish from the resolved slots, rather than from lyric text.
@@ -97,8 +112,9 @@ object LyricPayloadBuilder {
         mode: IslandContentMode,
         leftSlot: Boolean,
     ): String {
-        if (config.lyricMode == 1 || mode == IslandContentMode.LYRIC) {
+        if (mode == IslandContentMode.LYRIC) {
             val primary = primaryText(snapshot, config)
+            if (config.lyricMode != 1) return bounded(primary)
             val secondary = secondaryText(snapshot, config).ifBlank {
                 if (usesNextLyricPreview(snapshot, config)) "" else primary
             }

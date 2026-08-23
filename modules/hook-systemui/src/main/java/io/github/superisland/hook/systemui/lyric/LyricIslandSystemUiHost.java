@@ -712,16 +712,24 @@ public final class LyricIslandSystemUiHost {
         boolean active = enabled && snapshot != null && !snapshot.getStopped()
                 && currentConfig.getEnabled();
         if (active) {
-            String left = LyricPayloadBuilder.INSTANCE.contentFor(
-                    snapshot, currentConfig,
-                    currentConfig.getLyricMode() == 1
-                            ? io.github.superisland.source.lyric.IslandContentMode.LYRIC
-                            : currentConfig.getContentLeft(), true);
-            String right = LyricPayloadBuilder.INSTANCE.contentFor(
-                    snapshot, currentConfig,
-                    currentConfig.getLyricMode() == 1
-                            ? io.github.superisland.source.lyric.IslandContentMode.LYRIC
-                            : currentConfig.getContentRight(), false);
+            String left;
+            String right;
+            boolean duplicateLyricSlots = currentConfig.getLyricMode() == 0
+                    && currentConfig.getContentLeft() == io.github.superisland.source.lyric.IslandContentMode.LYRIC
+                    && currentConfig.getContentRight() == io.github.superisland.source.lyric.IslandContentMode.LYRIC;
+            if (currentConfig.getLyricMode() == 1) {
+                left = LyricPayloadBuilder.INSTANCE.contentFor(
+                        snapshot, currentConfig,
+                        io.github.superisland.source.lyric.IslandContentMode.LYRIC, true);
+                right = LyricPayloadBuilder.INSTANCE.contentFor(
+                        snapshot, currentConfig,
+                        io.github.superisland.source.lyric.IslandContentMode.LYRIC, false);
+            } else {
+                left = duplicateLyricSlots && currentConfig.getSlot() == io.github.superisland.source.lyric.LyricSlot.RIGHT
+                        ? "" : LyricPayloadBuilder.INSTANCE.contentFor(snapshot, currentConfig, currentConfig.getContentLeft(), true);
+                right = duplicateLyricSlots && currentConfig.getSlot() != io.github.superisland.source.lyric.LyricSlot.RIGHT
+                        ? "" : LyricPayloadBuilder.INSTANCE.contentFor(snapshot, currentConfig, currentConfig.getContentRight(), false);
+            }
             active = !left.isBlank() || !right.isBlank();
         }
         nativeActiveSnapshot = snapshot;

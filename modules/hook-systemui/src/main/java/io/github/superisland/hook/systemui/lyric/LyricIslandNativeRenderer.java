@@ -255,6 +255,14 @@ final class LyricIslandNativeRenderer {
 
         boolean leftEnabled = config.getContentLeft() != IslandContentMode.NONE;
         boolean rightEnabled = config.getContentRight() != IslandContentMode.NONE;
+        // Without HyperLyric's separated mode there is one lyric line. If stale or hand-edited
+        // settings put LYRIC in both content slots, keep only the configured lyric side and do
+        // not let the native host split the same line across both sides.
+        if (config.getContentLeft() == IslandContentMode.LYRIC
+                && config.getContentRight() == IslandContentMode.LYRIC) {
+            return config.getSlot() == io.github.superisland.source.lyric.LyricSlot.RIGHT
+                    ? new int[] {1} : new int[] {0};
+        }
         if (leftEnabled && rightEnabled) return new int[] {0, 1};
         if (leftEnabled) return new int[] {0};
         if (rightEnabled) return new int[] {1};

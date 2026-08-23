@@ -38,7 +38,6 @@ import top.yukonga.miuix.kmp.basic.TextField
 import top.yukonga.miuix.kmp.overlay.OverlayDialog
 import top.yukonga.miuix.kmp.preference.ArrowPreference
 import top.yukonga.miuix.kmp.preference.OverlayDropdownPreference
-import top.yukonga.miuix.kmp.preference.SliderPreference
 import top.yukonga.miuix.kmp.preference.SwitchPreference
 
 // MEDIA_FALLBACK is retained only for decoding old configurations. HyperLyric's basic source
@@ -81,20 +80,31 @@ private fun LyricInlineSliderRow(
     var sliderValue by remember(title, value, valueRange.start, valueRange.endInclusive) {
         mutableFloatStateOf(value.coerceIn(valueRange.start, valueRange.endInclusive))
     }
-    SliderPreference(
-        value = sliderValue,
-        onValueChange = { sliderValue = it },
-        title = title,
-        valueText = valueLabel,
-        valueRange = valueRange,
-        steps = steps,
-        enabled = enabled,
-        onValueChangeFinished = { onValueChangeFinished(sliderValue) },
-        showKeyPoints = true,
-        keyPoints = lyricSliderKeyPoints(valueRange),
-        hapticEffect = SliderDefaults.SliderHapticEffect.Step,
-        magnetThreshold = 0f,
-    )
+    Column(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(title)
+            Text(valueLabel)
+        }
+        Slider(
+            value = sliderValue,
+            onValueChange = { sliderValue = it },
+            valueRange = valueRange,
+            steps = steps,
+            enabled = enabled,
+            onValueChangeFinished = { onValueChangeFinished(sliderValue) },
+            showKeyPoints = true,
+            keyPoints = lyricSliderKeyPoints(valueRange),
+            hapticEffect = SliderDefaults.SliderHapticEffect.Step,
+            magnetThreshold = 0f,
+            modifier = Modifier.fillMaxWidth(),
+        )
+    }
 }
 
 private fun lyricSliderKeyPoints(valueRange: ClosedFloatingPointRange<Float>): List<Float> {
@@ -125,16 +135,35 @@ private fun LyricInlineDualSliderRow(
 ) {
     var firstValue by remember(title, first) { mutableFloatStateOf(first.coerceIn(-50, 100).toFloat()) }
     var secondValue by remember(title, second) { mutableFloatStateOf(second.coerceIn(-50, 100).toFloat()) }
-    Row(
+    Column(
         modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
-        Text(title, modifier = Modifier.weight(0.8f))
-        Text(firstValue.toInt().toString(), modifier = Modifier.weight(0.15f))
-        Slider(value = firstValue, onValueChange = { firstValue = it }, onValueChangeFinished = { onValueChangeFinished(firstValue.toInt(), secondValue.toInt()) }, valueRange = -50f..100f, steps = 14, enabled = enabled, modifier = Modifier.weight(0.8f))
-        Text(secondValue.toInt().toString(), modifier = Modifier.weight(0.15f))
-        Slider(value = secondValue, onValueChange = { secondValue = it }, onValueChangeFinished = { onValueChangeFinished(firstValue.toInt(), secondValue.toInt()) }, valueRange = -50f..100f, steps = 14, enabled = enabled, modifier = Modifier.weight(0.8f))
+        Text(title)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(firstValue.toInt().toString(), modifier = Modifier.padding(end = 8.dp))
+            Slider(
+                value = firstValue,
+                onValueChange = { firstValue = it },
+                onValueChangeFinished = { onValueChangeFinished(firstValue.toInt(), secondValue.toInt()) },
+                valueRange = -50f..100f,
+                steps = 14,
+                enabled = enabled,
+                modifier = Modifier.weight(1f),
+            )
+        }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(secondValue.toInt().toString(), modifier = Modifier.padding(end = 8.dp))
+            Slider(
+                value = secondValue,
+                onValueChange = { secondValue = it },
+                onValueChangeFinished = { onValueChangeFinished(firstValue.toInt(), secondValue.toInt()) },
+                valueRange = -50f..100f,
+                steps = 14,
+                enabled = enabled,
+                modifier = Modifier.weight(1f),
+            )
+        }
     }
 }
 
@@ -367,19 +396,29 @@ fun LyricConfigurationMiuix(
                     onSelectedIndexChange = { set(config.copy(dynamicWidthBasis = it.coerceIn(0, 1))) },
                 )
             }
-            Row(
+            Column(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                Text(
-                    if (config.widthMode == 1) {
-                        "超级岛长度 ${dynamicWidthRange.start.toInt()}~${dynamicWidthRange.endInclusive.toInt()}"
-                    } else {
-                        "超级岛长度 ${config.rightContentMaxWidth}"
-                    },
-                    modifier = Modifier.weight(0.9f),
-                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        if (config.widthMode == 1) {
+                            "超级岛长度"
+                        } else {
+                            "超级岛长度"
+                        },
+                    )
+                    Text(
+                        if (config.widthMode == 1) {
+                            "${dynamicWidthRange.start.toInt()}~${dynamicWidthRange.endInclusive.toInt()}"
+                        } else {
+                            config.rightContentMaxWidth.toString()
+                        },
+                    )
+                }
                 if (config.widthMode == 1) {
                     RangeSlider(
                         value = dynamicWidthRange,
@@ -396,7 +435,7 @@ fun LyricConfigurationMiuix(
                         magnetThreshold = 0f,
                         hapticEffect = SliderDefaults.SliderHapticEffect.Step,
                         onValueChangeFinished = { set(config.copy(dynamicMinWidth = dynamicWidthRange.start.toInt(), dynamicMaxWidth = dynamicWidthRange.endInclusive.toInt())) },
-                        modifier = Modifier.weight(1.4f),
+                        modifier = Modifier.fillMaxWidth(),
                     )
                 } else {
                     Slider(
@@ -410,7 +449,7 @@ fun LyricConfigurationMiuix(
                         magnetThreshold = 0f,
                         hapticEffect = SliderDefaults.SliderHapticEffect.Step,
                         onValueChangeFinished = { set(config.copy(rightContentMaxWidth = fixedIslandWidth.toInt())) },
-                        modifier = Modifier.weight(1.4f),
+                        modifier = Modifier.fillMaxWidth(),
                     )
                 }
             }
