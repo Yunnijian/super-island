@@ -1,6 +1,12 @@
 package io.github.superisland.ui.material
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -27,6 +33,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RangeSlider
 import androidx.compose.material3.Slider
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
@@ -45,9 +52,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.Dp
 import java.util.Locale
 import io.github.superisland.source.lyric.IslandContentMode
 import io.github.superisland.source.lyric.LyricIslandConfig
@@ -107,6 +116,70 @@ private val contentModes = listOf(
 
 private val LocalLyricControlsEnabled = compositionLocalOf { true }
 
+@Composable
+private fun MaterialInlineSliderItem(
+    title: String,
+    value: Float,
+    valueRange: ClosedFloatingPointRange<Float>,
+    steps: Int,
+    enabled: Boolean,
+    valueLabel: String,
+    onValueChangeFinished: (Float) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    var sliderValue by remember(title, value, valueRange.start, valueRange.endInclusive) {
+        mutableFloatStateOf(value.coerceIn(valueRange.start, valueRange.endInclusive))
+    }
+    SegmentedListItem(
+        modifier = modifier,
+        onClick = {},
+        enabled = enabled,
+        headlineContent = { Text(title) },
+        trailingContent = {
+            Row(
+                modifier = Modifier.width(220.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Text(valueLabel, modifier = Modifier.width(48.dp), maxLines = 1)
+                Slider(
+                    value = sliderValue,
+                    onValueChange = { sliderValue = it },
+                    onValueChangeFinished = { onValueChangeFinished(sliderValue) },
+                    valueRange = valueRange,
+                    steps = steps,
+                    enabled = enabled,
+                    modifier = Modifier.weight(1f),
+                )
+            }
+        },
+    )
+}
+
+@Composable
+private fun MaterialInlineDualSliderItem(
+    title: String,
+    first: Int,
+    second: Int,
+    enabled: Boolean,
+    onValueChangeFinished: (Int, Int) -> Unit,
+) {
+    var firstValue by remember(title, first) { mutableFloatStateOf(first.coerceIn(-50, 100).toFloat()) }
+    var secondValue by remember(title, second) { mutableFloatStateOf(second.coerceIn(-50, 100).toFloat()) }
+    SegmentedListItem(
+        onClick = {},
+        enabled = enabled,
+        headlineContent = { Text(title) },
+        trailingContent = {
+            Row(modifier = Modifier.width(220.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(firstValue.toInt().toString(), modifier = Modifier.width(28.dp))
+                Slider(value = firstValue, onValueChange = { firstValue = it }, valueRange = -50f..100f, steps = 14, enabled = enabled, modifier = Modifier.weight(1f), onValueChangeFinished = { onValueChangeFinished(firstValue.toInt(), secondValue.toInt()) })
+                Text(secondValue.toInt().toString(), modifier = Modifier.width(28.dp))
+                Slider(value = secondValue, onValueChange = { secondValue = it }, valueRange = -50f..100f, steps = 14, enabled = enabled, modifier = Modifier.weight(1f), onValueChangeFinished = { onValueChangeFinished(firstValue.toInt(), secondValue.toInt()) })
+            }
+        },
+    )
+}
+
 private fun contentModeIndex(value: IslandContentMode): Int =
     contentModes.indexOf(value).takeIf { it >= 0 } ?: 0
 
@@ -118,7 +191,15 @@ private fun contentModeAt(index: Int, fallback: IslandContentMode): IslandConten
 fun LyricMaterial(config: LyricIslandConfig, onConfigChange: (LyricIslandConfig) -> Unit, onBack: () -> Unit) {
     var section by remember { mutableStateOf<LyricConfigSection?>(null) }
     val selected = section
-    if (selected == null) {
+    AnimatedContent(
+        targetState = selected,
+        transitionSpec = {
+            (fadeIn() + slideInHorizontally { it / 6 }) togetherWith
+                (fadeOut() + slideOutHorizontally { -it / 6 })
+        },
+        label = "歌词配置页面切换",
+    ) { page ->
+    if (page == null) {
         LyricMaterialDirectory(
             config = config,
             enabled = config.enabled,
@@ -131,9 +212,10 @@ fun LyricMaterial(config: LyricIslandConfig, onConfigChange: (LyricIslandConfig)
         LyricMaterialDetail(
             config = config,
             onConfigChange = onConfigChange,
-            section = selected,
+            section = page,
             onBack = { section = null },
         )
+    }
     }
 }
 
@@ -258,7 +340,23 @@ private fun LyricMaterialDetail(
         SegmentedDropdownItem(title = title, items = values, selectedIndex = index.coerceIn(0, values.lastIndex), enabled = config.enabled && enabled, onItemSelected = onSelect)
     }
     val switch: @Composable (String, String, Boolean, Boolean, (Boolean) -> Unit) -> Unit = { title, summary, checked, enabled, onChange ->
-        SegmentedSwitchItem(title = title, summary = summary, checked = checked, enabled = config.enabled && enabled, onCheckedChange = onChange)
+        val rowEnabled = config.enabled && enabled
+        if (summary.isBlank()) {
+            SegmentedListItem(
+                onClick = { if (rowEnabled) onChange(!checked) },
+                enabled = rowEnabled,
+                headlineContent = { Text(title) },
+                trailingContent = {
+                    Switch(
+                        checked = checked,
+                        enabled = rowEnabled,
+                        onCheckedChange = onChange,
+                    )
+                },
+            )
+        } else {
+            SegmentedSwitchItem(title = title, summary = summary, checked = checked, enabled = rowEnabled, onCheckedChange = onChange)
+        }
     }
     ExpressiveScaffold(
         topBar = {
@@ -325,15 +423,19 @@ private fun LyricMaterialDetail(
                                 Column {
                                     Text(provider.label, style = MaterialTheme.typography.titleSmall)
                                     Text(provider.displaySummary(), style = MaterialTheme.typography.bodySmall)
-                                    dropdown(
-                                        "歌词时间偏移",
-                                        (-5000..5000 step 50).map { "${it}ms" },
-                                        ((delay + 5000) / 50).coerceIn(0, 200),
-                                    ) { index ->
+                                    MaterialInlineSliderItem(
+                                        title = "歌词时间偏移",
+                                        value = delay.toFloat(),
+                                        valueRange = -5000f..5000f,
+                                        steps = 19,
+                                        enabled = config.enabled,
+                                        valueLabel = "${delay}ms",
+                                        onValueChangeFinished = { value ->
                                         val next = config.lyriconProviderDelays.toMutableMap()
-                                        next[provider.packageName] = -5000 + index * 50
+                                        next[provider.packageName] = value.toInt().coerceIn(-5000, 5000)
                                         set(config.copy(lyriconProviderDelays = next))
-                                    }
+                                        },
+                                    )
                                 }
                             }
                         },
@@ -347,78 +449,51 @@ private fun LyricMaterialDetail(
                     { if (config.widthMode == 1) dropdown("动态长度判断基准", listOf("综合判断", "仅歌词"), config.dynamicWidthBasis) { set(config.copy(dynamicWidthBasis = it)) } },
                     {
                         SegmentedListItem(
-                            onClick = { if (config.enabled && config.widthMode == 0) showIslandWidthDialog = true },
+                            onClick = {},
                             enabled = config.enabled,
-                            headlineContent = { Text("超级岛长度") },
-                            trailingContent = {
+                            headlineContent = {
                                 Text(
                                     if (config.widthMode == 1) {
-                                        "${dynamicWidthRange.start.toInt()}~${dynamicWidthRange.endInclusive.toInt()}"
+                                        "超级岛长度 ${dynamicWidthRange.start.toInt()}~${dynamicWidthRange.endInclusive.toInt()}"
                                     } else {
-                                        config.rightContentMaxWidth.toString()
+                                        "超级岛长度 ${config.rightContentMaxWidth}"
                                     },
-                                    color = MaterialTheme.colorScheme.primary,
                                 )
                             },
-                            supportingContent = {
-                                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                    if (config.widthMode == 1) {
-                                        RangeSlider(
-                                            value = dynamicWidthRange,
-                                            enabled = config.enabled,
-                                            onValueChange = { value ->
-                                                val start = value.start.toInt().coerceIn(islandWidthMin, islandWidthMax)
-                                                val end = value.endInclusive.toInt().coerceIn(start, islandWidthMax)
-                                                dynamicWidthRange = start.toFloat()..end.toFloat()
-                                            },
-                                            valueRange = islandWidthMin.toFloat()..islandWidthMax.toFloat(),
-                                            steps = (islandWidthMax - islandWidthMin - 1).coerceAtLeast(0),
-                                            onValueChangeFinished = {
-                                                set(
-                                                    config.copy(
-                                                        dynamicMinWidth = dynamicWidthRange.start.toInt(),
-                                                        dynamicMaxWidth = dynamicWidthRange.endInclusive.toInt(),
-                                                    ),
-                                                )
-                                            },
-                                            modifier = Modifier.fillMaxWidth(),
-                                        )
-                                    } else {
-                                        Slider(
-                                            value = fixedIslandWidth,
-                                            enabled = config.enabled,
-                                            onValueChange = { value ->
-                                                fixedIslandWidth = value.coerceIn(islandWidthMin.toFloat(), islandWidthMax.toFloat())
-                                            },
-                                            valueRange = islandWidthMin.toFloat()..islandWidthMax.toFloat(),
-                                            steps = (islandWidthMax - islandWidthMin - 1).coerceAtLeast(0),
-                                            onValueChangeFinished = {
-                                                set(config.copy(rightContentMaxWidth = fixedIslandWidth.toInt()))
-                                            },
-                                            modifier = Modifier.fillMaxWidth(),
-                                        )
-                                    }
+                            trailingContent = {
+                                if (config.widthMode == 1) {
+                                    RangeSlider(
+                                        value = dynamicWidthRange,
+                                        enabled = config.enabled,
+                                        onValueChange = { value ->
+                                            val start = value.start.toInt().coerceIn(islandWidthMin, islandWidthMax)
+                                            val end = value.endInclusive.toInt().coerceIn(start, islandWidthMax)
+                                            dynamicWidthRange = start.toFloat()..end.toFloat()
+                                        },
+                                        valueRange = islandWidthMin.toFloat()..islandWidthMax.toFloat(),
+                                        steps = 3,
+                                        onValueChangeFinished = {
+                                            set(config.copy(dynamicMinWidth = dynamicWidthRange.start.toInt(), dynamicMaxWidth = dynamicWidthRange.endInclusive.toInt()))
+                                        },
+                                        modifier = Modifier.width(170.dp),
+                                    )
+                                } else {
+                                    Slider(
+                                        value = fixedIslandWidth,
+                                        enabled = config.enabled,
+                                        onValueChange = { fixedIslandWidth = it.coerceIn(islandWidthMin.toFloat(), islandWidthMax.toFloat()) },
+                                        valueRange = islandWidthMin.toFloat()..islandWidthMax.toFloat(),
+                                        steps = 3,
+                                        onValueChangeFinished = { set(config.copy(rightContentMaxWidth = fixedIslandWidth.toInt())) },
+                                        modifier = Modifier.width(170.dp),
+                                    )
                                 }
                             },
                         )
                     },
                     { switch("解除超级岛最大长度限制", "", config.disableWidthLimit, true) { set(config.copy(disableWidthLimit = it)) } },
-                    {
-                        SegmentedListItem(
-                            onClick = { if (config.enabled) editingPaddingSide = 0 },
-                            enabled = config.enabled,
-                            headlineContent = { Text("左侧内容内边距") },
-                            trailingContent = { Text("${config.leftPaddingLeft},${config.leftPaddingRight}", color = MaterialTheme.colorScheme.primary) },
-                        )
-                    },
-                    {
-                        SegmentedListItem(
-                            onClick = { if (config.enabled) editingPaddingSide = 1 },
-                            enabled = config.enabled,
-                            headlineContent = { Text("右侧内容内边距") },
-                            trailingContent = { Text("${config.rightPaddingLeft},${config.rightPaddingRight}", color = MaterialTheme.colorScheme.primary) },
-                        )
-                    },
+                    { MaterialInlineDualSliderItem("左侧内容内边距", config.leftPaddingLeft, config.leftPaddingRight, config.enabled) { left, right -> set(config.copy(leftPaddingLeft = left, leftPaddingRight = right)) } },
+                    { MaterialInlineDualSliderItem("右侧内容内边距", config.rightPaddingLeft, config.rightPaddingRight, config.enabled) { left, right -> set(config.copy(rightPaddingLeft = left, rightPaddingRight = right)) } },
                 ))
             }
             }
@@ -474,35 +549,11 @@ private fun LyricMaterialDetail(
                         }
                     },
                     { switch("英数窄字体", "", config.narrowLatinFont, true) { set(config.copy(narrowLatinFont = it)) } },
-                    {
-                        materialFieldRow("字重", config.fontWeight.toString()) {
-                            intEditor = MaterialIntEditorSpec("字重", "范围：100 ~ 900", config.fontWeight, 100, 900) {
-                                set(config.copy(fontWeight = it))
-                            }
-                        }
-                    },
+                    { MaterialInlineSliderItem("字重", config.fontWeight.toFloat(), 100f..900f, 7, config.enabled, config.fontWeight.toString(), { set(config.copy(fontWeight = it.toInt())) }) },
                     { switch("斜体", "", config.fontItalic, true) { set(config.copy(fontItalic = it)) } },
-                    {
-                        materialFieldRow("大小", config.textSizeSp.toInt().toString()) {
-                            intEditor = MaterialIntEditorSpec("大小", "范围：8 ~ 16", config.textSizeSp.toInt(), 8, 16) {
-                                set(config.copy(textSizeSp = it.toFloat()))
-                            }
-                        }
-                    },
-                    {
-                        materialFieldRow("多行模式下文字大小比例", "${(config.textSizeRatio * 100).toInt()}%") {
-                            intEditor = MaterialIntEditorSpec("多行模式下文字大小比例", "范围：10 ~ 100", (config.textSizeRatio * 100).toInt(), 10, 100) {
-                                set(config.copy(textSizeRatio = it / 100f))
-                            }
-                        }
-                    },
-                    {
-                        materialFieldRow("羽化边缘长度", config.fadingEdgeLengthDp.toString()) {
-                            intEditor = MaterialIntEditorSpec("羽化边缘长度", "范围：0 ~ 100", config.fadingEdgeLengthDp, 0, 100) {
-                                set(config.copy(fadingEdgeLengthDp = it))
-                            }
-                        }
-                    },
+                    { MaterialInlineSliderItem("大小", config.textSizeSp, 8f..16f, 7, config.enabled, config.textSizeSp.toInt().toString(), { set(config.copy(textSizeSp = it)) }) },
+                    { MaterialInlineSliderItem("多行模式下文字大小比例", config.textSizeRatio * 100f, 10f..100f, 8, config.enabled, "${(config.textSizeRatio * 100).toInt()}%", { set(config.copy(textSizeRatio = it / 100f)) }) },
+                    { MaterialInlineSliderItem("羽化边缘长度", config.fadingEdgeLengthDp.toFloat(), 0f..100f, 19, config.enabled, config.fadingEdgeLengthDp.toString(), { set(config.copy(fadingEdgeLengthDp = it.toInt())) }) },
                 ))
             }
             }
@@ -510,28 +561,10 @@ private fun LyricMaterialDetail(
             item {
                 SegmentedColumn(Modifier.fillMaxWidth(), title = "滚动显示", content = listOf(
                     { switch("歌词滚动", "针对没有时间轴的歌词", config.marqueeMode, true) { set(config.copy(marqueeMode = it)) } },
-                    {
-                        materialFieldRow("滚动速度", config.marqueeSpeed.toString(), enabled = config.marqueeMode) {
-                            intEditor = MaterialIntEditorSpec("滚动速度", "范围：5 ~ 100", config.marqueeSpeed, 5, 100) {
-                                set(config.copy(marqueeSpeed = it))
-                            }
-                        }
-                    },
-                    {
-                        materialFieldRow("初始滚动延迟", "${config.marqueeDelay}ms", enabled = config.marqueeMode) {
-                            intEditor = MaterialIntEditorSpec("初始滚动延迟", "ms 范围：0 ~ 10000", config.marqueeDelay, 0, 10000) {
-                                set(config.copy(marqueeDelay = it))
-                            }
-                        }
-                    },
+                    { MaterialInlineSliderItem("滚动速度", config.marqueeSpeed.toFloat(), 5f..100f, 18, config.enabled && config.marqueeMode, config.marqueeSpeed.toString(), { set(config.copy(marqueeSpeed = it.toInt())) }) },
+                    { MaterialInlineSliderItem("初始滚动延迟", config.marqueeDelay.toFloat(), 0f..10000f, 9, config.enabled && config.marqueeMode, "${config.marqueeDelay}ms", { set(config.copy(marqueeDelay = it.toInt())) }) },
                     { switch("无限循环", "", config.marqueeInfinite, config.marqueeMode) { set(config.copy(marqueeInfinite = it)) } },
-                    {
-                        materialFieldRow("循环间隔", "${config.marqueeLoopDelay}ms", enabled = config.marqueeMode) {
-                            intEditor = MaterialIntEditorSpec("循环间隔", "ms 范围：0 ~ 10000", config.marqueeLoopDelay, 0, 10000) {
-                                set(config.copy(marqueeLoopDelay = it))
-                            }
-                        }
-                    },
+                    { MaterialInlineSliderItem("循环间隔", config.marqueeLoopDelay.toFloat(), 0f..10000f, 9, config.enabled && config.marqueeMode, "${config.marqueeLoopDelay}ms", { set(config.copy(marqueeLoopDelay = it.toInt())) }) },
                     { switch("结束时在末尾停止", "", config.marqueeStopEnd, config.marqueeMode) { set(config.copy(marqueeStopEnd = it)) } },
                 ))
             }
@@ -539,28 +572,10 @@ private fun LyricMaterialDetail(
                 item {
                     SegmentedColumn(Modifier.fillMaxWidth(), title = "歌曲信息滚动", content = listOf(
                         { switch("歌曲信息滚动", "针对歌曲信息", config.metadataMarqueeMode, true) { set(config.copy(metadataMarqueeMode = it)) } },
-                        {
-                            materialFieldRow("滚动速度", config.metadataMarqueeSpeed.toString(), enabled = config.metadataMarqueeMode) {
-                                intEditor = MaterialIntEditorSpec("滚动速度", "范围：5 ~ 100", config.metadataMarqueeSpeed, 5, 100) {
-                                    set(config.copy(metadataMarqueeSpeed = it))
-                                }
-                            }
-                        },
-                        {
-                            materialFieldRow("初始滚动延迟", "${config.metadataMarqueeDelay}ms", enabled = config.metadataMarqueeMode) {
-                                intEditor = MaterialIntEditorSpec("初始滚动延迟", "ms 范围：0 ~ 10000", config.metadataMarqueeDelay, 0, 10000) {
-                                    set(config.copy(metadataMarqueeDelay = it))
-                                }
-                            }
-                        },
+                        { MaterialInlineSliderItem("滚动速度", config.metadataMarqueeSpeed.toFloat(), 5f..100f, 18, config.enabled && config.metadataMarqueeMode, config.metadataMarqueeSpeed.toString(), { set(config.copy(metadataMarqueeSpeed = it.toInt())) }) },
+                        { MaterialInlineSliderItem("初始滚动延迟", config.metadataMarqueeDelay.toFloat(), 0f..10000f, 9, config.enabled && config.metadataMarqueeMode, "${config.metadataMarqueeDelay}ms", { set(config.copy(metadataMarqueeDelay = it.toInt())) }) },
                         { switch("无限循环", "", config.metadataMarqueeInfinite, config.metadataMarqueeMode) { set(config.copy(metadataMarqueeInfinite = it)) } },
-                        {
-                            materialFieldRow("循环间隔", "${config.metadataMarqueeLoopDelay}ms", enabled = config.metadataMarqueeMode) {
-                                intEditor = MaterialIntEditorSpec("循环间隔", "ms 范围：0 ~ 10000", config.metadataMarqueeLoopDelay, 0, 10000) {
-                                    set(config.copy(metadataMarqueeLoopDelay = it))
-                                }
-                            }
-                        },
+                        { MaterialInlineSliderItem("循环间隔", config.metadataMarqueeLoopDelay.toFloat(), 0f..10000f, 9, config.enabled && config.metadataMarqueeMode, "${config.metadataMarqueeLoopDelay}ms", { set(config.copy(metadataMarqueeLoopDelay = it.toInt())) }) },
                     ))
                 }
             }
@@ -577,42 +592,10 @@ private fun LyricMaterialDetail(
                     { switch("羽化进度样式", "", config.gradientProgressStyle, true) { set(config.copy(gradientProgressStyle = it)) } },
                     { switch("逐字字词上浮动画", "", config.wordMotionEnabled, true) { set(config.copy(wordMotionEnabled = it)) } },
                     { if (config.wordMotionEnabled) switch("拉丁文字逐字母上浮", "关闭时按整个单词上浮", config.wordMotionLatinByCharacter, true) { set(config.copy(wordMotionLatinByCharacter = it)) } },
-                    {
-                        if (config.wordMotionEnabled) {
-                            materialFieldRow("中日韩上浮系数", String.format(Locale.ROOT, "%.2f", config.wordMotionCjkLift)) {
-                                floatEditor = MaterialFloatEditorSpec("中日韩上浮系数", "范围：0 ~ 0.2", config.wordMotionCjkLift, 0f, 0.2f) {
-                                    set(config.copy(wordMotionCjkLift = it))
-                                }
-                            }
-                        }
-                    },
-                    {
-                        if (config.wordMotionEnabled) {
-                            materialFieldRow("中日韩波长系数", String.format(Locale.ROOT, "%.2f", config.wordMotionCjkWave)) {
-                                floatEditor = MaterialFloatEditorSpec("中日韩波长系数", "范围：0 ~ 8", config.wordMotionCjkWave, 0f, 8f) {
-                                    set(config.copy(wordMotionCjkWave = it))
-                                }
-                            }
-                        }
-                    },
-                    {
-                        if (config.wordMotionEnabled) {
-                            materialFieldRow("拉丁文字上浮系数", String.format(Locale.ROOT, "%.2f", config.wordMotionLatinLift)) {
-                                floatEditor = MaterialFloatEditorSpec("拉丁文字上浮系数", "范围：0 ~ 0.2", config.wordMotionLatinLift, 0f, 0.2f) {
-                                    set(config.copy(wordMotionLatinLift = it))
-                                }
-                            }
-                        }
-                    },
-                    {
-                        if (config.wordMotionEnabled) {
-                            materialFieldRow("拉丁文字波长系数", String.format(Locale.ROOT, "%.2f", config.wordMotionLatinWave)) {
-                                floatEditor = MaterialFloatEditorSpec("拉丁文字波长系数", "范围：0 ~ 8", config.wordMotionLatinWave, 0f, 8f) {
-                                    set(config.copy(wordMotionLatinWave = it))
-                                }
-                            }
-                        }
-                    },
+                    { if (config.wordMotionEnabled) MaterialInlineSliderItem("中日韩上浮系数", config.wordMotionCjkLift, 0f..0.2f, 9, config.enabled, String.format(Locale.ROOT, "%.2f", config.wordMotionCjkLift), { set(config.copy(wordMotionCjkLift = it)) }) },
+                    { if (config.wordMotionEnabled) MaterialInlineSliderItem("中日韩波长系数", config.wordMotionCjkWave, 0f..8f, 7, config.enabled, String.format(Locale.ROOT, "%.2f", config.wordMotionCjkWave), { set(config.copy(wordMotionCjkWave = it)) }) },
+                    { if (config.wordMotionEnabled) MaterialInlineSliderItem("拉丁文字上浮系数", config.wordMotionLatinLift, 0f..0.2f, 9, config.enabled, String.format(Locale.ROOT, "%.2f", config.wordMotionLatinLift), { set(config.copy(wordMotionLatinLift = it)) }) },
+                    { if (config.wordMotionEnabled) MaterialInlineSliderItem("拉丁文字波长系数", config.wordMotionLatinWave, 0f..8f, 7, config.enabled, String.format(Locale.ROOT, "%.2f", config.wordMotionLatinWave), { set(config.copy(wordMotionLatinWave = it)) }) },
                 ))
             }
             }

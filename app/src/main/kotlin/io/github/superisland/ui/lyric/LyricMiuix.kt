@@ -1,6 +1,12 @@
 package io.github.superisland.ui.lyric
 
 import androidx.compose.foundation.layout.Column
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
@@ -34,7 +40,15 @@ fun LyricMiuix(
         subtitle = "",
         onBack = { if (selected == null) onBack() else section = null },
     ) { paddingValues ->
-        if (selected == null) {
+        AnimatedContent(
+            targetState = selected,
+            transitionSpec = {
+                (fadeIn() + slideInHorizontally { it / 6 }) togetherWith
+                    (fadeOut() + slideOutHorizontally { -it / 6 })
+            },
+            label = "歌词配置页面切换",
+        ) { page ->
+        if (page == null) {
             Column(
                 modifier = Modifier
                     .fillMaxSize()
@@ -64,10 +78,11 @@ fun LyricMiuix(
                 LyricConfigurationMiuix(
                     config = config,
                     onConfigChange = onConfigChange,
-                    section = selected,
+                    section = page,
                     enabled = config.enabled,
                 )
             }
+        }
         }
     }
 }

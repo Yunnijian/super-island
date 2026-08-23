@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.Row
+import androidx.compose.ui.Alignment
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.rememberScrollState
@@ -67,6 +68,61 @@ private val animationIds = listOf(
     "slide_out_right_fade_in_up", "slide_out_right_zoom_in", "slide_out_right_landing", "flip_out_x_flip_in_x",
     "flip_out_y_flip_in_y", "rotate_out_rotate_in", "zoom_out_zoom_in",
 )
+
+@Composable
+private fun LyricInlineSliderRow(
+    title: String,
+    value: Float,
+    valueRange: ClosedFloatingPointRange<Float>,
+    steps: Int,
+    enabled: Boolean,
+    valueLabel: String,
+    onValueChangeFinished: (Float) -> Unit,
+) {
+    var sliderValue by remember(title, value, valueRange.start, valueRange.endInclusive) {
+        mutableFloatStateOf(value.coerceIn(valueRange.start, valueRange.endInclusive))
+    }
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Text(title, modifier = Modifier.weight(0.9f))
+        Text(valueLabel, modifier = Modifier.weight(0.25f), maxLines = 1)
+        Slider(
+            value = sliderValue,
+            onValueChange = { sliderValue = it },
+            onValueChangeFinished = { onValueChangeFinished(sliderValue) },
+            valueRange = valueRange,
+            steps = steps,
+            enabled = enabled,
+            modifier = Modifier.weight(1.4f),
+        )
+    }
+}
+
+@Composable
+private fun LyricInlineDualSliderRow(
+    title: String,
+    first: Int,
+    second: Int,
+    enabled: Boolean,
+    onValueChangeFinished: (Int, Int) -> Unit,
+) {
+    var firstValue by remember(title, first) { mutableFloatStateOf(first.coerceIn(-50, 100).toFloat()) }
+    var secondValue by remember(title, second) { mutableFloatStateOf(second.coerceIn(-50, 100).toFloat()) }
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Text(title, modifier = Modifier.weight(0.8f))
+        Text(firstValue.toInt().toString(), modifier = Modifier.weight(0.15f))
+        Slider(value = firstValue, onValueChange = { firstValue = it }, onValueChangeFinished = { onValueChangeFinished(firstValue.toInt(), secondValue.toInt()) }, valueRange = -50f..100f, steps = 14, enabled = enabled, modifier = Modifier.weight(0.8f))
+        Text(secondValue.toInt().toString(), modifier = Modifier.weight(0.15f))
+        Slider(value = secondValue, onValueChange = { secondValue = it }, onValueChangeFinished = { onValueChangeFinished(firstValue.toInt(), secondValue.toInt()) }, valueRange = -50f..100f, steps = 14, enabled = enabled, modifier = Modifier.weight(0.8f))
+    }
+}
 
 /** Entry pages mirror HyperLyric's compact settings surface. */
 enum class LyricConfigSection(val title: String) {
@@ -326,27 +382,19 @@ fun LyricConfigurationMiuix(
                         text = "${provider.label}  v${provider.versionName}" +
                             provider.providerAuthor.orEmpty().takeIf { it.isNotBlank() }?.let { "，作者 $it" }.orEmpty(),
                     )
-                    OverlayDropdownPreference(
-                        title = "歌词时间偏移",
-                        summary = buildString {
+                    Text(
+                        buildString {
                             append("v").append(provider.versionName)
-                            provider.providerAuthor?.takeIf { it.isNotBlank() }?.let {
-                                append("，作者 ").append(it)
-                            }
-                            provider.providerCategory?.takeIf { it.isNotBlank() }?.let {
-                                append("，").append(it)
-                            }
+                            provider.providerAuthor?.takeIf { it.isNotBlank() }?.let { append("，作者 ").append(it) }
+                            provider.providerCategory?.takeIf { it.isNotBlank() }?.let { append("，").append(it) }
                             append("；正数延后显示，负数提前显示")
                         },
-                        items = (-5000..5000 step 50).map { "${it}ms" },
-                        selectedIndex = ((delay + 5000) / 50).coerceIn(0, 200),
-                        enabled = enabled,
-                        onSelectedIndexChange = {
-                            val next = config.lyriconProviderDelays.toMutableMap()
-                            next[provider.packageName] = -5000 + it * 50
-                            set(config.copy(lyriconProviderDelays = next))
-                        },
                     )
+                    LyricInlineSliderRow("歌词时间偏移", delay.toFloat(), -5000f..5000f, 19, enabled, "${delay}ms") { value ->
+                        val next = config.lyriconProviderDelays.toMutableMap()
+                        next[provider.packageName] = value.toInt().coerceIn(-5000, 5000)
+                        set(config.copy(lyriconProviderDelays = next))
+                    }
                 }
             } else if (config.sourceMode == LyricSourceMode.SUPER_LYRIC) {
                 if (!support.superLyricInstalled) {
@@ -390,61 +438,53 @@ fun LyricConfigurationMiuix(
                     onSelectedIndexChange = { set(config.copy(dynamicWidthBasis = it.coerceIn(0, 1))) },
                 )
             }
-            ArrowPreference(
-                title = "超级岛长度",
-                summary = if (config.widthMode == 1) {
-                    "${dynamicWidthRange.start.toInt()}~${dynamicWidthRange.endInclusive.toInt()}"
-                } else {
-                    config.rightContentMaxWidth.toString()
-                },
-                bottomAction = {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Text(
                     if (config.widthMode == 1) {
-                        RangeSlider(
-                            value = dynamicWidthRange,
-                            enabled = enabled,
-                            onValueChange = { value ->
-                                val start = value.start.toInt().coerceIn(islandWidthMin, islandWidthMax)
-                                val end = value.endInclusive.toInt().coerceIn(start, islandWidthMax)
-                                dynamicWidthRange = start.toFloat()..end.toFloat()
-                            },
-                            valueRange = islandWidthMin.toFloat()..islandWidthMax.toFloat(),
-                            steps = 0,
-                            showKeyPoints = true,
-                            keyPoints = (islandWidthMin..islandWidthMax step 20).map(Int::toFloat),
-                            magnetThreshold = 0f,
-                            hapticEffect = SliderDefaults.SliderHapticEffect.Step,
-                            onValueChangeFinished = {
-                                set(
-                                    config.copy(
-                                        dynamicMinWidth = dynamicWidthRange.start.toInt(),
-                                        dynamicMaxWidth = dynamicWidthRange.endInclusive.toInt(),
-                                    ),
-                                )
-                            },
-                        )
+                        "超级岛长度 ${dynamicWidthRange.start.toInt()}~${dynamicWidthRange.endInclusive.toInt()}"
                     } else {
-                        Slider(
-                            value = fixedIslandWidth,
-                            enabled = enabled,
-                            onValueChange = { value ->
-                                fixedIslandWidth = value.coerceIn(islandWidthMin.toFloat(), islandWidthMax.toFloat())
-                            },
-                            valueRange = islandWidthMin.toFloat()..islandWidthMax.toFloat(),
-                            steps = 0,
-                            showKeyPoints = true,
-                            keyPoints = (islandWidthMin..islandWidthMax step 20).map(Int::toFloat),
-                            magnetThreshold = 0f,
-                            hapticEffect = SliderDefaults.SliderHapticEffect.Step,
-                            onValueChangeFinished = {
-                                set(config.copy(rightContentMaxWidth = fixedIslandWidth.toInt()))
-                            },
-                        )
-                    }
-                },
-                onClick = {
-                    if (enabled && config.widthMode == 0) showIslandWidthDialog = true
-                },
-            )
+                        "超级岛长度 ${config.rightContentMaxWidth}"
+                    },
+                    modifier = Modifier.weight(0.9f),
+                )
+                if (config.widthMode == 1) {
+                    RangeSlider(
+                        value = dynamicWidthRange,
+                        enabled = enabled,
+                        onValueChange = { value ->
+                            val start = value.start.toInt().coerceIn(islandWidthMin, islandWidthMax)
+                            val end = value.endInclusive.toInt().coerceIn(start, islandWidthMax)
+                            dynamicWidthRange = start.toFloat()..end.toFloat()
+                        },
+                        valueRange = islandWidthMin.toFloat()..islandWidthMax.toFloat(),
+                        steps = 3,
+                        showKeyPoints = true,
+                        keyPoints = (islandWidthMin..islandWidthMax step 20).map(Int::toFloat),
+                        magnetThreshold = 0f,
+                        hapticEffect = SliderDefaults.SliderHapticEffect.Step,
+                        onValueChangeFinished = { set(config.copy(dynamicMinWidth = dynamicWidthRange.start.toInt(), dynamicMaxWidth = dynamicWidthRange.endInclusive.toInt())) },
+                        modifier = Modifier.weight(1.4f),
+                    )
+                } else {
+                    Slider(
+                        value = fixedIslandWidth,
+                        enabled = enabled,
+                        onValueChange = { fixedIslandWidth = it.coerceIn(islandWidthMin.toFloat(), islandWidthMax.toFloat()) },
+                        valueRange = islandWidthMin.toFloat()..islandWidthMax.toFloat(),
+                        steps = 3,
+                        showKeyPoints = true,
+                        keyPoints = (islandWidthMin..islandWidthMax step 20).map(Int::toFloat),
+                        magnetThreshold = 0f,
+                        hapticEffect = SliderDefaults.SliderHapticEffect.Step,
+                        onValueChangeFinished = { set(config.copy(rightContentMaxWidth = fixedIslandWidth.toInt())) },
+                        modifier = Modifier.weight(1.4f),
+                    )
+                }
+            }
         }
         Card {
             SwitchPreference(
@@ -455,18 +495,8 @@ fun LyricConfigurationMiuix(
             )
         }
         Card {
-            ArrowPreference(
-                title = "左侧内容内边距",
-                summary = "${config.leftPaddingLeft},${config.leftPaddingRight}",
-                enabled = enabled,
-                onClick = { if (enabled) editingPaddingSide = 0 },
-            )
-            ArrowPreference(
-                title = "右侧内容内边距",
-                summary = "${config.rightPaddingLeft},${config.rightPaddingRight}",
-                enabled = enabled,
-                onClick = { if (enabled) editingPaddingSide = 1 },
-            )
+            LyricInlineDualSliderRow("左侧内容内边距", config.leftPaddingLeft, config.leftPaddingRight, enabled) { left, right -> set(config.copy(leftPaddingLeft = left, leftPaddingRight = right)) }
+            LyricInlineDualSliderRow("右侧内容内边距", config.rightPaddingLeft, config.rightPaddingRight, enabled) { left, right -> set(config.copy(rightPaddingLeft = left, rightPaddingRight = right)) }
         }
 
         SmallTitle(text = "内容")
@@ -554,39 +584,9 @@ fun LyricConfigurationMiuix(
         SmallTitle(text = "文字样式")
         Card {
             SmallTitle(text = "基础样式")
-            ArrowPreference(
-                title = "大小",
-                summary = config.textSizeSp.toInt().toString(),
-                enabled = enabled,
-                onClick = {
-                    if (!enabled) return@ArrowPreference
-                    intEditor = IntEditorSpec("大小", "范围：8 ~ 16", config.textSizeSp.toInt(), 8, 16) {
-                        set(config.copy(textSizeSp = it.toFloat()))
-                    }
-                },
-            )
-            ArrowPreference(
-                title = "多行模式下文字大小比例",
-                summary = "${(config.textSizeRatio * 100).toInt()}%",
-                enabled = enabled,
-                onClick = {
-                    if (!enabled) return@ArrowPreference
-                    intEditor = IntEditorSpec("多行模式下文字大小比例", "范围：10 ~ 100", (config.textSizeRatio * 100).toInt(), 10, 100) {
-                        set(config.copy(textSizeRatio = it / 100f))
-                    }
-                },
-            )
-            ArrowPreference(
-                title = "羽化边缘长度",
-                summary = config.fadingEdgeLengthDp.toString(),
-                enabled = enabled,
-                onClick = {
-                    if (!enabled) return@ArrowPreference
-                    intEditor = IntEditorSpec("羽化边缘长度", "范围：0 ~ 100", config.fadingEdgeLengthDp, 0, 100) {
-                        set(config.copy(fadingEdgeLengthDp = it))
-                    }
-                },
-            )
+            LyricInlineSliderRow("大小", config.textSizeSp, 8f..16f, 7, enabled, config.textSizeSp.toInt().toString()) { set(config.copy(textSizeSp = it)) }
+            LyricInlineSliderRow("多行模式下文字大小比例", config.textSizeRatio * 100f, 10f..100f, 8, enabled, "${(config.textSizeRatio * 100).toInt()}%") { set(config.copy(textSizeRatio = it / 100f)) }
+            LyricInlineSliderRow("羽化边缘长度", config.fadingEdgeLengthDp.toFloat(), 0f..100f, 19, enabled, config.fadingEdgeLengthDp.toString()) { set(config.copy(fadingEdgeLengthDp = it.toInt())) }
             OverlayDropdownPreference(title = "文字颜色", items = textColors, selectedIndex = config.textColorStyle.coerceIn(0, 3), enabled = enabled, onSelectedIndexChange = { set(config.copy(textColorStyle = it)) })
         }
         Card {
@@ -602,17 +602,7 @@ fun LyricConfigurationMiuix(
                 },
             )
             SwitchPreference(title = "英数窄字体", checked = config.narrowLatinFont, enabled = enabled, onCheckedChange = { set(config.copy(narrowLatinFont = it)) })
-            ArrowPreference(
-                title = "字重",
-                summary = config.fontWeight.toString(),
-                enabled = enabled,
-                onClick = {
-                    if (!enabled) return@ArrowPreference
-                    intEditor = IntEditorSpec("字重", "范围：100 ~ 900", config.fontWeight, 100, 900) {
-                        set(config.copy(fontWeight = it))
-                    }
-                },
-            )
+            LyricInlineSliderRow("字重", config.fontWeight.toFloat(), 100f..900f, 7, enabled, config.fontWeight.toString()) { set(config.copy(fontWeight = it.toInt())) }
             SwitchPreference(title = "斜体", checked = config.fontItalic, enabled = enabled, onCheckedChange = { set(config.copy(fontItalic = it)) })
         }
         }
@@ -622,80 +612,20 @@ fun LyricConfigurationMiuix(
         SmallTitle(text = "歌词滚动")
         Card {
             SwitchPreference(title = "歌词滚动", summary = "针对没有时间轴的歌词", checked = config.marqueeMode, enabled = enabled, onCheckedChange = { set(config.copy(marqueeMode = it)) })
-            ArrowPreference(
-                title = "滚动速度",
-                summary = config.marqueeSpeed.toString(),
-                enabled = enabled && config.marqueeMode,
-                onClick = {
-                    if (!enabled) return@ArrowPreference
-                    intEditor = IntEditorSpec("滚动速度", "范围：5 ~ 100", config.marqueeSpeed, 5, 100) {
-                        set(config.copy(marqueeSpeed = it))
-                    }
-                },
-            )
-            ArrowPreference(
-                title = "初始滚动延迟",
-                summary = "${config.marqueeDelay}ms",
-                enabled = enabled && config.marqueeMode,
-                onClick = {
-                    if (!enabled) return@ArrowPreference
-                        intEditor = IntEditorSpec("初始滚动延迟", "ms 范围：0 ~ 10000", config.marqueeDelay, 0, 10000) {
-                        set(config.copy(marqueeDelay = it))
-                    }
-                },
-            )
+            LyricInlineSliderRow("滚动速度", config.marqueeSpeed.toFloat(), 5f..100f, 18, enabled && config.marqueeMode, config.marqueeSpeed.toString()) { set(config.copy(marqueeSpeed = it.toInt())) }
+            LyricInlineSliderRow("初始滚动延迟", config.marqueeDelay.toFloat(), 0f..10000f, 9, enabled && config.marqueeMode, "${config.marqueeDelay}ms") { set(config.copy(marqueeDelay = it.toInt())) }
             SwitchPreference(title = "无限循环", enabled = enabled && config.marqueeMode, checked = config.marqueeInfinite, onCheckedChange = { set(config.copy(marqueeInfinite = it)) })
-            ArrowPreference(
-                title = "循环间隔",
-                summary = "${config.marqueeLoopDelay}ms",
-                enabled = enabled && config.marqueeMode,
-                onClick = {
-                    if (!enabled) return@ArrowPreference
-                        intEditor = IntEditorSpec("循环间隔", "ms 范围：0 ~ 10000", config.marqueeLoopDelay, 0, 10000) {
-                        set(config.copy(marqueeLoopDelay = it))
-                    }
-                },
-            )
+            LyricInlineSliderRow("循环间隔", config.marqueeLoopDelay.toFloat(), 0f..10000f, 9, enabled && config.marqueeMode, "${config.marqueeLoopDelay}ms") { set(config.copy(marqueeLoopDelay = it.toInt())) }
             SwitchPreference(title = "结束时在末尾停止", enabled = enabled && config.marqueeMode, checked = config.marqueeStopEnd, onCheckedChange = { set(config.copy(marqueeStopEnd = it)) })
         }
         if (config.lyricMode == 0) {
             SmallTitle(text = "歌曲信息滚动")
             Card {
                 SwitchPreference(title = "歌曲信息滚动", summary = "针对歌曲信息", checked = config.metadataMarqueeMode, enabled = enabled, onCheckedChange = { set(config.copy(metadataMarqueeMode = it)) })
-                ArrowPreference(
-                    title = "滚动速度",
-                    summary = config.metadataMarqueeSpeed.toString(),
-                    enabled = enabled && config.metadataMarqueeMode,
-                    onClick = {
-                        if (!enabled) return@ArrowPreference
-                        intEditor = IntEditorSpec("滚动速度", "范围：5 ~ 100", config.metadataMarqueeSpeed, 5, 100) {
-                            set(config.copy(metadataMarqueeSpeed = it))
-                        }
-                    },
-                )
-                ArrowPreference(
-                    title = "初始滚动延迟",
-                    summary = "${config.metadataMarqueeDelay}ms",
-                    enabled = enabled && config.metadataMarqueeMode,
-                    onClick = {
-                        if (!enabled) return@ArrowPreference
-                        intEditor = IntEditorSpec("初始滚动延迟", "ms 范围：0 ~ 10000", config.metadataMarqueeDelay, 0, 10000) {
-                            set(config.copy(metadataMarqueeDelay = it))
-                        }
-                    },
-                )
+                LyricInlineSliderRow("滚动速度", config.metadataMarqueeSpeed.toFloat(), 5f..100f, 18, enabled && config.metadataMarqueeMode, config.metadataMarqueeSpeed.toString()) { set(config.copy(metadataMarqueeSpeed = it.toInt())) }
+                LyricInlineSliderRow("初始滚动延迟", config.metadataMarqueeDelay.toFloat(), 0f..10000f, 9, enabled && config.metadataMarqueeMode, "${config.metadataMarqueeDelay}ms") { set(config.copy(metadataMarqueeDelay = it.toInt())) }
                 SwitchPreference(title = "无限循环", enabled = enabled && config.metadataMarqueeMode, checked = config.metadataMarqueeInfinite, onCheckedChange = { set(config.copy(metadataMarqueeInfinite = it)) })
-                ArrowPreference(
-                    title = "循环间隔",
-                    summary = "${config.metadataMarqueeLoopDelay}ms",
-                    enabled = enabled && config.metadataMarqueeMode,
-                    onClick = {
-                        if (!enabled) return@ArrowPreference
-                        intEditor = IntEditorSpec("循环间隔", "ms 范围：0 ~ 10000", config.metadataMarqueeLoopDelay, 0, 10000) {
-                            set(config.copy(metadataMarqueeLoopDelay = it))
-                        }
-                    },
-                )
+                LyricInlineSliderRow("循环间隔", config.metadataMarqueeLoopDelay.toFloat(), 0f..10000f, 9, enabled && config.metadataMarqueeMode, "${config.metadataMarqueeLoopDelay}ms") { set(config.copy(metadataMarqueeLoopDelay = it.toInt())) }
             }
         }
         }
@@ -718,50 +648,10 @@ fun LyricConfigurationMiuix(
             SwitchPreference(title = "逐字字词上浮动画", checked = config.wordMotionEnabled, enabled = enabled, onCheckedChange = { set(config.copy(wordMotionEnabled = it)) })
             if (config.wordMotionEnabled) {
                 SwitchPreference(title = "拉丁文字逐字母上浮", summary = "关闭时按整个单词上浮", checked = config.wordMotionLatinByCharacter, enabled = enabled, onCheckedChange = { set(config.copy(wordMotionLatinByCharacter = it)) })
-                ArrowPreference(
-                    title = "中日韩上浮系数",
-                    summary = "%.2f".format(java.util.Locale.ROOT, config.wordMotionCjkLift),
-                    enabled = enabled,
-                    onClick = {
-                        if (!enabled) return@ArrowPreference
-                        floatEditor = FloatEditorSpec("中日韩上浮系数", "范围：0 ~ 0.2", config.wordMotionCjkLift, 0f, 0.2f) {
-                            set(config.copy(wordMotionCjkLift = it))
-                        }
-                    },
-                )
-                ArrowPreference(
-                    title = "中日韩波长系数",
-                    summary = "%.2f".format(java.util.Locale.ROOT, config.wordMotionCjkWave),
-                    enabled = enabled,
-                    onClick = {
-                        if (!enabled) return@ArrowPreference
-                        floatEditor = FloatEditorSpec("中日韩波长系数", "范围：0 ~ 8", config.wordMotionCjkWave, 0f, 8f) {
-                            set(config.copy(wordMotionCjkWave = it))
-                        }
-                    },
-                )
-                ArrowPreference(
-                    title = "拉丁文字上浮系数",
-                    summary = "%.2f".format(java.util.Locale.ROOT, config.wordMotionLatinLift),
-                    enabled = enabled,
-                    onClick = {
-                        if (!enabled) return@ArrowPreference
-                        floatEditor = FloatEditorSpec("拉丁文字上浮系数", "范围：0 ~ 0.2", config.wordMotionLatinLift, 0f, 0.2f) {
-                            set(config.copy(wordMotionLatinLift = it))
-                        }
-                    },
-                )
-                ArrowPreference(
-                    title = "拉丁文字波长系数",
-                    summary = "%.2f".format(java.util.Locale.ROOT, config.wordMotionLatinWave),
-                    enabled = enabled,
-                    onClick = {
-                        if (!enabled) return@ArrowPreference
-                        floatEditor = FloatEditorSpec("拉丁文字波长系数", "范围：0 ~ 8", config.wordMotionLatinWave, 0f, 8f) {
-                            set(config.copy(wordMotionLatinWave = it))
-                        }
-                    },
-                )
+                LyricInlineSliderRow("中日韩上浮系数", config.wordMotionCjkLift, 0f..0.2f, 9, enabled, "%.2f".format(java.util.Locale.ROOT, config.wordMotionCjkLift)) { set(config.copy(wordMotionCjkLift = it)) }
+                LyricInlineSliderRow("中日韩波长系数", config.wordMotionCjkWave, 0f..8f, 7, enabled, "%.2f".format(java.util.Locale.ROOT, config.wordMotionCjkWave)) { set(config.copy(wordMotionCjkWave = it)) }
+                LyricInlineSliderRow("拉丁文字上浮系数", config.wordMotionLatinLift, 0f..0.2f, 9, enabled, "%.2f".format(java.util.Locale.ROOT, config.wordMotionLatinLift)) { set(config.copy(wordMotionLatinLift = it)) }
+                LyricInlineSliderRow("拉丁文字波长系数", config.wordMotionLatinWave, 0f..8f, 7, enabled, "%.2f".format(java.util.Locale.ROOT, config.wordMotionLatinWave)) { set(config.copy(wordMotionLatinWave = it)) }
             }
         }
         }
