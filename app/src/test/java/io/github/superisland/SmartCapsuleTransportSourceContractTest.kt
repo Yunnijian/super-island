@@ -13,9 +13,9 @@ class SmartCapsuleTransportSourceContractTest {
     @Test
     fun smartCapsuleUiUsesSystemUiConfigInsteadOfNotificationListenerProxy() {
         val source = sourceFile("app/src/main/kotlin/io/github/superisland/MainActivity.kt").readText()
-        val dashboard =
+            val dashboard =
             source.substringAfter("private fun SmartCapsuleDashboard(")
-                .substringBefore("private fun MediaIsland(")
+                .substringBefore("private fun ResidentMonitorSettings(")
         val stateOwner =
             sourceFile(
                 "app/src/main/kotlin/io/github/superisland/SmartCapsuleDashboardStateOwner.kt",

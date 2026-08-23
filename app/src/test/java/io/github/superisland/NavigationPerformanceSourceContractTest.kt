@@ -26,9 +26,6 @@ class NavigationPerformanceSourceContractTest {
     @Test
     fun navigationFamiliesUseRootStableOwnersAndDeferredSystemWork() {
         val activity = sourceFile("app/src/main/kotlin/io/github/superisland/MainActivity.kt").readText()
-        val media =
-            activity.substringAfter("private fun MediaIsland(")
-                .substringBefore("private fun ResidentMonitorSettings(")
         val resident =
             activity.substringAfter("private fun BatteryMonitor(")
                 .substringBefore("private fun ResidentMetricKey.metricValue(")
@@ -42,9 +39,8 @@ class NavigationPerformanceSourceContractTest {
             assertTrue("$owner must be disposed with the root host", "onDispose" in activity && "::close" in activity)
         }
         assertTrue("The first Activity resume must not duplicate startup sync", "resumeGeneration > FIRST_RESUME_GENERATION" in activity)
-        assertTrue("Media reads must wait for the KernelSU transition contract", "rememberContentReady()" in media)
-        assertFalse("Media composables must not construct page-local controllers", "NotificationProxyController" in media)
-        assertFalse("Media composables must not synchronously build a system snapshot", ".mediaSnapshot()" in media)
+        assertFalse("The removed media island must not retain a page renderer", "private fun MediaIsland(" in activity)
+        assertFalse("The removed media island must not retain media routes", "AppDestination.MEDIA" in activity)
         assertTrue("Current resident settings must leave the legacy state tree before it is built", resident.indexOf("ResidentMonitorSettings(") < resident.indexOf("val context = LocalContext.current"))
     }
 

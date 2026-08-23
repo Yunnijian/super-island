@@ -66,7 +66,6 @@ import io.github.superisland.design.DirectoryGroupUi
 import io.github.superisland.design.DirectoryIcon
 import io.github.superisland.design.InformationEntryUi
 import io.github.superisland.design.IslandPriorityOptionUi
-import io.github.superisland.design.MediaSourceOptionUi
 import io.github.superisland.design.NotificationSourceOptionUi
 import io.github.superisland.design.SmartCapsuleAppProfileUi
 import io.github.superisland.design.SmartCapsuleAppSortConfig
@@ -502,98 +501,6 @@ fun MaterialSmartCapsuleAppProfileScreen(
         onRefreshChannels = onRefreshChannels,
         onBack = onBack,
     )
-}
-
-@Composable
-fun MaterialMediaIslandConnectionScreen(
-    modeLabel: String,
-    notificationAccessStatus: String,
-    listenerStatus: String,
-    showNotificationAccessAction: Boolean,
-    showAutostartSettingsAction: Boolean,
-    onOpenNotificationAccess: () -> Unit,
-    onOpenAutostartSettings: () -> Unit,
-    onRefresh: () -> Unit,
-    onBackToMediaIsland: () -> Unit,
-) {
-    MaterialFeatureScreen(
-        title = "通知访问与连接",
-        subtitle = modeLabel,
-        onBack = onBackToMediaIsland,
-    ) {
-        MaterialInformationGroup(
-            listOf(
-                MaterialInformationRow("通知访问", notificationAccessStatus),
-                MaterialInformationRow("监听服务", listenerStatus),
-                MaterialInformationRow("连接说明", "媒体岛只读取已允许播放器的公开媒体会话，暂停后会立即结束媒体岛。"),
-            ),
-        )
-        if (showNotificationAccessAction) {
-            MaterialPrimaryAction("打开通知访问", onClick = onOpenNotificationAccess)
-        }
-        if (showAutostartSettingsAction) {
-            MaterialPrimaryAction("打开 HyperOS 自启动", onClick = onOpenAutostartSettings)
-        }
-        MaterialSecondaryAction("重新连接并刷新", onClick = onRefresh)
-        MaterialTextAction("返回媒体岛", onClick = onBackToMediaIsland)
-    }
-}
-
-@Composable
-fun MaterialMediaIslandSourcesScreen(
-    modeLabel: String,
-    enabledSummary: String,
-    candidates: List<MediaSourceOptionUi>,
-    hasEnabledSources: Boolean,
-    onSelectCandidate: (String) -> Unit,
-    onClearRules: () -> Unit,
-    onRefresh: () -> Unit,
-    onBackToMediaIsland: () -> Unit,
-) {
-    MaterialFeatureScreen(title = "播放器来源", subtitle = modeLabel, onBack = onBackToMediaIsland) {
-        MaterialInformationGroup(listOf(MaterialInformationRow("允许的播放器", enabledSummary)))
-        if (candidates.isEmpty()) {
-            MaterialInformationGroup(
-                listOf(MaterialInformationRow("可选播放器", "尚未发现活动 MediaSession；开始播放后点击刷新")),
-            )
-        } else {
-            MaterialSelectableInformationGroup(
-                candidates.map { candidate ->
-                    MaterialSelectableRow(
-                        title = candidate.title,
-                        summary = candidate.summary,
-                        selected = candidate.selected,
-                        onClick = { onSelectCandidate(candidate.id) },
-                    )
-                },
-            )
-        }
-        if (hasEnabledSources) {
-            MaterialSecondaryAction("清空播放器允许列表", onClick = onClearRules)
-        }
-        MaterialSecondaryAction("刷新媒体会话", onClick = onRefresh)
-        MaterialTextAction("返回媒体岛", onClick = onBackToMediaIsland)
-    }
-}
-
-@Composable
-fun MaterialMediaIslandStatusScreen(
-    modeLabel: String,
-    activeMediaCount: Int,
-    operationStatus: String,
-    onRefresh: () -> Unit,
-    onBackToMediaIsland: () -> Unit,
-) {
-    MaterialFeatureScreen(title = "运行状态", subtitle = modeLabel, onBack = onBackToMediaIsland) {
-        MaterialInformationGroup(
-            listOf(
-                MaterialInformationRow("媒体岛状态 · $activeMediaCount 个活动事件", operationStatus),
-                MaterialInformationRow("隐私说明", "只读取允许播放器的公开会话元数据；不会保存播放内容或历史。"),
-            ),
-        )
-        MaterialSecondaryAction("刷新媒体会话", onClick = onRefresh)
-        MaterialTextAction("返回媒体岛", onClick = onBackToMediaIsland)
-    }
 }
 
 @Composable

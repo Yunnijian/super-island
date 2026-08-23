@@ -13,10 +13,6 @@ import io.github.superisland.design.BatteryRealtimeScreen as MiuixBatteryRealtim
 import io.github.superisland.design.DirectoryGroupUi
 import io.github.superisland.design.InformationEntryUi
 import io.github.superisland.design.IslandPriorityOptionUi
-import io.github.superisland.design.MediaIslandConnectionScreen as MiuixMediaIslandConnectionScreen
-import io.github.superisland.design.MediaIslandSourcesScreen as MiuixMediaIslandSourcesScreen
-import io.github.superisland.design.MediaIslandStatusScreen as MiuixMediaIslandStatusScreen
-import io.github.superisland.design.MediaSourceOptionUi
 import io.github.superisland.design.NotificationSourceOptionUi
 import io.github.superisland.design.SmartCapsuleAppSortConfig
 import io.github.superisland.design.SmartCapsuleAppProfileUi
@@ -33,9 +29,6 @@ import io.github.superisland.ui.material.MaterialBatteryContinuousMonitorScreen
 import io.github.superisland.ui.material.MaterialBatteryMonitorDiagnosticsScreen
 import io.github.superisland.ui.material.MaterialBatteryMonitorEventsScreen
 import io.github.superisland.ui.material.MaterialBatteryRealtimeScreen
-import io.github.superisland.ui.material.MaterialMediaIslandConnectionScreen
-import io.github.superisland.ui.material.MaterialMediaIslandSourcesScreen
-import io.github.superisland.ui.material.MaterialMediaIslandStatusScreen
 import io.github.superisland.ui.material.MaterialResidentMonitorConfigurationScreen
 import io.github.superisland.ui.material.MaterialSmartCapsuleAppsScreen
 import io.github.superisland.ui.material.MaterialSmartCapsuleAppProfileScreen
@@ -246,111 +239,6 @@ fun SmartCapsuleAppProfileScreen(
                 onOpenChannel = onOpenChannel,
                 onRefreshChannels = onRefreshChannels,
                 onBack = onBack,
-            )
-    }
-}
-
-@Composable
-fun MediaIslandConnectionScreen(
-    modeLabel: String,
-    notificationAccessStatus: String,
-    listenerStatus: String,
-    showNotificationAccessAction: Boolean,
-    showAutostartSettingsAction: Boolean,
-    onOpenNotificationAccess: () -> Unit,
-    onOpenAutostartSettings: () -> Unit,
-    onRefresh: () -> Unit,
-    onBackToMediaIsland: () -> Unit,
-) {
-    when (LocalUiMode.current) {
-        UiMode.Miuix ->
-            MiuixMediaIslandConnectionScreen(
-                modeLabel,
-                notificationAccessStatus,
-                listenerStatus,
-                showNotificationAccessAction,
-                showAutostartSettingsAction,
-                onOpenNotificationAccess,
-                onOpenAutostartSettings,
-                onRefresh,
-                onBackToMediaIsland,
-            )
-        UiMode.Material ->
-            MaterialMediaIslandConnectionScreen(
-                modeLabel,
-                notificationAccessStatus,
-                listenerStatus,
-                showNotificationAccessAction,
-                showAutostartSettingsAction,
-                onOpenNotificationAccess,
-                onOpenAutostartSettings,
-                onRefresh,
-                onBackToMediaIsland,
-            )
-    }
-}
-
-@Composable
-fun MediaIslandSourcesScreen(
-    modeLabel: String,
-    enabledSummary: String,
-    candidates: List<MediaSourceOptionUi>,
-    hasEnabledSources: Boolean,
-    onSelectCandidate: (String) -> Unit,
-    onClearRules: () -> Unit,
-    onRefresh: () -> Unit,
-    onBackToMediaIsland: () -> Unit,
-) {
-    when (LocalUiMode.current) {
-        UiMode.Miuix ->
-            MiuixMediaIslandSourcesScreen(
-                modeLabel,
-                enabledSummary,
-                candidates,
-                hasEnabledSources,
-                onSelectCandidate,
-                onClearRules,
-                onRefresh,
-                onBackToMediaIsland,
-            )
-        UiMode.Material ->
-            MaterialMediaIslandSourcesScreen(
-                modeLabel,
-                enabledSummary,
-                candidates,
-                hasEnabledSources,
-                onSelectCandidate,
-                onClearRules,
-                onRefresh,
-                onBackToMediaIsland,
-            )
-    }
-}
-
-@Composable
-fun MediaIslandStatusScreen(
-    modeLabel: String,
-    activeMediaCount: Int,
-    operationStatus: String,
-    onRefresh: () -> Unit,
-    onBackToMediaIsland: () -> Unit,
-) {
-    when (LocalUiMode.current) {
-        UiMode.Miuix ->
-            MiuixMediaIslandStatusScreen(
-                modeLabel,
-                activeMediaCount,
-                operationStatus,
-                onRefresh,
-                onBackToMediaIsland,
-            )
-        UiMode.Material ->
-            MaterialMediaIslandStatusScreen(
-                modeLabel,
-                activeMediaCount,
-                operationStatus,
-                onRefresh,
-                onBackToMediaIsland,
             )
     }
 }
