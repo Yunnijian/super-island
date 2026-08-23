@@ -14,6 +14,8 @@ import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.AlertDialog
@@ -24,17 +26,18 @@ import androidx.compose.material3.LargeFlexibleTopAppBar
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RangeSlider
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.ArrowDownward
 import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -54,15 +57,23 @@ import io.github.superisland.source.lyric.LyricMusicInfoLayout
 import io.github.superisland.source.lyric.LyricPlaceholder
 import io.github.superisland.source.lyric.LyricSourceMode
 import io.github.superisland.design.displaySummary
+import io.github.superisland.design.LyricConfigSection
 import io.github.superisland.design.rememberLyricSupportSnapshot
 import me.weishu.kernelsu.ui.component.material.SegmentedColumn
 import me.weishu.kernelsu.ui.component.material.SegmentedDropdownItem
 import me.weishu.kernelsu.ui.component.material.SegmentedListItem
 import me.weishu.kernelsu.ui.component.material.SegmentedSwitchItem
+import me.weishu.kernelsu.ui.component.material.ExpressiveScaffold
+import me.weishu.kernelsu.ui.component.material.TopBarBackButton
 import me.weishu.kernelsu.ui.component.material.expressiveTopAppBarColors
 
-private val sources = listOf(LyricSourceMode.LYRICON, LyricSourceMode.SUPER_LYRIC, LyricSourceMode.LYRIC_INFO)
+private val sources = listOf(
+    LyricSourceMode.LYRICON,
+    LyricSourceMode.SUPER_LYRIC,
+    LyricSourceMode.LYRIC_INFO,
+)
 private val sourceLabels = listOf("Lyricon", "SuperLyric", "LyricInfo")
+private val lyricModeLabels = listOf("逐字歌词", "分离歌词")
 private val separators = listOf("加号（+）", "空格", "逗号（,）", "顿号（、）", "斜杠（/）", "横杠（-）", "不使用连接符")
 private val separatorKeys = listOf("plus", "space", "comma", "ideographic_comma", "slash", "hyphen", "none")
 private val animationIds = listOf("none", "default", "fade_out_fade_in", "fade_out_up_fade_in_up", "fade_out_down_fade_in_down", "fade_out_left_fade_in_right", "fade_out_left_fade_in_up", "fade_out_left_zoom_in", "fade_out_left_landing", "fade_out_right_fade_in_left", "fade_out_right_fade_in_up", "fade_out_right_zoom_in", "fade_out_right_landing", "fade_out_left_zoom_in_right", "fade_out_right_zoom_in_left", "slide_out_left_slide_in_right", "slide_out_left_fade_in_up", "slide_out_left_zoom_in", "slide_out_left_landing", "slide_out_right_slide_in_left", "slide_out_right_fade_in_up", "slide_out_right_zoom_in", "slide_out_right_landing", "flip_out_x_flip_in_x", "flip_out_y_flip_in_y", "rotate_out_rotate_in", "zoom_out_zoom_in")
@@ -94,6 +105,8 @@ private val contentModes = listOf(
     IslandContentMode.LYRIC,
 )
 
+private val LocalLyricControlsEnabled = compositionLocalOf { true }
+
 private fun contentModeIndex(value: IslandContentMode): Int =
     contentModes.indexOf(value).takeIf { it >= 0 } ?: 0
 
@@ -103,8 +116,37 @@ private fun contentModeAt(index: Int, fallback: IslandContentMode): IslandConten
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun LyricMaterial(config: LyricIslandConfig, onConfigChange: (LyricIslandConfig) -> Unit, onBack: () -> Unit) {
+    var section by remember { mutableStateOf<LyricConfigSection?>(null) }
+    val selected = section
+    if (selected == null) {
+        LyricMaterialDirectory(
+            config = config,
+            enabled = config.enabled,
+            onEnabledChange = { onConfigChange(config.withEnabled(it)) },
+            onConfigChange = onConfigChange,
+            onOpenSection = { section = it },
+            onBack = onBack,
+        )
+    } else {
+        LyricMaterialDetail(
+            config = config,
+            onConfigChange = onConfigChange,
+            section = selected,
+            onBack = { section = null },
+        )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
+@Composable
+private fun LyricMaterialDetail(
+    config: LyricIslandConfig,
+    onConfigChange: (LyricIslandConfig) -> Unit,
+    section: LyricConfigSection,
+    onBack: () -> Unit,
+) {
     val behavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
-    val set: (LyricIslandConfig) -> Unit = { onConfigChange(it.normalized()) }
+    val set: (LyricIslandConfig) -> Unit = { if (config.enabled) onConfigChange(it.normalized()) }
     val support = rememberLyricSupportSnapshot()
     var showFontDialog by remember { mutableStateOf(false) }
     var fontPath by remember(config.customFontPath) { mutableStateOf(config.customFontPath) }
@@ -210,28 +252,68 @@ fun LyricMaterial(config: LyricIslandConfig, onConfigChange: (LyricIslandConfig)
         )
     }
     val dropdown: @Composable (String, List<String>, Int, (Int) -> Unit) -> Unit = { title, values, index, onSelect ->
-        SegmentedDropdownItem(title = title, items = values, selectedIndex = index.coerceIn(0, values.lastIndex), onItemSelected = onSelect)
+        SegmentedDropdownItem(title = title, items = values, selectedIndex = index.coerceIn(0, values.lastIndex), enabled = config.enabled, onItemSelected = onSelect)
     }
     val dropdownEnabled: @Composable (String, List<String>, Int, Boolean, (Int) -> Unit) -> Unit = { title, values, index, enabled, onSelect ->
-        SegmentedDropdownItem(title = title, items = values, selectedIndex = index.coerceIn(0, values.lastIndex), enabled = enabled, onItemSelected = onSelect)
+        SegmentedDropdownItem(title = title, items = values, selectedIndex = index.coerceIn(0, values.lastIndex), enabled = config.enabled && enabled, onItemSelected = onSelect)
     }
     val switch: @Composable (String, String, Boolean, Boolean, (Boolean) -> Unit) -> Unit = { title, summary, checked, enabled, onChange ->
-        SegmentedSwitchItem(title = title, summary = summary, checked = checked, enabled = enabled, onCheckedChange = onChange)
+        SegmentedSwitchItem(title = title, summary = summary, checked = checked, enabled = config.enabled && enabled, onCheckedChange = onChange)
     }
-    Scaffold(
-        topBar = { LargeFlexibleTopAppBar(title = { Text("小米超级岛歌词") }, colors = expressiveTopAppBarColors(), windowInsets = WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal), scrollBehavior = behavior) },
+    ExpressiveScaffold(
+        topBar = {
+            LargeFlexibleTopAppBar(
+                title = { Text(section.title) },
+                navigationIcon = {
+                    TopBarBackButton(onClick = onBack, contentDescription = "返回")
+                },
+                colors = expressiveTopAppBarColors(),
+                windowInsets = WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal),
+                scrollBehavior = behavior,
+            )
+        },
         contentWindowInsets = WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal),
     ) { padding ->
-        LazyColumn(Modifier.fillMaxSize().padding(padding).nestedScroll(behavior.nestedScrollConnection), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        CompositionLocalProvider(LocalLyricControlsEnabled provides config.enabled) {
+        LazyColumn(
+            Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .nestedScroll(behavior.nestedScrollConnection)
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            contentPadding = PaddingValues(bottom = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            if (section == LyricConfigSection.SOURCE) {
             item {
                 SegmentedColumn(Modifier.fillMaxWidth(), title = "小米超级岛歌词自定义配置", content = listOf(
-                    { switch("启用", "", config.enabled, true) { set(config.copy(enabled = it)) } },
-                    { dropdown("歌词源", sourceLabels, sources.selected(config.sourceMode)) { set(config.copy(sourceMode = sources.getOrElse(it) { LyricSourceMode.LYRICON })) } },
+                    { dropdown("歌词源", sourceLabels, sources.selected(config.sourceMode.publicPickerMode())) { set(config.copy(sourceMode = sources.getOrElse(it) { LyricSourceMode.LYRICON })) } },
                     { if (config.sourceMode == LyricSourceMode.LYRICON && support.lyriconProviders.isEmpty() && support.loaded) Text("未发现 Lyricon 歌词提供器", style = MaterialTheme.typography.bodySmall) },
                     { if (config.sourceMode == LyricSourceMode.SUPER_LYRIC && !support.superLyricInstalled && support.loaded) Text("未安装 SuperLyric\n请安装并启用 SuperLyric 模块以使用该歌词源", style = MaterialTheme.typography.bodySmall) },
                 ))
             }
-            if (config.sourceMode == LyricSourceMode.LYRICON) {
+            if (config.sourceMode == LyricSourceMode.SUPER_LYRIC) {
+                item {
+                    SegmentedColumn(
+                        Modifier.fillMaxWidth(),
+                        title = "API 支持列表",
+                        content = support.superLyricApiApps.map { app ->
+                            { Text("${app.label}  v${app.versionName} (${app.versionCode})") }
+                        },
+                    )
+                }
+                item {
+                    SegmentedColumn(
+                        Modifier.fillMaxWidth(),
+                        title = "Hook 支持列表",
+                        content = support.superLyricHookApps.map { app ->
+                            { Text("${app.label}  v${app.versionName} (${app.versionCode})") }
+                        },
+                    )
+                }
+            }
+            }
+            if (section == LyricConfigSection.PROVIDER && config.sourceMode == LyricSourceMode.LYRICON) {
                 item {
                     SegmentedColumn(
                         Modifier.fillMaxWidth(),
@@ -257,26 +339,8 @@ fun LyricMaterial(config: LyricIslandConfig, onConfigChange: (LyricIslandConfig)
                         },
                     )
                 }
-            } else if (config.sourceMode == LyricSourceMode.SUPER_LYRIC) {
-                item {
-                    SegmentedColumn(
-                        Modifier.fillMaxWidth(),
-                        title = "API 支持列表",
-                        content = support.superLyricApiApps.map { app ->
-                            { Text("${app.label}  v${app.versionName} (${app.versionCode})") }
-                        },
-                    )
-                }
-                item {
-                    SegmentedColumn(
-                        Modifier.fillMaxWidth(),
-                        title = "Hook 支持列表",
-                        content = support.superLyricHookApps.map { app ->
-                            { Text("${app.label}  v${app.versionName} (${app.versionCode})") }
-                        },
-                    )
-                }
             }
+            if (section == LyricConfigSection.ISLAND) {
             item {
                 SegmentedColumn(Modifier.fillMaxWidth(), title = "布局", content = listOf(
                     { dropdown("超级岛长度模式", listOf("固定长度", "动态长度"), config.widthMode) { set(config.copy(widthMode = it)) } },
@@ -284,7 +348,8 @@ fun LyricMaterial(config: LyricIslandConfig, onConfigChange: (LyricIslandConfig)
                     {
                         Column {
                             SegmentedListItem(
-                                onClick = { if (config.widthMode == 0) showIslandWidthDialog = true },
+                                onClick = { if (config.enabled && config.widthMode == 0) showIslandWidthDialog = true },
+                                enabled = config.enabled,
                                 headlineContent = { Text("超级岛长度") },
                                 trailingContent = {
                                     Text(
@@ -300,6 +365,7 @@ fun LyricMaterial(config: LyricIslandConfig, onConfigChange: (LyricIslandConfig)
                             if (config.widthMode == 1) {
                                 RangeSlider(
                                     value = dynamicWidthRange,
+                                    enabled = config.enabled,
                                     onValueChange = { value ->
                                         val start = value.start.toInt().coerceIn(islandWidthMin, islandWidthMax)
                                         val end = value.endInclusive.toInt().coerceIn(start, islandWidthMax)
@@ -319,6 +385,7 @@ fun LyricMaterial(config: LyricIslandConfig, onConfigChange: (LyricIslandConfig)
                             } else {
                                 Slider(
                                     value = fixedIslandWidth,
+                                    enabled = config.enabled,
                                     onValueChange = { value ->
                                         fixedIslandWidth = value.coerceIn(islandWidthMin.toFloat(), islandWidthMax.toFloat())
                                     },
@@ -334,20 +401,24 @@ fun LyricMaterial(config: LyricIslandConfig, onConfigChange: (LyricIslandConfig)
                     { switch("解除超级岛最大长度限制", "", config.disableWidthLimit, true) { set(config.copy(disableWidthLimit = it)) } },
                     {
                         SegmentedListItem(
-                            onClick = { editingPaddingSide = 0 },
+                            onClick = { if (config.enabled) editingPaddingSide = 0 },
+                            enabled = config.enabled,
                             headlineContent = { Text("左侧内容内边距") },
                             trailingContent = { Text("${config.leftPaddingLeft},${config.leftPaddingRight}", color = MaterialTheme.colorScheme.primary) },
                         )
                     },
                     {
                         SegmentedListItem(
-                            onClick = { editingPaddingSide = 1 },
+                            onClick = { if (config.enabled) editingPaddingSide = 1 },
+                            enabled = config.enabled,
                             headlineContent = { Text("右侧内容内边距") },
                             trailingContent = { Text("${config.rightPaddingLeft},${config.rightPaddingRight}", color = MaterialTheme.colorScheme.primary) },
                         )
                     },
                 ))
             }
+            }
+            if (section == LyricConfigSection.ISLAND) {
             item {
                 SegmentedColumn(Modifier.fillMaxWidth(), title = "内容", content = listOf(
                     { switch("分离歌词", "", config.lyricMode == 1, true) { set(config.copy(lyricMode = if (it) 1 else 0)) } },
@@ -371,6 +442,8 @@ fun LyricMaterial(config: LyricIslandConfig, onConfigChange: (LyricIslandConfig)
                     { dropdown("音频律动", listOf("默认", "封面色", "封面渐变色", "隐藏"), config.musicWaveStyle) { set(config.copy(musicWaveStyle = it)) } },
                 ))
             }
+            }
+            if (section == LyricConfigSection.ISLAND) {
             item {
                 SegmentedColumn(Modifier.fillMaxWidth(), title = "内容布局", content = listOf(
                     { materialFieldRow("第一行", summarizeFields(config.musicInfoFirstLine, LyricMusicInfoLayout.FIELD_TITLE)) { editingFieldRow = 0 } },
@@ -382,6 +455,8 @@ fun LyricMaterial(config: LyricIslandConfig, onConfigChange: (LyricIslandConfig)
                     { dropdown("占位符格式", LyricPlaceholder.entries.map { it.display }, config.placeholder.ordinal) { set(config.copy(placeholder = LyricPlaceholder.entries.getOrElse(it) { LyricPlaceholder.COUNTDOWN })) } },
                 ))
             }
+            }
+            if (section == LyricConfigSection.TEXT_STYLE) {
             item {
                 SegmentedColumn(Modifier.fillMaxWidth(), title = "文字样式", content = listOf(
                     { dropdown("文字颜色", listOf("默认", "封面色", "封面渐变色", "跟随状态栏颜色"), config.textColorStyle) { set(config.copy(textColorStyle = it)) } },
@@ -418,6 +493,8 @@ fun LyricMaterial(config: LyricIslandConfig, onConfigChange: (LyricIslandConfig)
                     },
                 ))
             }
+            }
+            if (section == LyricConfigSection.SCROLL) {
             item {
                 SegmentedColumn(Modifier.fillMaxWidth(), title = "滚动显示", content = listOf(
                     { switch("歌词滚动", "针对没有时间轴的歌词", config.marqueeMode, true) { set(config.copy(marqueeMode = it)) } },
@@ -475,11 +552,12 @@ fun LyricMaterial(config: LyricIslandConfig, onConfigChange: (LyricIslandConfig)
                     ))
                 }
             }
+            }
+            if (section == LyricConfigSection.VERBATIM) {
             item {
                 SegmentedColumn(Modifier.fillMaxWidth(), title = "逐字歌词", content = listOf(
-                    { switch("模拟逐行歌词", "将带有字词时间轴的歌词降级为整行时间轴显示", config.syllableLineDisplay, true) { set(config.copy(syllableLineDisplay = it)) } },
                     { switch("相对进度歌词", "当歌词缺少字词时间轴时，将整行作为一个进度单元", config.syllableRelative, true) { set(config.copy(syllableRelative = it)) } },
-                    { switch("模拟逐字歌词", "", config.syllableHighlight, config.syllableRelative) { set(config.copy(syllableHighlight = it)) } },
+                    { switch("相对进度歌词高亮显示", "", config.syllableHighlight, config.syllableRelative) { set(config.copy(syllableHighlight = it)) } },
                 ))
             }
             item {
@@ -525,24 +603,29 @@ fun LyricMaterial(config: LyricIslandConfig, onConfigChange: (LyricIslandConfig)
                     },
                 ))
             }
+            }
+            if (section == LyricConfigSection.TRANSLATION) {
             item {
                 val nextSupported = config.sourceMode == LyricSourceMode.LYRICON ||
                     config.sourceMode == LyricSourceMode.LYRIC_INFO
-                val translationEnabled = !nextSupported || !config.nextLyricLine || config.autoSwitchTranslation
+                val translationEnabled = !nextSupported || !config.nextLyricLine
                 SegmentedColumn(Modifier.fillMaxWidth(), title = "双行内容", content = buildList {
                     if (nextSupported) {
                         add { switch("显示下一句歌词", "占用第二行，开启后不显示翻译", config.nextLyricLine, true) { set(config.copy(nextLyricLine = it)) } }
-                        add { switch("自动切换翻译", "有翻译的歌曲，显示歌词翻译", config.autoSwitchTranslation, config.nextLyricLine) { set(config.copy(autoSwitchTranslation = it)) } }
                     }
                     add { switch("禁用所有翻译", "", config.disableTranslation, translationEnabled) { set(config.copy(disableTranslation = it)) } }
                     add { switch("仅显示翻译", "", config.translationOnly, translationEnabled && !config.swapTranslation) { set(config.copy(translationOnly = it, swapTranslation = if (it) false else config.swapTranslation)) } }
                     add { switch("原词翻译对调位置", "", config.swapTranslation, translationEnabled && !config.translationOnly) { set(config.copy(swapTranslation = it, translationOnly = if (it) false else config.translationOnly)) } }
                 })
             }
+            }
+            if (section == LyricConfigSection.ANIMATION) {
             item {
                 val index = animationIds.indexOf(config.animId).takeIf { config.animEnabled && it >= 0 } ?: 0
                 SegmentedColumn(Modifier.fillMaxWidth(), title = "歌词切换动画", content = listOf({ dropdown("歌词切换动画", animationLabels, index) { i -> set(config.copy(animEnabled = i != 0, animId = animationIds.getOrElse(i) { "default" })) } }))
             }
+            }
+        }
         }
     }
     if (showFontDialog) {
@@ -570,6 +653,137 @@ fun LyricMaterial(config: LyricIslandConfig, onConfigChange: (LyricIslandConfig)
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
+@Composable
+private fun LyricMaterialDirectory(
+    config: LyricIslandConfig,
+    enabled: Boolean,
+    onEnabledChange: (Boolean) -> Unit,
+    onConfigChange: (LyricIslandConfig) -> Unit,
+    onOpenSection: (LyricConfigSection) -> Unit,
+    onBack: () -> Unit,
+) {
+    val behavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
+    ExpressiveScaffold(
+        topBar = {
+            LargeFlexibleTopAppBar(
+                title = { Text("小米超级岛歌词") },
+                navigationIcon = {
+                    TopBarBackButton(onClick = onBack, contentDescription = "返回")
+                },
+                colors = expressiveTopAppBarColors(),
+                windowInsets = WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal),
+                scrollBehavior = behavior,
+            )
+        },
+        contentWindowInsets = WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal),
+    ) { padding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .nestedScroll(behavior.nestedScrollConnection)
+                .padding(horizontal = 16.dp, vertical = 12.dp)
+                .verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            SegmentedColumn(
+                modifier = Modifier.fillMaxWidth(),
+                title = "小米超级岛歌词",
+                content = listOf {
+                    SegmentedSwitchItem(
+                        title = "启用",
+                        summary = if (enabled) "正在通过超级岛显示歌词" else "关闭后不会发布歌词超级岛",
+                        checked = enabled,
+                        enabled = true,
+                        onCheckedChange = onEnabledChange,
+                    )
+                    SegmentedDropdownItem(
+                        title = "歌词模式",
+                        items = lyricModeLabels,
+                        selectedIndex = config.lyricMode.coerceIn(0, lyricModeLabels.lastIndex),
+                        enabled = enabled,
+                        onItemSelected = { mode ->
+                            onConfigChange(config.copy(lyricMode = mode).normalized())
+                        },
+                    )
+                    SegmentedDropdownItem(
+                        title = "歌词源",
+                        items = sourceLabels,
+                        selectedIndex = sources.selected(config.sourceMode.publicPickerMode()),
+                        enabled = enabled,
+                        onItemSelected = { source ->
+                            onConfigChange(config.copy(sourceMode = sources.getOrElse(source) { LyricSourceMode.LYRICON }).normalized())
+                        },
+                    )
+                },
+            )
+            LyricConfigSection.entries
+                .filter {
+                    it != LyricConfigSection.SOURCE &&
+                        (it != LyricConfigSection.PROVIDER || config.sourceMode == LyricSourceMode.LYRICON)
+                }
+                .forEachIndexed { index, section ->
+                LyricMaterialDirectoryEntry(
+                    section = section,
+                    config = config,
+                    enabled = enabled,
+                    title = if (index == 0) "自定义配置" else "",
+                    onOpenSection = onOpenSection,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun LyricMaterialDirectoryEntry(
+    section: LyricConfigSection,
+    config: LyricIslandConfig,
+    enabled: Boolean,
+    title: String,
+    onOpenSection: (LyricConfigSection) -> Unit,
+) {
+    SegmentedColumn(
+        Modifier.fillMaxWidth(),
+        title = title,
+        content = listOf {
+            SegmentedListItem(
+                onClick = { onOpenSection(section) },
+                enabled = enabled,
+                headlineContent = { Text(section.title) },
+                supportingContent = { Text(lyricSectionSummary(section, config)) },
+                trailingContent = {
+                    Icon(
+                        Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                        contentDescription = "进入",
+                    )
+                },
+            )
+        },
+    )
+}
+
+private fun lyricSectionSummary(
+    section: LyricConfigSection,
+    config: LyricIslandConfig,
+): String = when (section) {
+    LyricConfigSection.SOURCE -> when (config.sourceMode) {
+        LyricSourceMode.SUPER_LYRIC -> "SuperLyric"
+        LyricSourceMode.LYRIC_INFO -> "LyricInfo"
+        LyricSourceMode.MEDIA_FALLBACK -> "LyricInfo"
+        LyricSourceMode.LYRICON -> "Lyricon"
+    }
+    LyricConfigSection.ISLAND -> if (config.widthMode == 1) "动态长度" else "固定长度"
+    LyricConfigSection.PROVIDER -> "Lyricon 歌词提供器与时间偏移"
+    LyricConfigSection.TEXT_STYLE,
+    LyricConfigSection.SCROLL,
+    LyricConfigSection.VERBATIM,
+    LyricConfigSection.ANIMATION,
+    -> ""
+    LyricConfigSection.TRANSLATION -> "歌词翻译、下一句歌词等功能"
+}
+
 private fun summarizeFields(raw: String, defaultField: String): String =
     LyricMusicInfoLayout.parseFields(raw, defaultField)
         .map { LyricMusicInfoLayout.fieldLabels[it] ?: it }
@@ -590,7 +804,7 @@ private fun materialFieldRow(
 ) {
     SegmentedListItem(
         onClick = onClick,
-        enabled = enabled,
+        enabled = LocalLyricControlsEnabled.current && enabled,
         headlineContent = { Text(title) },
         supportingContent = { Text(summary) },
     )

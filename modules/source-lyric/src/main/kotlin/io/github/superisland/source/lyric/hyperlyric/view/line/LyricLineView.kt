@@ -67,6 +67,17 @@ open class LyricLineView(context: Context, attrs: AttributeSet? = null) :
         scrollRenderer.stopAtEnd = stop
     }
 
+    /** Clears a metadata-only marquee override without resetting the lyric model. */
+    fun clearMarqueeOverride() {
+        scrollUnlocked = false
+        scrollStarted = false
+        scrollRenderer.scrollSpeed = 0f
+        scrollRenderer.repeatCount = 0
+        scrollRenderer.reset(lineState)
+        animator.stop()
+        invalidate()
+    }
+
     fun setPeerLineWidth(width: Float) {
         scrollRenderer.peerLineWidth = width
     }
@@ -619,5 +630,4 @@ open class LyricLineView(context: Context, attrs: AttributeSet? = null) :
         }
     }
 }
-
 

@@ -55,7 +55,9 @@ object RichLyricLineSplitter {
             val leftMinWidthPx: Float,
             val leftMaxWidthPx: Float,
             val rightMinWidthPx: Float,
-            val rightMaxWidthPx: Float
+            val rightMaxWidthPx: Float,
+            /** Optional measured width used by the lyric-only dynamic-width policy. */
+            val basisWidthPx: Float? = null,
         ) : ContainerWidthSpec {
             private val minTotalWidthPx: Float
                 get() = (leftMinWidthPx.coerceAtLeast(0f) +
@@ -66,7 +68,7 @@ object RichLyricLineSplitter {
                         rightMaxWidthPx.coerceAtLeast(0f)).coerceAtLeast(minTotalWidthPx)
 
             override fun targetSplitWidthPx(totalTextWidthPx: Float): Float {
-                val textWidth = totalTextWidthPx.coerceAtLeast(0f)
+                val textWidth = (basisWidthPx ?: totalTextWidthPx).coerceAtLeast(0f)
                 if (textWidth <= 0f) return 0f
 
                 // Once the island reaches its maximum, the left side is filled to its own

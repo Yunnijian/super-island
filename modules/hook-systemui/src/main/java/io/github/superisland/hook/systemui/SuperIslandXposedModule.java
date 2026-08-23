@@ -62,6 +62,10 @@ public final class SuperIslandXposedModule extends XposedModule {
             "miui.systemui.dynamicisland.template.IslandTemplateBuilder";
     private static final String ISLAND_MODULE_ADAPTER_CLASS =
             "miui.systemui.dynamicisland.module.IslandModuleViewHolderAdapter";
+    /** One posted native render per root per main-loop turn. */
+    private static final Object NATIVE_UPDATE_LOCK = new Object();
+    private static final Map<ViewGroup, Runnable> PENDING_NATIVE_UPDATES = new WeakHashMap<>();
+    private static final Map<ViewGroup, Object> PENDING_NATIVE_DATA = new WeakHashMap<>();
 
     /**
      * HyperOS loads the focus plugin with a separate ClassLoader. A hook installed only in the
@@ -858,7 +862,7 @@ public final class SuperIslandXposedModule extends XposedModule {
                                 ViewGroup fakeRoot = (ViewGroup) receiver;
                                 Object data = currentIslandData(fakeRoot);
                                 io.github.superisland.hook.systemui.lyric.LyricIslandSystemUiHost
-                                        .renderAndFreezeNative(fakeRoot, data);
+                                        .scheduleRenderAndFreezeNative(fakeRoot, data);
                             }
                             return result;
                         }));
@@ -877,15 +881,10 @@ public final class SuperIslandXposedModule extends XposedModule {
                                 io.github.libxposed.api.XposedInterface.ExceptionMode.PROTECTIVE)
                         .intercept(chain -> {
                             int visibility = ((Number) chain.getArg(0)).intValue();
-                            if (visibility == android.view.View.VISIBLE) {
-                                Object receiver = chain.getThisObject();
-                                if (receiver instanceof ViewGroup) {
-                                    ViewGroup fakeRoot = (ViewGroup) receiver;
-                                    Object data = currentIslandData(fakeRoot);
-                                    io.github.superisland.hook.systemui.lyric.LyricIslandSystemUiHost
-                                            .renderAndFreezeNative(fakeRoot, data);
-                                }
-                            }
+                            // Visibility is called repeatedly for every shade-animation frame on
+                            // some HyperOS builds. Rendering here made each frame compete with the
+                            // status-bar transition; the lifecycle hooks above already schedule
+                            // the one freeze bind needed when the fake surface starts.
                             Object result = chain.proceed();
                             if (visibility != android.view.View.VISIBLE
                                     && chain.getThisObject() instanceof ViewGroup) {
@@ -995,26 +994,42 @@ public final class SuperIslandXposedModule extends XposedModule {
     private static void dispatchNativeIslandUpdate(Object receiver, Object data) {
         if (!(receiver instanceof ViewGroup)) return;
         ViewGroup root = (ViewGroup) receiver;
-        Runnable update = () -> {
-            try {
-                // LyricIslandNativeRenderer owns the complete media/pending-intent gate. Keeping
-                // the decision in one place avoids an asynchronous stale-data precheck clearing
-                // a newer player root.
-                io.github.superisland.hook.systemui.lyric.LyricIslandSystemUiHost
-                        .renderNative(root, data);
-            } catch (Throwable error) {
-                // Renderer/runtime drift must restore OEM children and never escape a hook.
-                io.github.superisland.hook.systemui.lyric.LyricIslandSystemUiHost.clearNative(root);
-                Log.w(TAG, "Native lyric render failed closed", error);
-            }
-        };
+        final Runnable update;
+        synchronized (NATIVE_UPDATE_LOCK) {
+            PENDING_NATIVE_DATA.put(root, data);
+            if (PENDING_NATIVE_UPDATES.containsKey(root)) return;
+            update = () -> {
+                Object latest;
+                synchronized (NATIVE_UPDATE_LOCK) {
+                    PENDING_NATIVE_UPDATES.remove(root);
+                    latest = PENDING_NATIVE_DATA.remove(root);
+                }
+                try {
+                    // LyricIslandNativeRenderer owns the complete media/pending-intent gate. The
+                    // posted/coalesced dispatch keeps expensive OEM tree work off the hook call
+                    // stack and lets one frame absorb bursty width/update callbacks.
+                    io.github.superisland.hook.systemui.lyric.LyricIslandSystemUiHost
+                            .renderNative(root, latest);
+                } catch (Throwable error) {
+                    // Renderer/runtime drift must restore OEM children and never escape a hook.
+                    io.github.superisland.hook.systemui.lyric.LyricIslandSystemUiHost.clearNative(root);
+                    Log.w(TAG, "Native lyric render failed closed", error);
+                }
+            };
+            PENDING_NATIVE_UPDATES.put(root, update);
+        }
         try {
-            if (Looper.myLooper() == Looper.getMainLooper()) {
-                update.run();
-            } else {
-                root.post(update);
+            if (!root.post(update)) {
+                synchronized (NATIVE_UPDATE_LOCK) {
+                    PENDING_NATIVE_UPDATES.remove(root);
+                    PENDING_NATIVE_DATA.remove(root);
+                }
             }
         } catch (Throwable error) {
+            synchronized (NATIVE_UPDATE_LOCK) {
+                PENDING_NATIVE_UPDATES.remove(root);
+                PENDING_NATIVE_DATA.remove(root);
+            }
             Log.w(TAG, "Could not dispatch native lyric render", error);
         }
     }

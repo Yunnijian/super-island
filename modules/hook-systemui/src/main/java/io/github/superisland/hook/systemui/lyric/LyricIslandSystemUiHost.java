@@ -22,13 +22,15 @@ import io.github.superisland.source.lyric.LyricPayloadBuilder;
 import io.github.superisland.source.lyric.LyricResolver;
 import io.github.superisland.source.lyric.LyricSnapshot;
 import io.github.superisland.source.lyric.LyricSourceMode;
-import io.github.superisland.source.lyric.LyricSlot;
 import io.github.superisland.source.lyric.SuperLyricBridge;
 import kotlin.Unit;
 import kotlin.jvm.functions.Function1;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.Collections;
+import java.util.Map;
+import java.util.WeakHashMap;
 
 /**
  * SystemUI-owned lyric island host.
@@ -44,6 +46,8 @@ public final class LyricIslandSystemUiHost {
     private static final long PUBLISH_INTERVAL_MS = 120L;
     private static final long POSITION_TICK_MS = 50L;
     private static final long FALLBACK_TICK_MS = 250L;
+    private static final long PLAYBACK_RESOLVE_INTERVAL_MS = 400L;
+    private static final long ARTWORK_RESOLVE_INTERVAL_MS = 1_000L;
 
     private static boolean registered;
     private static Context appContext;
@@ -62,6 +66,46 @@ public final class LyricIslandSystemUiHost {
         return thread;
     });
     private static final AtomicBoolean FALLBACK_QUERY_RUNNING = new AtomicBoolean();
+    private static final ExecutorService MEDIA_EXECUTOR = Executors.newSingleThreadExecutor(runnable -> {
+        Thread thread = new Thread(runnable, "SuperIslandLyricMedia");
+        thread.setDaemon(true);
+        return thread;
+    });
+    private static final ExecutorService NOTIFICATION_EXECUTOR = Executors.newSingleThreadExecutor(runnable -> {
+        Thread thread = new Thread(runnable, "SuperIslandLyricNotification");
+        thread.setDaemon(true);
+        return thread;
+    });
+    private static final Object NOTIFICATION_QUEUE_LOCK = new Object();
+    private static Runnable pendingNotificationOperation;
+    private static boolean notificationWorkerRunning;
+    /**
+     * Tracks whether the optional Focus fallback may still be present. Native island callbacks
+     * can arrive once per display frame; scheduling a Binder cancel for every callback made
+     * notification-shade expansion compete with NotificationManager even after the fallback was
+     * already gone.
+     */
+    private static boolean fallbackNotificationMayExist = true;
+    private static final AtomicBoolean PLAYBACK_QUERY_RUNNING = new AtomicBoolean();
+    private static final AtomicBoolean ARTWORK_QUERY_RUNNING = new AtomicBoolean();
+    private static volatile String playbackCacheKey = "";
+    private static volatile io.github.superisland.source.lyric.LyricPlayback playbackCache;
+    private static volatile long playbackCacheElapsed;
+    /** Last provider anchor applied to CLOCK; prevents placeholder Binder snapshots resetting it. */
+    private static io.github.superisland.source.lyric.LyricPlayback lastAppliedProviderPlayback;
+    private static volatile String artworkCacheKey = "";
+    private static volatile java.util.List<Integer> artworkCache = Collections.emptyList();
+    private static volatile long artworkCacheElapsed;
+    private static final AtomicBoolean NATIVE_REFRESH_PENDING = new AtomicBoolean();
+    private static final Map<ViewGroup, Boolean> NATIVE_FREEZE_RENDER_PENDING = new WeakHashMap<>();
+    private static final Runnable NATIVE_REFRESH = () -> {
+        NATIVE_REFRESH_PENDING.set(false);
+        try {
+            LyricIslandNativeRenderer.refreshAll();
+        } catch (Throwable error) {
+            Log.w(TAG, "Could not refresh native lyric slots", error);
+        }
+    };
 
     private static final Function1<LyricSnapshot, Unit> SNAPSHOT_LISTENER = snapshot -> {
         onSnapshot(snapshot, LyricSourceMode.SUPER_LYRIC);
@@ -75,12 +119,24 @@ public final class LyricIslandSystemUiHost {
     private static final Runnable POSITION_TICK = new Runnable() {
         @Override
         public void run() {
+            // LyricInfo is resolved by the fallback poller, but it still needs the same
+            // position clock for progress, word highlighting and next-line transitions. The
+            // previous gate stopped after the first fallback snapshot, leaving a frozen line.
             if (!enabled || (config.getSourceMode() != LyricSourceMode.SUPER_LYRIC
-                    && config.getSourceMode() != LyricSourceMode.LYRICON)) return;
+                    && config.getSourceMode() != LyricSourceMode.LYRICON
+                    && config.getSourceMode() != LyricSourceMode.LYRIC_INFO
+                    && config.getSourceMode() != LyricSourceMode.MEDIA_FALLBACK)) return;
             LyricSnapshot snapshot = latestSnapshot;
             if (snapshot != null && !snapshot.getStopped() && CLOCK.isActive()) {
-                publishIfNeeded(true);
-                LyricIslandNativeRenderer.updatePositions();
+                // Once the player's native island owns the lyric slot, publishing a Focus SBN on
+                // every clock tick only cancels the same fallback notification and traverses the
+                // OEM tree again. Content changes still arrive through onSnapshot; ticks only
+                // advance the in-place rich renderer and keep shade scrolling responsive.
+                boolean nativeAttached = LyricIslandNativeRenderer.hasAttachedSlot();
+                if (!nativeAttached) {
+                    publishIfNeeded(true);
+                }
+                if (nativeAttached) LyricIslandNativeRenderer.updatePositions();
                 MAIN_HANDLER.postDelayed(this, POSITION_TICK_MS);
             }
         }
@@ -103,7 +159,8 @@ public final class LyricIslandSystemUiHost {
                     }
                     final LyricSnapshot resolvedSnapshot = resolved;
                     MAIN_HANDLER.post(() -> {
-                        if (!enabled || (config.getSourceMode() != LyricSourceMode.LYRIC_INFO)) return;
+                        if (!enabled || (config.getSourceMode() != LyricSourceMode.LYRIC_INFO
+                                && config.getSourceMode() != LyricSourceMode.MEDIA_FALLBACK)) return;
                         if (resolvedSnapshot == null) {
                             latestSnapshot = null;
                             CLOCK.reset();
@@ -111,7 +168,9 @@ public final class LyricIslandSystemUiHost {
                             return;
                         }
                         latestSnapshot = resolvedSnapshot;
-                        CLOCK.update(resolvePlayback(resolvedSnapshot), android.os.SystemClock.elapsedRealtime());
+                        // LyricResolver already read the MediaSession on FALLBACK_EXECUTOR. Do
+                        // not query the same controller again on the SystemUI main looper.
+                        CLOCK.update(resolvedSnapshot.getPlayback(), android.os.SystemClock.elapsedRealtime());
                         publishIfNeeded(false);
                         if (CLOCK.isActive()) {
                             MAIN_HANDLER.removeCallbacks(POSITION_TICK);
@@ -227,37 +286,45 @@ public final class LyricIslandSystemUiHost {
         lastPublishElapsed = 0L;
         lastPublishedPosition = Long.MIN_VALUE;
         lastPublishedContentHash = 0;
+        resetMediaCaches();
         cancelNotification();
         Log.i(TAG, "SuperLyric listener stopped");
+    }
+
+    private static void resetMediaCaches() {
+        playbackCacheKey = "";
+        playbackCache = null;
+        playbackCacheElapsed = 0L;
+        lastAppliedProviderPlayback = null;
+        artworkCacheKey = "";
+        artworkCache = Collections.emptyList();
+        artworkCacheElapsed = 0L;
     }
 
     private static void onSnapshot(LyricSnapshot snapshot, LyricSourceMode sourceMode) {
         if (!enabled || config.getSourceMode() != sourceMode || snapshot == null) return;
         final LyricSnapshot incoming = snapshot;
         MAIN_HANDLER.post(() -> {
-            if (!enabled) return;
+            // A source switch can happen while this callback is queued on the main looper. Do
+            // not let a stale provider snapshot overwrite the newly selected source state.
+            if (!enabled || config.getSourceMode() != sourceMode) return;
             LyricSnapshot effective = incoming;
             if (effective.getArtworkColors() == null || effective.getArtworkColors().isEmpty()) {
-                try {
-                    java.util.List<Integer> artworkColors =
-                            LyricPlaybackResolver.INSTANCE.artworkColors(
-                                    appContext,
-                                    effective.getPublisher());
-                    if (artworkColors != null && !artworkColors.isEmpty()) {
-                        effective = effective.copy(
-                                effective.getPublisher(),
-                                effective.getLine(),
-                                effective.getSecondary(),
-                                effective.getTranslation(),
-                                effective.getTitle(),
-                                effective.getArtist(),
-                                effective.getAlbum(),
-                                artworkColors,
-                                effective.getPlayback(),
-                                effective.getStopped());
-                    }
-                } catch (Throwable ignored) {
-                    // Artwork is optional; lyric delivery must continue without palette data.
+                // Use a previously resolved palette immediately, then refresh it off the main
+                // looper when this track has not been seen before.
+                java.util.List<Integer> cachedArtwork = cachedArtworkFor(mediaKey(effective));
+                if (cachedArtwork != null && !cachedArtwork.isEmpty()) {
+                    effective = effective.copy(
+                            effective.getPublisher(),
+                            effective.getLine(),
+                            effective.getSecondary(),
+                            effective.getTranslation(),
+                            effective.getTitle(),
+                            effective.getArtist(),
+                            effective.getAlbum(),
+                            cachedArtwork,
+                            effective.getPlayback(),
+                            effective.getStopped());
                 }
             }
             latestSnapshot = effective;
@@ -267,9 +334,8 @@ public final class LyricIslandSystemUiHost {
                 LyricIslandNativeRenderer.clearAll();
                 return;
             }
-            if (effective.getPlayback() != null) {
-                CLOCK.update(resolvePlayback(effective), android.os.SystemClock.elapsedRealtime());
-            }
+            scheduleArtworkResolve(effective, sourceMode);
+            applySnapshotPlayback(effective, sourceMode, false);
             publishIfNeeded(false);
             if (CLOCK.isActive()) {
                 MAIN_HANDLER.removeCallbacks(POSITION_TICK);
@@ -284,30 +350,198 @@ public final class LyricIslandSystemUiHost {
         if (!enabled || context == null || snapshot == null || snapshot.getStopped()) return;
         long now = android.os.SystemClock.elapsedRealtime();
         if (snapshot.getPlayback() != null) {
-            CLOCK.update(resolvePlayback(snapshot), now);
+            if (positionTick) {
+                // The clock already interpolates between source/resolver anchors. Re-applying a
+                // cached MediaSession position on every 50 ms tick would reset that anchor and
+                // make lyric progress appear frozen until the next Binder refresh.
+                resolvePlaybackForSource(snapshot);
+            } else {
+                applySnapshotPlayback(snapshot, config.getSourceMode(), false);
+            }
         }
         LyricLine line = snapshot.getLine();
         long position = CLOCK.positionAt(now);
         int contentHash = contentHash(snapshot, config);
         boolean contentChanged = contentHash != lastPublishedContentHash;
         if (!contentChanged && position == lastPublishedPosition) return;
+        // A bound native player slot receives position updates directly from POSITION_TICK. Do
+        // not rebuild/cancel the fallback notification every 120ms while the shade animation is
+        // running; that Binder work is only needed when content/config changes.
+        if (positionTick && !contentChanged && LyricIslandNativeRenderer.hasAttachedSlot()) return;
         if (positionTick && !contentChanged && now - lastPublishElapsed < PUBLISH_INTERVAL_MS) return;
         if (!positionTick && !contentChanged && now - lastPublishElapsed < 16L) return;
         publish(context, snapshot, line, position, contentHash);
     }
 
-    private static io.github.superisland.source.lyric.LyricPlayback resolvePlayback(
+    /**
+     * Returns the latest cached MediaSession state and schedules a refresh when it is stale.
+     * MediaSessionManager.getActiveSessions() is a Binder call and must never run from a 50 ms
+     * SystemUI animation tick.
+     */
+    private static io.github.superisland.source.lyric.LyricPlayback resolvePlaybackForSource(
             LyricSnapshot snapshot) {
-        Context context = appContext;
-        if (context == null || snapshot == null) {
-            return snapshot == null || snapshot.getPlayback() == null
-                    ? new io.github.superisland.source.lyric.LyricPlayback()
-                    : snapshot.getPlayback();
+        if (snapshot == null || snapshot.getPlayback() == null) {
+            return new io.github.superisland.source.lyric.LyricPlayback();
         }
-        return LyricPlaybackResolver.INSTANCE.resolve(
-                context,
-                snapshot.getPublisher(),
-                snapshot.getPlayback());
+        if (config.getSourceMode() == LyricSourceMode.LYRICON
+                || config.getSourceMode() == LyricSourceMode.LYRIC_INFO
+                || config.getSourceMode() == LyricSourceMode.MEDIA_FALLBACK) {
+            return snapshot.getPlayback();
+        }
+        schedulePlaybackResolve(snapshot);
+        // Keep the provider's latest anchor for this frame. A cached MediaSession result may be
+        // older than a seek/pause event just delivered by SuperLyric; the async resolver callback
+        // will replace this anchor when its Binder read completes.
+        return snapshot.getPlayback();
+    }
+
+    /** Applies only authoritative/new provider anchors; high-frequency placeholders must not
+     * rewind the interpolated clock between asynchronous MediaSession reads. */
+    private static void applySnapshotPlayback(
+            LyricSnapshot snapshot,
+            LyricSourceMode sourceMode,
+            boolean force) {
+        if (snapshot == null || snapshot.getPlayback() == null) return;
+        io.github.superisland.source.lyric.LyricPlayback playback = snapshot.getPlayback();
+        if (sourceMode == LyricSourceMode.SUPER_LYRIC) {
+            schedulePlaybackResolve(snapshot);
+            if (!force && !hasPlaybackSignal(playback)) return;
+            if (!force && playback.equals(lastAppliedProviderPlayback)) return;
+            lastAppliedProviderPlayback = playback;
+        }
+        CLOCK.update(playback, android.os.SystemClock.elapsedRealtime());
+    }
+
+    private static boolean hasPlaybackSignal(
+            io.github.superisland.source.lyric.LyricPlayback playback) {
+        return playback != null && (playback.isPlaying()
+                || playback.getPositionMs() > 0L
+                || playback.getDurationMs() > 0L
+                || playback.getSpeed() != 1f);
+    }
+
+    private static String mediaKey(LyricSnapshot snapshot) {
+        if (snapshot == null) return "";
+        return String.valueOf(snapshot.getPublisher()) + '\u0000'
+                + String.valueOf(snapshot.getTitle()) + '\u0000'
+                + String.valueOf(snapshot.getArtist()) + '\u0000'
+                + String.valueOf(snapshot.getAlbum());
+    }
+
+    private static java.util.List<Integer> cachedArtworkFor(String key) {
+        java.util.List<Integer> cached = artworkCache;
+        return key.equals(artworkCacheKey) ? cached : Collections.emptyList();
+    }
+
+    private static void schedulePlaybackResolve(LyricSnapshot snapshot) {
+        Context context = appContext;
+        if (context == null || snapshot == null || snapshot.getPublisher() == null
+                || snapshot.getPublisher().isBlank()) return;
+        final String key = mediaKey(snapshot);
+        final long now = android.os.SystemClock.elapsedRealtime();
+        if (key.equals(playbackCacheKey)
+                && now - playbackCacheElapsed < PLAYBACK_RESOLVE_INTERVAL_MS) return;
+        if (!PLAYBACK_QUERY_RUNNING.compareAndSet(false, true)) return;
+        final String publisher = snapshot.getPublisher();
+        final io.github.superisland.source.lyric.LyricPlayback fallback = snapshot.getPlayback();
+        MEDIA_EXECUTOR.execute(() -> {
+            io.github.superisland.source.lyric.LyricPlayback resolved;
+            try {
+                resolved = LyricPlaybackResolver.INSTANCE.resolve(context, publisher, fallback);
+            } catch (Throwable error) {
+                resolved = fallback;
+            }
+            final io.github.superisland.source.lyric.LyricPlayback result = resolved;
+            MAIN_HANDLER.post(() -> {
+                PLAYBACK_QUERY_RUNNING.set(false);
+                final LyricSnapshot current = latestSnapshot;
+                if (!enabled || config.getSourceMode() != LyricSourceMode.SUPER_LYRIC
+                        || current == null || current.getStopped() || !key.equals(mediaKey(current))) {
+                    if (enabled && current != null && !current.getStopped()
+                            && config.getSourceMode() == LyricSourceMode.SUPER_LYRIC
+                            && !key.equals(mediaKey(current))) {
+                        schedulePlaybackResolve(current);
+                    }
+                    return;
+                }
+                playbackCacheKey = key;
+                playbackCache = result;
+                playbackCacheElapsed = android.os.SystemClock.elapsedRealtime();
+                latestSnapshot = current.copy(
+                        current.getPublisher(),
+                        current.getLine(),
+                        current.getSecondary(),
+                        current.getTranslation(),
+                        current.getTitle(),
+                        current.getArtist(),
+                        current.getAlbum(),
+                        current.getArtworkColors(),
+                        result,
+                        current.getStopped());
+                CLOCK.update(result, android.os.SystemClock.elapsedRealtime());
+                lastAppliedProviderPlayback = result;
+                publishIfNeeded(false);
+                if (CLOCK.isActive()) {
+                    MAIN_HANDLER.removeCallbacks(POSITION_TICK);
+                    MAIN_HANDLER.postDelayed(POSITION_TICK, POSITION_TICK_MS);
+                }
+            });
+        });
+    }
+
+    private static void scheduleArtworkResolve(
+            LyricSnapshot snapshot,
+            LyricSourceMode sourceMode) {
+        if (snapshot == null || (snapshot.getArtworkColors() != null
+                && !snapshot.getArtworkColors().isEmpty())) return;
+        Context context = appContext;
+        if (context == null || snapshot.getPublisher() == null || snapshot.getPublisher().isBlank()) return;
+        final String key = mediaKey(snapshot);
+        final long now = android.os.SystemClock.elapsedRealtime();
+        if (key.equals(artworkCacheKey)
+                && now - artworkCacheElapsed < ARTWORK_RESOLVE_INTERVAL_MS) return;
+        if (!ARTWORK_QUERY_RUNNING.compareAndSet(false, true)) return;
+        final String publisher = snapshot.getPublisher();
+        MEDIA_EXECUTOR.execute(() -> {
+            java.util.List<Integer> resolved;
+            try {
+                resolved = LyricPlaybackResolver.INSTANCE.artworkColors(context, publisher);
+            } catch (Throwable error) {
+                resolved = Collections.emptyList();
+            }
+            if (resolved == null) resolved = Collections.emptyList();
+            final java.util.List<Integer> result = Collections.unmodifiableList(
+                    new java.util.ArrayList<>(resolved));
+            MAIN_HANDLER.post(() -> {
+                ARTWORK_QUERY_RUNNING.set(false);
+                artworkCacheKey = key;
+                artworkCache = result;
+                artworkCacheElapsed = android.os.SystemClock.elapsedRealtime();
+                final LyricSnapshot current = latestSnapshot;
+                if (!enabled || current == null || current.getStopped()) return;
+                if (config.getSourceMode() != sourceMode || !key.equals(mediaKey(current))) {
+                    if (current.getArtworkColors() == null || current.getArtworkColors().isEmpty()) {
+                        scheduleArtworkResolve(current, config.getSourceMode());
+                    }
+                    return;
+                }
+                if (!result.isEmpty() && (current.getArtworkColors() == null
+                        || current.getArtworkColors().isEmpty())) {
+                    latestSnapshot = current.copy(
+                            current.getPublisher(),
+                            current.getLine(),
+                            current.getSecondary(),
+                            current.getTranslation(),
+                            current.getTitle(),
+                            current.getArtist(),
+                            current.getAlbum(),
+                            result,
+                            current.getPlayback(),
+                            current.getStopped());
+                    publishIfNeeded(false);
+                }
+            });
+        });
     }
 
     private static void publish(
@@ -317,8 +551,6 @@ public final class LyricIslandSystemUiHost {
             long position,
             int contentHash) {
         try {
-            NotificationManager manager = context.getSystemService(NotificationManager.class);
-            if (manager == null) return;
             LyricIslandConfig currentConfig = config;
             // Resolve the configured slots before deciding whether anything can be published.
             // MUSIC_INFO is a valid standalone layout and must not be rejected by the old
@@ -344,18 +576,45 @@ public final class LyricIslandSystemUiHost {
             Integer progress = LyricProgress.INSTANCE.lineProgress(line, position);
             boolean showProgress = currentConfig.getShowProgress() && progress != null;
             int progressValue = progress == null ? 0 : progress;
-            String leftText = currentConfig.lyricSlot() == LyricSlot.RIGHT ? secondary : primary;
-            String rightText = currentConfig.lyricSlot() == LyricSlot.RIGHT ? primary : secondary;
-            FocusNotificationPublisher publisher =
-                    new FocusNotificationPublisher(context, CHANNEL_NAME);
             boolean nativeAttached = LyricIslandNativeRenderer.hasAttachedSlot();
             if (!nativeAttached) {
                 // FocusNotificationRequest intentionally requires both text fields to be
-                // non-blank. Keep this compatibility fill local to the fallback request: the
-                // native renderer still receives the original slot values, so an explicit NONE
-                // slot is never turned into a duplicate lyric on the player's own island.
-                String fallbackLeft = leftText;
-                String fallbackRight = rightText;
+                // non-blank. A native lyric canvas can render a main line plus translation in
+                // one slot, while the Focus fallback has one line per module. Never replace the
+                // main lyric with a translation/next line there: a one-lyric layout gets the
+                // main lyric first and preserves the opposite music-info slot; split lyrics keep
+                // their main/secondary pair.
+                boolean leftLyric = currentConfig.getContentLeft()
+                        == io.github.superisland.source.lyric.IslandContentMode.LYRIC;
+                boolean rightLyric = currentConfig.getContentRight()
+                        == io.github.superisland.source.lyric.IslandContentMode.LYRIC;
+                String fallbackLeft;
+                String fallbackRight;
+                if (currentConfig.getLyricMode() == 1 || (leftLyric && rightLyric)) {
+                    fallbackLeft = LyricPayloadBuilder.INSTANCE.contentFor(
+                            snapshot,
+                            currentConfig,
+                            io.github.superisland.source.lyric.IslandContentMode.LYRIC,
+                            true);
+                    fallbackRight = LyricPayloadBuilder.INSTANCE.contentFor(
+                            snapshot,
+                            currentConfig,
+                            io.github.superisland.source.lyric.IslandContentMode.LYRIC,
+                            false);
+                } else if (leftLyric || rightLyric) {
+                    fallbackLeft = LyricPayloadBuilder.INSTANCE.contentFor(
+                            snapshot,
+                            currentConfig,
+                            io.github.superisland.source.lyric.IslandContentMode.LYRIC,
+                            true);
+                    fallbackRight = leftLyric ? secondary : primary;
+                } else {
+                    fallbackLeft = primary;
+                    fallbackRight = secondary;
+                }
+                // Keep this compatibility fill local to the fallback request: the native
+                // renderer still receives its original slot values, so an explicit NONE slot is
+                // never turned into a duplicate lyric on the player's own island.
                 if (fallbackLeft.isBlank()) fallbackLeft = fallbackRight;
                 if (fallbackRight.isBlank()) fallbackRight = fallbackLeft;
                 if (fallbackLeft.isBlank() || fallbackRight.isBlank()) {
@@ -370,27 +629,49 @@ public final class LyricIslandSystemUiHost {
                         !showProgress,
                         fallbackRight,
                         showProgress);
-                Notification notification = publisher.buildSystemUiLyricNotification(
-                        request,
-                        android.R.drawable.ic_media_play,
-                        null,
-                        null,
-                        true,
-                        false,
-                        null,
-                        MODULE_PACKAGE);
-                manager.notify(LyricIslandContract.LYRIC_NOTIFICATION_ID, notification);
+                // FocusNotificationPublisher.ensureChannel() and notify() both cross the
+                // NotificationManager Binder. Keep the whole build/post operation off the
+                // SystemUI main looper so shade expansion never waits for notification service.
+                markFallbackNotificationMayExist();
+                enqueueNotificationOperation(() -> {
+                    try {
+                        NotificationManager manager = context.getSystemService(NotificationManager.class);
+                        if (manager == null) return;
+                        FocusNotificationPublisher publisher =
+                                new FocusNotificationPublisher(context, CHANNEL_NAME);
+                        Notification notification = publisher.buildSystemUiLyricNotification(
+                                request,
+                                android.R.drawable.ic_media_play,
+                                null,
+                                null,
+                                true,
+                                false,
+                                null,
+                                MODULE_PACKAGE);
+                        manager.notify(LyricIslandContract.LYRIC_NOTIFICATION_ID, notification);
+                    } catch (Throwable error) {
+                        Log.e(TAG, "Could not publish lyric island", error);
+                    }
+                });
             } else {
                 // The player's own island is the primary surface while a native slot is attached.
-                manager.cancel(LyricIslandContract.LYRIC_NOTIFICATION_ID);
+                enqueueNotificationCancel(context);
             }
             lastPublishElapsed = android.os.SystemClock.elapsedRealtime();
             lastPublishedPosition = position;
             lastPublishedContentHash = contentHash;
-            LyricIslandNativeRenderer.refreshAll();
+            // Word-level providers can emit several snapshots within one frame. Match
+            // HyperLyric's debounced content coordinator so each frame performs at most one
+            // native-tree reconciliation while the latest snapshot remains authoritative.
+            if (nativeAttached) scheduleNativeRefresh();
         } catch (Throwable error) {
             Log.e(TAG, "Could not publish lyric island", error);
         }
+    }
+
+    private static void scheduleNativeRefresh() {
+        if (!NATIVE_REFRESH_PENDING.compareAndSet(false, true)) return;
+        MAIN_HANDLER.postDelayed(NATIVE_REFRESH, 16L);
     }
 
     /** True only while a module-owned lyric snapshot is eligible for native slot rendering. */
@@ -469,13 +750,73 @@ public final class LyricIslandSystemUiHost {
 
     /** Cancels only the optional Focus fallback; native island slots remain untouched. */
     public static void suppressFallbackNotification() {
+        enqueueNotificationCancel(appContext);
+    }
+
+    /**
+     * Keeps at most one notification operation queued. Position ticks can outpace the OEM
+     * notification Binder; retaining stale payloads would otherwise create an unbounded queue
+     * while the user is dragging the shade.
+     */
+    private static void enqueueNotificationOperation(Runnable operation) {
+        if (operation == null) return;
+        synchronized (NOTIFICATION_QUEUE_LOCK) {
+            pendingNotificationOperation = operation;
+            if (notificationWorkerRunning) return;
+            notificationWorkerRunning = true;
+        }
         try {
-            Context context = appContext;
-            NotificationManager manager = context == null
-                    ? null : context.getSystemService(NotificationManager.class);
-            if (manager != null) manager.cancel(LyricIslandContract.LYRIC_NOTIFICATION_ID);
+            NOTIFICATION_EXECUTOR.execute(() -> {
+                while (true) {
+                    Runnable next;
+                    synchronized (NOTIFICATION_QUEUE_LOCK) {
+                        next = pendingNotificationOperation;
+                        pendingNotificationOperation = null;
+                        if (next == null) {
+                            notificationWorkerRunning = false;
+                            return;
+                        }
+                    }
+                    try {
+                        next.run();
+                    } catch (Throwable error) {
+                        Log.w(TAG, "Notification operation failed", error);
+                    }
+                }
+            });
         } catch (Throwable error) {
-            Log.w(TAG, "Could not suppress lyric fallback notification", error);
+            synchronized (NOTIFICATION_QUEUE_LOCK) {
+                notificationWorkerRunning = false;
+            }
+            Log.w(TAG, "Could not schedule notification operation", error);
+        }
+    }
+
+    private static void enqueueNotificationCancel(Context context) {
+        if (context == null) return;
+        if (!takeFallbackNotificationMayExist()) return;
+        enqueueNotificationOperation(() -> {
+            try {
+                NotificationManager manager = context.getSystemService(NotificationManager.class);
+                if (manager != null) manager.cancel(LyricIslandContract.LYRIC_NOTIFICATION_ID);
+            } catch (Throwable error) {
+                Log.w(TAG, "Could not cancel lyric fallback notification", error);
+            }
+        });
+    }
+
+    private static void markFallbackNotificationMayExist() {
+        synchronized (NOTIFICATION_QUEUE_LOCK) {
+            fallbackNotificationMayExist = true;
+        }
+    }
+
+    /** Returns true once for each fallback publish, so redundant native-frame cancels are free. */
+    private static boolean takeFallbackNotificationMayExist() {
+        synchronized (NOTIFICATION_QUEUE_LOCK) {
+            if (!fallbackNotificationMayExist) return false;
+            fallbackNotificationMayExist = false;
+            return true;
         }
     }
 
@@ -490,8 +831,8 @@ public final class LyricIslandSystemUiHost {
     }
 
     public static void clearNative(ViewGroup root) {
-        LyricIslandNativeRenderer.clearRoot(root);
-        if (!LyricIslandNativeRenderer.hasAttachedSlot()) {
+        boolean cleared = LyricIslandNativeRenderer.clearRoot(root);
+        if (cleared && !LyricIslandNativeRenderer.hasAttachedSlot()) {
             // A layout mismatch or player switch may happen without a new Binder line. Restore
             // the explicitly documented Focus fallback only after the native surface is gone.
             MAIN_HANDLER.post(() -> publishIfNeeded(false));
@@ -520,11 +861,32 @@ public final class LyricIslandSystemUiHost {
         LyricIslandNativeRenderer.freeze(root);
     }
 
+    /** Coalesces fake-transition callbacks before touching the SystemUI view tree. */
+    public static void scheduleRenderAndFreezeNative(ViewGroup root, Object islandData) {
+        if (root == null) return;
+        synchronized (NATIVE_FREEZE_RENDER_PENDING) {
+            if (NATIVE_FREEZE_RENDER_PENDING.put(root, Boolean.TRUE) != null) return;
+        }
+        MAIN_HANDLER.post(() -> {
+            synchronized (NATIVE_FREEZE_RENDER_PENDING) {
+                NATIVE_FREEZE_RENDER_PENDING.remove(root);
+            }
+            try {
+                renderAndFreezeNative(root, islandData);
+            } catch (Throwable error) {
+                clearNative(root);
+                Log.w(TAG, "Could not render frozen native lyric island", error);
+            }
+        });
+    }
+
     private static int contentHash(LyricSnapshot snapshot, LyricIslandConfig currentConfig) {
         int result = 17;
         result = 31 * result + (snapshot.getLine() == null ? 0 : snapshot.getLine().hashCode());
         result = 31 * result + (snapshot.getTranslation() == null ? 0 : snapshot.getTranslation().hashCode());
         result = 31 * result + (snapshot.getSecondary() == null ? 0 : snapshot.getSecondary().hashCode());
+        result = 31 * result + (snapshot.getArtworkColors() == null
+                ? 0 : snapshot.getArtworkColors().hashCode());
         result = 31 * result + java.util.Objects.hash(
                 snapshot.getPublisher(), snapshot.getTitle(), snapshot.getArtist(), snapshot.getAlbum());
         result = 31 * result + currentConfig.hashCode();
@@ -532,14 +894,7 @@ public final class LyricIslandSystemUiHost {
     }
 
     private static void cancelNotification() {
-        try {
-            Context context = appContext;
-            NotificationManager manager = context == null
-                    ? null : context.getSystemService(NotificationManager.class);
-        if (manager != null) manager.cancel(LyricIslandContract.LYRIC_NOTIFICATION_ID);
-            LyricIslandNativeRenderer.clearAll();
-        } catch (Throwable error) {
-            Log.w(TAG, "Could not cancel lyric island", error);
-        }
+        enqueueNotificationCancel(appContext);
+        LyricIslandNativeRenderer.clearAll();
     }
 }

@@ -25,6 +25,10 @@ enum class LyricSourceMode(val wireValue: String) {
                 }
         }
     }
+
+    /** Maps retired local compatibility values to the closest public HyperLyric source. */
+    fun publicPickerMode(): LyricSourceMode =
+        if (this == MEDIA_FALLBACK) LYRIC_INFO else this
 }
 
 /** Legacy compatibility enum; the upstream picker uses animEnabled/animId. */
@@ -255,9 +259,9 @@ data class LyricIslandConfig(
     val marqueeInfinite: Boolean = false,
     val marqueeStopEnd: Boolean = true,
     val metadataMarqueeMode: Boolean = true,
-    val metadataMarqueeSpeed: Int = 10,
-    val metadataMarqueeDelay: Int = 4000,
-    val metadataMarqueeLoopDelay: Int = 5000,
+    val metadataMarqueeSpeed: Int = 25,
+    val metadataMarqueeDelay: Int = 1000,
+    val metadataMarqueeLoopDelay: Int = 0,
     val metadataMarqueeInfinite: Boolean = true,
 
     // Verbatim lyrics
@@ -268,8 +272,8 @@ data class LyricIslandConfig(
     val wordMotionLatinByCharacter: Boolean = false,
     val wordMotionCjkLift: Float = 0.05f,
     val wordMotionCjkWave: Float = 2.8f,
-    val wordMotionLatinLift: Float = 0.08f,
-    val wordMotionLatinWave: Float = 2.0f,
+    val wordMotionLatinLift: Float = 0.06f,
+    val wordMotionLatinWave: Float = 3.6f,
 
     // Double-line content
     val disableTranslation: Boolean = false,
@@ -350,10 +354,19 @@ data class LyricIslandConfig(
             metadataMarqueeSpeed = metadataMarqueeSpeed.coerceIn(5, 100),
             metadataMarqueeDelay = metadataMarqueeDelay.coerceIn(0, 10_000),
             metadataMarqueeLoopDelay = metadataMarqueeLoopDelay.coerceIn(0, 10_000),
+            // `syllableLineDisplay` is an old local compatibility value. It has no public
+            // control, but configurations that already contain it must keep their behavior.
+            syllableHighlight = syllableHighlight && syllableRelative,
+            // The former `displayTranslation` field is not user-facing. Keep it as a wire
+            // mirror so an old false value cannot override the public translation switch.
+            displayTranslation = !disableTranslation,
+            // Song-level automatic translation switching is deliberately outside the basic
+            // Super Island lyric scope. Retire a persisted legacy value without rejecting it.
+            autoSwitchTranslation = false,
             wordMotionCjkLift = wordMotionCjkLift.takeIf { it.isFinite() }?.coerceIn(0f, 0.2f) ?: 0.05f,
             wordMotionCjkWave = wordMotionCjkWave.takeIf { it.isFinite() }?.coerceIn(0f, 8f) ?: 2.8f,
-            wordMotionLatinLift = wordMotionLatinLift.takeIf { it.isFinite() }?.coerceIn(0f, 0.2f) ?: 0.08f,
-            wordMotionLatinWave = wordMotionLatinWave.takeIf { it.isFinite() }?.coerceIn(0f, 8f) ?: 2f,
+            wordMotionLatinLift = wordMotionLatinLift.takeIf { it.isFinite() }?.coerceIn(0f, 0.2f) ?: 0.06f,
+            wordMotionLatinWave = wordMotionLatinWave.takeIf { it.isFinite() }?.coerceIn(0f, 8f) ?: 3.6f,
             customFontPath = customFontPath.take(512),
             animId = animId.takeIf { it.isNotBlank() }?.take(64) ?: "default",
             // HyperLyric accepts -50..100 in the editor; the SystemUI geometry layer clamps

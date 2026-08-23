@@ -209,6 +209,12 @@ class RichLyricLineView(
         }
     }
 
+    fun clearMetadataMarqueeConfig() {
+        main.clearMarqueeOverride()
+        secondary.clearMarqueeOverride()
+        requestMarquee = false
+    }
+
     fun setStyle(style: LyricViewStyle) {
         displayLineByLine = style.lineDisplay
         assembler.updateFlags(
@@ -497,4 +503,3 @@ class RichLyricLineView(
         const val NEXT_LINE_PREVIEW_FADE_DURATION = 140L
     }
 }
-

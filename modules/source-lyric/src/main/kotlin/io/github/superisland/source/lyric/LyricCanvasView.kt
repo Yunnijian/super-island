@@ -2,6 +2,7 @@ package io.github.superisland.source.lyric
 
 import android.content.Context
 import android.graphics.Paint
+import android.graphics.Color
 import android.graphics.Typeface
 import android.util.AttributeSet
 import android.widget.FrameLayout
@@ -34,6 +35,7 @@ class LyricCanvasView @JvmOverloads constructor(
     private val richView = RichLyricLineView(context)
     private var currentConfig = LyricIslandConfig()
     private var currentArtworkColors: List<Int> = emptyList()
+    private var statusBarTextColor: Int = Color.WHITE
     private var metadataSnapshot: LyricSnapshot? = null
     private var lastContentSignature: Int? = null
 
@@ -78,7 +80,7 @@ class LyricCanvasView @JvmOverloads constructor(
         ) {
             currentConfig = normalizedConfig
             currentArtworkColors = snapshot.artworkColors
-            applyConfig(currentConfig, currentArtworkColors)
+            applyConfig(currentConfig, currentArtworkColors, metadataMode = false)
         }
         val line = snapshot.line?.toRichLine(snapshot.translation, snapshot.secondary)
             ?: placeholderLine(snapshot, normalizedConfig)
@@ -122,17 +124,77 @@ class LyricCanvasView @JvmOverloads constructor(
         richView.setPlaybackActive(active)
     }
 
+    /**
+     * Updates the color used by HyperLyric's "follow status bar" option.  SystemUI owns the
+     * appearance flag, so the native host supplies the resolved color when it binds a slot.
+     */
+    fun setStatusBarTextColor(color: Int) {
+        if (statusBarTextColor == color) return
+        statusBarTextColor = color
+        applyConfig(
+            currentConfig,
+            currentArtworkColors,
+            centerOverride = if (metadataSnapshot != null) currentConfig.centerMusicInfo else null,
+            metadataMode = metadataSnapshot != null,
+        )
+    }
+
+    /** Returns the configured side width for the native slot wrapper. */
+    fun configuredWidthPx(config: LyricIslandConfig = currentConfig): Int {
+        val density = resources.displayMetrics.density
+        val minWidth = LyricIslandWidthPolicy.minIslandWidth(
+            LyricIslandWidthPolicy.isAlbumCoverVisible(config.albumCoverStyle),
+            LyricIslandWidthPolicy.isMusicWaveVisible(config.musicWaveStyle),
+        )
+        val maxWidth = LyricIslandWidthPolicy.maxIslandWidth(
+            LyricIslandWidthPolicy.isMusicWaveVisible(config.musicWaveStyle),
+            config.disableWidthLimit,
+        ).coerceAtLeast(minWidth)
+        val targetDp = if (config.widthMode == 0) {
+            config.rightContentMaxWidth
+        } else {
+            // "仅歌词" follows the primary lyric line; translation/preview rows must not
+            // widen the native island in that mode. The combined width remains HyperLyric's
+            // default basis.
+            val measured = if (config.dynamicWidthBasis == 1) {
+                richView.main.lineWidth
+            } else {
+                maxOf(richView.main.lineWidth, richView.secondary.lineWidth)
+            }
+            ((measured / density) +
+                if (tag == "SUPER_ISLAND_LYRIC_RIGHT") {
+                    config.rightPaddingLeft + config.rightPaddingRight
+                } else {
+                    config.leftPaddingLeft + config.leftPaddingRight
+                }).toInt()
+                .coerceIn(config.dynamicMinWidth, config.dynamicMaxWidth)
+        }
+        return (targetDp.coerceIn(minWidth, maxWidth) * density).toInt().coerceAtLeast(1)
+    }
+
     /** Renders HyperLyric's configurable two-row music metadata in a native island slot. */
     fun setMetadata(snapshot: LyricSnapshot, config: LyricIslandConfig = currentConfig) {
         val normalizedConfig = config.normalized()
+        val metadataMarqueeWasEnabled = currentConfig.metadataMarqueeMode
+        val hadMetadataLine = metadataSnapshot != null
         applySlotPadding(normalizedConfig)
         if (normalizedConfig != currentConfig || snapshot.artworkColors != currentArtworkColors) {
             currentConfig = normalizedConfig
             currentArtworkColors = snapshot.artworkColors
-            applyConfig(currentConfig, currentArtworkColors, centerOverride = normalizedConfig.centerMusicInfo)
+            applyConfig(
+                currentConfig,
+                currentArtworkColors,
+                centerOverride = normalizedConfig.centerMusicInfo,
+                metadataMode = true,
+            )
         } else if (metadataSnapshot == null) {
             // A slot can switch from lyrics to metadata without recreating the CanvasView.
-            applyConfig(currentConfig, currentArtworkColors, centerOverride = normalizedConfig.centerMusicInfo)
+            applyConfig(
+                currentConfig,
+                currentArtworkColors,
+                centerOverride = normalizedConfig.centerMusicInfo,
+                metadataMode = true,
+            )
         }
         val first = metadataFields(normalizedConfig.musicInfoFirstLine)
             .mapNotNull { metadataValue(it, snapshot) }
@@ -156,8 +218,21 @@ class LyricCanvasView @JvmOverloads constructor(
         }
         metadataSnapshot = snapshot
         val signature = lineSignature(metadataLine)
-        if (signature == lastContentSignature) return
-        richView.line = metadataLine
+        if (signature == lastContentSignature) {
+            // Clearing the metadata override also clears RichLyricLineView's pending request.
+            // Re-arm it only for a false -> true transition; position ticks must stay cheap.
+            if (!metadataMarqueeWasEnabled && normalizedConfig.metadataMarqueeMode) {
+                richView.post { richView.requestStartMarquee() }
+            }
+            return
+        }
+        // Position-derived metadata (elapsed/progress) can change every clock tick. Preserve the
+        // current marquee/scroll state instead of rebuilding the line as a fresh lyric each time.
+        if (hadMetadataLine) {
+            richView.updateMetadataLine(metadataLine)
+        } else {
+            richView.line = metadataLine
+        }
         richView.setPlaybackActive(false)
         richView.setPosition(0L, 1f)
         if (normalizedConfig.metadataMarqueeMode) richView.post { richView.requestStartMarquee() }
@@ -182,6 +257,7 @@ class LyricCanvasView @JvmOverloads constructor(
         config: LyricIslandConfig,
         artworkColors: List<Int> = currentArtworkColors,
         centerOverride: Boolean? = null,
+        metadataMode: Boolean = false,
     ) {
         applySlotPadding(config)
         richView.displayTranslation = !config.disableTranslation && config.displayTranslation
@@ -206,15 +282,36 @@ class LyricCanvasView @JvmOverloads constructor(
             .ifEmpty { listOf(config.textColor) }
             .take(4)
         val primaryColors = when (config.textColorStyle) {
-            1, 2 -> coverColors.toIntArray()
+            // HyperLyric's cover-color mode is a solid swatch; the gradient mode is the only
+            // mode that feeds the full extracted palette to RichLyricLineView.
+            1 -> intArrayOf(coverColors.first())
+            2 -> coverColors.toIntArray()
+            3 -> intArrayOf(statusBarTextColor)
             else -> intArrayOf(config.textColor)
         }
         val highlightColors = when (config.textColorStyle) {
-            1, 2 -> intArrayOf(coverColors.first())
+            1 -> intArrayOf(coverColors.first())
+            2 -> intArrayOf(coverColors.first())
+            3 -> intArrayOf(statusBarTextColor)
             else -> intArrayOf(config.highlightColor)
         }
-        val marqueeEnabled = config.marqueeMode
-        val repeatCount = if (!marqueeEnabled) 0 else if (config.marqueeInfinite) -1 else 1
+        // HyperLyric builds styles per slot mode. Applying the metadata override to every
+        // canvas made its settings overwrite (or clear) the separate lyric marquee settings.
+        val marqueeEnabled = if (metadataMode) config.metadataMarqueeMode else config.marqueeMode
+        val marqueeSpeed = if (metadataMode) config.metadataMarqueeSpeed else config.marqueeSpeed
+        val marqueeDelay = if (metadataMode) config.metadataMarqueeDelay else config.marqueeDelay
+        val marqueeLoopDelay = if (metadataMode) {
+            config.metadataMarqueeLoopDelay
+        } else {
+            config.marqueeLoopDelay
+        }
+        val marqueeInfinite = if (metadataMode) {
+            config.metadataMarqueeInfinite
+        } else {
+            config.marqueeInfinite
+        }
+        val marqueeStopEnd = if (metadataMode) true else config.marqueeStopEnd
+        val repeatCount = if (!marqueeEnabled) 0 else if (marqueeInfinite) -1 else 1
         richView.setStyle(
             LyricViewStyle(
                 primary = TextLook(
@@ -225,7 +322,7 @@ class LyricCanvasView @JvmOverloads constructor(
                     relativeHighlight = config.syllableHighlight,
                 ),
                 secondary = TextLook(
-                    color = intArrayOf(config.secondaryTextColor),
+                    color = primaryColors,
                     size = secondarySize,
                     typeface = typeface,
                 ),
@@ -237,12 +334,12 @@ class LyricCanvasView @JvmOverloads constructor(
                 lineDisplay = config.syllableLineDisplay,
                 fadingEdge = (config.fadingEdgeLengthDp * density).toInt(),
                 marquee = Marquee(
-                    speed = if (marqueeEnabled) config.marqueeSpeed.toFloat() else 0f,
+                    speed = if (marqueeEnabled) marqueeSpeed.toFloat() else 0f,
                     spacing = 70f * density,
-                    initialDelay = config.marqueeDelay,
-                    loopDelay = config.marqueeLoopDelay,
+                    initialDelay = marqueeDelay,
+                    loopDelay = marqueeLoopDelay,
                     repeatCount = repeatCount,
-                    stopAtEnd = config.marqueeStopEnd,
+                    stopAtEnd = marqueeStopEnd,
                 ),
                 wordMotion = WordMotion(
                     enabled = config.wordMotionEnabled,
@@ -261,17 +358,7 @@ class LyricCanvasView @JvmOverloads constructor(
                 rightIfPossible = if (centerOverride != null) false else config.rightLyric,
             ),
         )
-        if (config.metadataMarqueeMode) {
-            val metadataRepeatCount = if (config.metadataMarqueeInfinite) -1 else 1
-            richView.setMetadataMarqueeConfig(
-                speed = config.metadataMarqueeSpeed.toFloat(),
-                initialDelay = config.metadataMarqueeDelay,
-                loopDelay = config.metadataMarqueeLoopDelay,
-                repeatCount = metadataRepeatCount,
-                stopAtEnd = true,
-            )
-        }
-        if (config.marqueeMode) {
+        if (marqueeEnabled) {
             // RichLyricLineView starts scrolling only after attachment and after its line model
             // has been measured. Posting mirrors HyperLyric's requestStartMarquee lifecycle.
             richView.post { richView.requestStartMarquee() }
@@ -333,11 +420,17 @@ class LyricCanvasView @JvmOverloads constructor(
         }
         val fixedWidth = config.rightContentMaxWidth.coerceAtLeast(22)
         val spec = if (config.widthMode == 1) {
+            // In lyric-only mode the metadata/translation rows must not make the dynamic island
+            // grow. The splitter still receives the same bounds, but the measured lyric text is
+            // the sole basis for the target width.
+            val lyricOnly = config.dynamicWidthBasis == 1
+            val primaryWidth = if (lyricOnly) primaryPaint.measureText(line.text.orEmpty()) else 0f
             RichLyricLineSplitter.ContainerWidthSpec.Dynamic(
                 leftMinWidthPx = contentWidth(config.dynamicMinWidth, true),
                 leftMaxWidthPx = contentWidth(config.dynamicMaxWidth, true),
                 rightMinWidthPx = contentWidth(config.dynamicMinWidth, false),
                 rightMaxWidthPx = contentWidth(config.dynamicMaxWidth, false),
+                basisWidthPx = primaryWidth.takeIf { lyricOnly && it > 0f },
             )
         } else {
             RichLyricLineSplitter.ContainerWidthSpec.Fixed(
@@ -445,8 +538,7 @@ class LyricCanvasView @JvmOverloads constructor(
         } else {
             val nextLineSource = currentConfig.sourceMode == LyricSourceMode.LYRICON ||
                 currentConfig.sourceMode == LyricSourceMode.LYRIC_INFO
-            val showNextLine = currentConfig.nextLyricLine && nextLineSource &&
-                (!currentConfig.autoSwitchTranslation || translated.isNullOrBlank())
+            val showNextLine = currentConfig.nextLyricLine && nextLineSource
             rich.copy(
                 translation = if (showTranslation && !showNextLine) translated else null,
                 translationWords = if (showTranslation && !showNextLine) translatedWords else null,

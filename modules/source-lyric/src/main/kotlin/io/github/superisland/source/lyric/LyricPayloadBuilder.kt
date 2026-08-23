@@ -274,14 +274,13 @@ object LyricPayloadBuilder {
         return ""
     }
 
-    /** HyperLyric's next-line preview suppresses translation until auto-switch permits it. */
+    /** Next-line preview takes ownership of the second line for its supported sources. */
     private fun usesNextLyricPreview(snapshot: LyricSnapshot, config: LyricIslandConfig): Boolean {
         if (!config.nextLyricLine) return false
         if (config.sourceMode != LyricSourceMode.LYRICON &&
             config.sourceMode != LyricSourceMode.LYRIC_INFO
         ) return false
-        val hasTranslation = !snapshot.translation?.text.isNullOrBlank()
-        return !config.autoSwitchTranslation || !hasTranslation
+        return true
     }
 
     private fun bounded(value: String?): String =

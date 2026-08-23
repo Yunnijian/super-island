@@ -158,6 +158,49 @@ class LyricIslandConfigCodecTest {
     }
 
     @Test
+    fun freshConfigUsesHyperLyricMarqueeAndWordMotionDefaults() {
+        val config = LyricIslandConfig()
+
+        assertEquals(25, config.metadataMarqueeSpeed)
+        assertEquals(1_000, config.metadataMarqueeDelay)
+        assertEquals(0, config.metadataMarqueeLoopDelay)
+        assertTrue(config.metadataMarqueeInfinite)
+        assertEquals(0.06f, config.wordMotionLatinLift)
+        assertEquals(3.6f, config.wordMotionLatinWave)
+    }
+
+    @Test
+    fun preservesHiddenLineDisplayAndNormalizesRetiredCompatibilityFields() {
+        val normalized = LyricIslandConfig(
+            syllableRelative = true,
+            syllableHighlight = true,
+            syllableLineDisplay = true,
+            disableTranslation = false,
+            displayTranslation = false,
+            autoSwitchTranslation = true,
+        ).normalized()
+
+        assertTrue(normalized.syllableRelative)
+        assertTrue(normalized.syllableHighlight)
+        assertTrue(normalized.syllableLineDisplay)
+        assertTrue(normalized.displayTranslation)
+        assertFalse(normalized.autoSwitchTranslation)
+    }
+
+    @Test
+    fun legacyDisplayTranslationCannotOverridePublicTranslationSwitch() {
+        val enabled = LyricIslandConfigCodec.decode(
+            "{\"schema\":2,\"disableTranslation\":false,\"displayTranslation\":false}",
+        )
+        val disabled = LyricIslandConfigCodec.decode(
+            "{\"schema\":2,\"disableTranslation\":true,\"displayTranslation\":true}",
+        )
+
+        assertTrue(enabled.displayTranslation)
+        assertFalse(disabled.displayTranslation)
+    }
+
+    @Test
     fun coverPickerOrderKeepsWireValuesStable() {
         assertEquals(listOf(0, 1, 3, 2, 4), LyricAlbumCoverStyle.pickerValues)
         assertEquals(2, LyricAlbumCoverStyle.pickerValues[3])

@@ -41,8 +41,14 @@ import top.yukonga.miuix.kmp.preference.ArrowPreference
 import top.yukonga.miuix.kmp.preference.OverlayDropdownPreference
 import top.yukonga.miuix.kmp.preference.SwitchPreference
 
+// MEDIA_FALLBACK is retained only for decoding old configurations. HyperLyric's basic source
+// picker exposes the three real providers, so the compatibility value must never be selectable.
 private val sourceLabels = listOf("Lyricon", "SuperLyric", "LyricInfo")
-private val sourceValues = listOf(LyricSourceMode.LYRICON, LyricSourceMode.SUPER_LYRIC, LyricSourceMode.LYRIC_INFO)
+private val sourceValues = listOf(
+    LyricSourceMode.LYRICON,
+    LyricSourceMode.SUPER_LYRIC,
+    LyricSourceMode.LYRIC_INFO,
+)
 private val animationLabels = listOf(
     "无动画", "默认", "渐隐渐现", "向上渐隐＆向上渐现", "向下渐隐＆向下渐现",
     "向左渐隐＆右侧渐现", "向左渐隐＆向上渐现", "向左渐隐＆缩放渐现", "向左渐隐＆柔缓着陆",
@@ -61,6 +67,58 @@ private val animationIds = listOf(
     "slide_out_right_fade_in_up", "slide_out_right_zoom_in", "slide_out_right_landing", "flip_out_x_flip_in_x",
     "flip_out_y_flip_in_y", "rotate_out_rotate_in", "zoom_out_zoom_in",
 )
+
+/** Entry pages mirror HyperLyric's compact settings surface. */
+enum class LyricConfigSection(val title: String) {
+    SOURCE("歌词源"),
+    ISLAND("超级岛"),
+    TEXT_STYLE("文字样式"),
+    SCROLL("滚动显示"),
+    VERBATIM("逐字歌词"),
+    TRANSLATION("翻译"),
+    ANIMATION("歌词切换动画"),
+    PROVIDER("歌词提供器"),
+}
+
+@Composable
+fun LyricSectionEntryPageMiuix(
+    config: LyricIslandConfig,
+    enabled: Boolean,
+    onSectionSelected: (LyricConfigSection) -> Unit,
+) {
+    SmallTitle(text = "自定义配置")
+    Card(modifier = Modifier.fillMaxWidth()) {
+        LyricConfigSection.entries
+            .filter { it != LyricConfigSection.PROVIDER || config.sourceMode == LyricSourceMode.LYRICON }
+            .forEach { section ->
+            ArrowPreference(
+                title = section.title,
+                summary = lyricSectionSummary(section, config),
+                enabled = enabled,
+                onClick = { onSectionSelected(section) },
+            )
+        }
+    }
+}
+
+private fun lyricSectionSummary(section: LyricConfigSection, config: LyricIslandConfig): String = when (section) {
+    LyricConfigSection.SOURCE -> when (config.sourceMode) {
+        LyricSourceMode.LYRICON -> "Lyricon"
+        LyricSourceMode.SUPER_LYRIC -> "SuperLyric"
+        LyricSourceMode.LYRIC_INFO -> "LyricInfo"
+        // Old builds persisted MEDIA_FALLBACK. Keep it out of the picker while showing the
+        // nearest public provider label instead of leaking an implementation-only option.
+        LyricSourceMode.MEDIA_FALLBACK -> "LyricInfo"
+    }
+    LyricConfigSection.ISLAND -> if (config.widthMode == 1) "动态长度" else "固定长度"
+    LyricConfigSection.PROVIDER -> "Lyricon 歌词提供器与时间偏移"
+    LyricConfigSection.TEXT_STYLE,
+    LyricConfigSection.SCROLL,
+    LyricConfigSection.VERBATIM,
+    LyricConfigSection.ANIMATION,
+    -> ""
+    LyricConfigSection.TRANSLATION -> "歌词翻译、下一句歌词等功能"
+}
 
 private data class IntEditorSpec(
     val title: String,
@@ -86,10 +144,15 @@ private fun <T> List<T>.safeIndex(value: T): Int = indexOf(value).takeIf { it >=
 fun LyricConfigurationMiuix(
     config: LyricIslandConfig,
     onConfigChange: (LyricIslandConfig) -> Unit,
+    section: LyricConfigSection? = null,
+    enabled: Boolean = true,
 ) {
-    val set: (LyricIslandConfig) -> Unit = { onConfigChange(it.normalized()) }
+    // Keep the detail page readable while making every mutation obey the feature master switch.
+    // The caller still owns persistence/rollback; this guard prevents disabled edits from reaching
+    // that owner even for controls whose visual component has no enabled parameter in older Miuix.
+    val set: (LyricIslandConfig) -> Unit = { if (enabled) onConfigChange(it.normalized()) }
     val support = rememberLyricSupportSnapshot()
-    val sourceIndex = sourceValues.safeIndex(config.sourceMode)
+    val sourceIndex = sourceValues.safeIndex(config.sourceMode.publicPickerMode())
     val animationIndex = animationIds.indexOf(config.animId).takeIf { config.animEnabled && it >= 0 } ?: 0
     val textColors = listOf("默认", "封面色", "封面渐变色", "跟随状态栏颜色")
     val placeholders = LyricPlaceholder.entries.map { it.display }
@@ -242,12 +305,13 @@ fun LyricConfigurationMiuix(
         modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        SmallTitle(text = "小米超级岛歌词自定义配置")
+        if (section == null || section == LyricConfigSection.SOURCE || section == LyricConfigSection.PROVIDER) {
         Card {
             OverlayDropdownPreference(
                 title = "歌词源",
                 items = sourceLabels,
                 selectedIndex = sourceIndex,
+                enabled = enabled,
                 onSelectedIndexChange = { set(config.copy(sourceMode = sourceValues.getOrElse(it) { LyricSourceMode.LYRICON })) },
             )
             if (config.sourceMode == LyricSourceMode.LYRICON) {
@@ -276,6 +340,7 @@ fun LyricConfigurationMiuix(
                         },
                         items = (-5000..5000 step 50).map { "${it}ms" },
                         selectedIndex = ((delay + 5000) / 50).coerceIn(0, 200),
+                        enabled = enabled,
                         onSelectedIndexChange = {
                             val next = config.lyriconProviderDelays.toMutableMap()
                             next[provider.packageName] = -5000 + it * 50
@@ -304,13 +369,16 @@ fun LyricConfigurationMiuix(
                 }
             }
         }
+        }
 
+        if (section == null || section == LyricConfigSection.ISLAND) {
         SmallTitle(text = "布局")
         Card {
             OverlayDropdownPreference(
                 title = "超级岛长度模式",
                 items = listOf("固定长度", "动态长度"),
                 selectedIndex = config.widthMode.coerceIn(0, 1),
+                enabled = enabled,
                 onSelectedIndexChange = { set(config.copy(widthMode = it.coerceIn(0, 1))) },
             )
             if (config.widthMode == 1) {
@@ -318,6 +386,7 @@ fun LyricConfigurationMiuix(
                     title = "动态长度判断基准",
                     items = listOf("综合判断", "仅歌词"),
                     selectedIndex = config.dynamicWidthBasis.coerceIn(0, 1),
+                    enabled = enabled,
                     onSelectedIndexChange = { set(config.copy(dynamicWidthBasis = it.coerceIn(0, 1))) },
                 )
             }
@@ -332,6 +401,7 @@ fun LyricConfigurationMiuix(
                     if (config.widthMode == 1) {
                         RangeSlider(
                             value = dynamicWidthRange,
+                            enabled = enabled,
                             onValueChange = { value ->
                                 val start = value.start.toInt().coerceIn(islandWidthMin, islandWidthMax)
                                 val end = value.endInclusive.toInt().coerceIn(start, islandWidthMax)
@@ -355,6 +425,7 @@ fun LyricConfigurationMiuix(
                     } else {
                         Slider(
                             value = fixedIslandWidth,
+                            enabled = enabled,
                             onValueChange = { value ->
                                 fixedIslandWidth = value.coerceIn(islandWidthMin.toFloat(), islandWidthMax.toFloat())
                             },
@@ -371,7 +442,7 @@ fun LyricConfigurationMiuix(
                     }
                 },
                 onClick = {
-                    if (config.widthMode == 0) showIslandWidthDialog = true
+                    if (enabled && config.widthMode == 0) showIslandWidthDialog = true
                 },
             )
         }
@@ -379,6 +450,7 @@ fun LyricConfigurationMiuix(
             SwitchPreference(
                 title = "解除超级岛最大长度限制",
                 checked = config.disableWidthLimit,
+                enabled = enabled,
                 onCheckedChange = { set(config.copy(disableWidthLimit = it)) },
             )
         }
@@ -386,12 +458,14 @@ fun LyricConfigurationMiuix(
             ArrowPreference(
                 title = "左侧内容内边距",
                 summary = "${config.leftPaddingLeft},${config.leftPaddingRight}",
-                onClick = { editingPaddingSide = 0 },
+                enabled = enabled,
+                onClick = { if (enabled) editingPaddingSide = 0 },
             )
             ArrowPreference(
                 title = "右侧内容内边距",
                 summary = "${config.rightPaddingLeft},${config.rightPaddingRight}",
-                onClick = { editingPaddingSide = 1 },
+                enabled = enabled,
+                onClick = { if (enabled) editingPaddingSide = 1 },
             )
         }
 
@@ -400,6 +474,7 @@ fun LyricConfigurationMiuix(
             SwitchPreference(
                 title = "分离歌词",
                 checked = config.lyricMode == 1,
+                enabled = enabled,
                 onCheckedChange = { set(config.copy(lyricMode = if (it) 1 else 0)) },
             )
         }
@@ -408,6 +483,7 @@ fun LyricConfigurationMiuix(
                 title = "音频封面",
                 items = LyricAlbumCoverStyle.pickerLabels,
                 selectedIndex = LyricAlbumCoverStyle.pickerIndex(config.albumCoverStyle),
+                enabled = enabled,
                 onSelectedIndexChange = {
                     set(config.copy(albumCoverStyle = LyricAlbumCoverStyle.pickerValues.getOrElse(it) {
                         LyricAlbumCoverStyle.DEFAULT
@@ -419,12 +495,14 @@ fun LyricConfigurationMiuix(
                     title = "超级岛左侧",
                     items = listOf("无内容", "音乐信息", "歌词"),
                     selectedIndex = when (config.contentLeft) { IslandContentMode.NONE -> 0; IslandContentMode.MUSIC_INFO -> 1; IslandContentMode.LYRIC -> 2 },
+                    enabled = enabled,
                     onSelectedIndexChange = { index -> set(config.copy(contentLeft = listOf(IslandContentMode.NONE, IslandContentMode.MUSIC_INFO, IslandContentMode.LYRIC).getOrElse(index) { IslandContentMode.MUSIC_INFO })) },
                 )
                 OverlayDropdownPreference(
                     title = "超级岛右侧",
                     items = listOf("无内容", "音乐信息", "歌词"),
                     selectedIndex = when (config.contentRight) { IslandContentMode.NONE -> 0; IslandContentMode.MUSIC_INFO -> 1; IslandContentMode.LYRIC -> 2 },
+                    enabled = enabled,
                     onSelectedIndexChange = { index -> set(config.copy(contentRight = listOf(IslandContentMode.NONE, IslandContentMode.MUSIC_INFO, IslandContentMode.LYRIC).getOrElse(index) { IslandContentMode.LYRIC })) },
                 )
             }
@@ -432,46 +510,56 @@ fun LyricConfigurationMiuix(
                 title = "音频律动",
                 items = listOf("默认", "封面色", "封面渐变色", "隐藏"),
                 selectedIndex = config.musicWaveStyle.coerceIn(0, 3),
+                enabled = enabled,
                 onSelectedIndexChange = { set(config.copy(musicWaveStyle = it)) },
             )
         }
+        }
 
+        if (section == null || section == LyricConfigSection.ISLAND) {
         SmallTitle(text = "内容布局")
         SmallTitle(text = "音乐信息")
         Card {
             ArrowPreference(
                 title = "第一行",
                 summary = summarizeFields(config.musicInfoFirstLine, LyricMusicInfoLayout.FIELD_TITLE),
-                onClick = { editingFieldRow = 0 },
+                enabled = enabled,
+                onClick = { if (enabled) editingFieldRow = 0 },
             )
             ArrowPreference(
                 title = "第二行",
                 summary = summarizeFields(config.musicInfoSecondLine, LyricMusicInfoLayout.FIELD_ARTIST),
-                onClick = { editingFieldRow = 1 },
+                enabled = enabled,
+                onClick = { if (enabled) editingFieldRow = 1 },
             )
             OverlayDropdownPreference(
                 title = "字段连接符",
                 summary = "选择多个字段之间的拼接方式",
                 items = separatorOptions,
                 selectedIndex = separatorValues.safeIndex(config.musicInfoSeparator),
+                enabled = enabled,
                 onSelectedIndexChange = { set(config.copy(musicInfoSeparator = separatorValues.getOrElse(it) { "hyphen" })) },
             )
-            SwitchPreference(title = "居中显示", checked = config.centerMusicInfo, onCheckedChange = { set(config.copy(centerMusicInfo = it)) })
+            SwitchPreference(title = "居中显示", checked = config.centerMusicInfo, enabled = enabled, onCheckedChange = { set(config.copy(centerMusicInfo = it)) })
         }
         SmallTitle(text = "歌词")
         Card {
-            SwitchPreference(title = "居中显示", checked = config.centerLyric, enabled = !config.rightLyric, onCheckedChange = { set(config.copy(centerLyric = it, rightLyric = if (it) false else config.rightLyric)) })
-            SwitchPreference(title = "歌词右对齐", checked = config.rightLyric, enabled = !config.centerLyric, onCheckedChange = { set(config.copy(rightLyric = it, centerLyric = if (it) false else config.centerLyric)) })
-            OverlayDropdownPreference(title = "占位符格式", items = placeholders, selectedIndex = config.placeholder.ordinal, onSelectedIndexChange = { set(config.copy(placeholder = LyricPlaceholder.entries.getOrElse(it) { LyricPlaceholder.COUNTDOWN })) })
+            SwitchPreference(title = "居中显示", checked = config.centerLyric, enabled = enabled && !config.rightLyric, onCheckedChange = { set(config.copy(centerLyric = it, rightLyric = if (it) false else config.rightLyric)) })
+            SwitchPreference(title = "歌词右对齐", checked = config.rightLyric, enabled = enabled && !config.centerLyric, onCheckedChange = { set(config.copy(rightLyric = it, centerLyric = if (it) false else config.centerLyric)) })
+            OverlayDropdownPreference(title = "占位符格式", items = placeholders, selectedIndex = config.placeholder.ordinal, enabled = enabled, onSelectedIndexChange = { set(config.copy(placeholder = LyricPlaceholder.entries.getOrElse(it) { LyricPlaceholder.COUNTDOWN })) })
+        }
         }
 
+        if (section == null || section == LyricConfigSection.TEXT_STYLE) {
         SmallTitle(text = "文字样式")
         Card {
             SmallTitle(text = "基础样式")
             ArrowPreference(
                 title = "大小",
                 summary = config.textSizeSp.toInt().toString(),
+                enabled = enabled,
                 onClick = {
+                    if (!enabled) return@ArrowPreference
                     intEditor = IntEditorSpec("大小", "范围：8 ~ 16", config.textSizeSp.toInt(), 8, 16) {
                         set(config.copy(textSizeSp = it.toFloat()))
                     }
@@ -480,7 +568,9 @@ fun LyricConfigurationMiuix(
             ArrowPreference(
                 title = "多行模式下文字大小比例",
                 summary = "${(config.textSizeRatio * 100).toInt()}%",
+                enabled = enabled,
                 onClick = {
+                    if (!enabled) return@ArrowPreference
                     intEditor = IntEditorSpec("多行模式下文字大小比例", "范围：10 ~ 100", (config.textSizeRatio * 100).toInt(), 10, 100) {
                         set(config.copy(textSizeRatio = it / 100f))
                     }
@@ -489,13 +579,15 @@ fun LyricConfigurationMiuix(
             ArrowPreference(
                 title = "羽化边缘长度",
                 summary = config.fadingEdgeLengthDp.toString(),
+                enabled = enabled,
                 onClick = {
+                    if (!enabled) return@ArrowPreference
                     intEditor = IntEditorSpec("羽化边缘长度", "范围：0 ~ 100", config.fadingEdgeLengthDp, 0, 100) {
                         set(config.copy(fadingEdgeLengthDp = it))
                     }
                 },
             )
-            OverlayDropdownPreference(title = "文字颜色", items = textColors, selectedIndex = config.textColorStyle.coerceIn(0, 3), onSelectedIndexChange = { set(config.copy(textColorStyle = it)) })
+            OverlayDropdownPreference(title = "文字颜色", items = textColors, selectedIndex = config.textColorStyle.coerceIn(0, 3), enabled = enabled, onSelectedIndexChange = { set(config.copy(textColorStyle = it)) })
         }
         Card {
             SmallTitle(text = "字体样式")
@@ -503,30 +595,36 @@ fun LyricConfigurationMiuix(
                 title = "字体",
                 items = listOf(if (config.customFontPath.isBlank()) "默认" else config.customFontPath),
                 selectedIndex = 0,
-                onSelectedIndexChange = { showFontDialog = true },
+                enabled = enabled,
+                onSelectedIndexChange = { if (enabled) showFontDialog = true },
             )
-            SwitchPreference(title = "英数窄字体", checked = config.narrowLatinFont, onCheckedChange = { set(config.copy(narrowLatinFont = it)) })
+            SwitchPreference(title = "英数窄字体", checked = config.narrowLatinFont, enabled = enabled, onCheckedChange = { set(config.copy(narrowLatinFont = it)) })
             ArrowPreference(
                 title = "字重",
                 summary = config.fontWeight.toString(),
+                enabled = enabled,
                 onClick = {
+                    if (!enabled) return@ArrowPreference
                     intEditor = IntEditorSpec("字重", "范围：100 ~ 900", config.fontWeight, 100, 900) {
                         set(config.copy(fontWeight = it))
                     }
                 },
             )
-            SwitchPreference(title = "斜体", checked = config.fontItalic, onCheckedChange = { set(config.copy(fontItalic = it)) })
+            SwitchPreference(title = "斜体", checked = config.fontItalic, enabled = enabled, onCheckedChange = { set(config.copy(fontItalic = it)) })
+        }
         }
 
+        if (section == null || section == LyricConfigSection.SCROLL) {
         SmallTitle(text = "滚动显示")
         SmallTitle(text = "歌词滚动")
         Card {
-            SwitchPreference(title = "歌词滚动", summary = "针对没有时间轴的歌词", checked = config.marqueeMode, onCheckedChange = { set(config.copy(marqueeMode = it)) })
+            SwitchPreference(title = "歌词滚动", summary = "针对没有时间轴的歌词", checked = config.marqueeMode, enabled = enabled, onCheckedChange = { set(config.copy(marqueeMode = it)) })
             ArrowPreference(
                 title = "滚动速度",
                 summary = config.marqueeSpeed.toString(),
-                enabled = config.marqueeMode,
+                enabled = enabled && config.marqueeMode,
                 onClick = {
+                    if (!enabled) return@ArrowPreference
                     intEditor = IntEditorSpec("滚动速度", "范围：5 ~ 100", config.marqueeSpeed, 5, 100) {
                         set(config.copy(marqueeSpeed = it))
                     }
@@ -535,35 +633,38 @@ fun LyricConfigurationMiuix(
             ArrowPreference(
                 title = "初始滚动延迟",
                 summary = "${config.marqueeDelay}ms",
-                enabled = config.marqueeMode,
+                enabled = enabled && config.marqueeMode,
                 onClick = {
+                    if (!enabled) return@ArrowPreference
                         intEditor = IntEditorSpec("初始滚动延迟", "ms 范围：0 ~ 10000", config.marqueeDelay, 0, 10000) {
                         set(config.copy(marqueeDelay = it))
                     }
                 },
             )
-            SwitchPreference(title = "无限循环", enabled = config.marqueeMode, checked = config.marqueeInfinite, onCheckedChange = { set(config.copy(marqueeInfinite = it)) })
+            SwitchPreference(title = "无限循环", enabled = enabled && config.marqueeMode, checked = config.marqueeInfinite, onCheckedChange = { set(config.copy(marqueeInfinite = it)) })
             ArrowPreference(
                 title = "循环间隔",
                 summary = "${config.marqueeLoopDelay}ms",
-                enabled = config.marqueeMode,
+                enabled = enabled && config.marqueeMode,
                 onClick = {
+                    if (!enabled) return@ArrowPreference
                         intEditor = IntEditorSpec("循环间隔", "ms 范围：0 ~ 10000", config.marqueeLoopDelay, 0, 10000) {
                         set(config.copy(marqueeLoopDelay = it))
                     }
                 },
             )
-            SwitchPreference(title = "结束时在末尾停止", enabled = config.marqueeMode, checked = config.marqueeStopEnd, onCheckedChange = { set(config.copy(marqueeStopEnd = it)) })
+            SwitchPreference(title = "结束时在末尾停止", enabled = enabled && config.marqueeMode, checked = config.marqueeStopEnd, onCheckedChange = { set(config.copy(marqueeStopEnd = it)) })
         }
         if (config.lyricMode == 0) {
             SmallTitle(text = "歌曲信息滚动")
             Card {
-                SwitchPreference(title = "歌曲信息滚动", summary = "针对歌曲信息", checked = config.metadataMarqueeMode, onCheckedChange = { set(config.copy(metadataMarqueeMode = it)) })
+                SwitchPreference(title = "歌曲信息滚动", summary = "针对歌曲信息", checked = config.metadataMarqueeMode, enabled = enabled, onCheckedChange = { set(config.copy(metadataMarqueeMode = it)) })
                 ArrowPreference(
                     title = "滚动速度",
                     summary = config.metadataMarqueeSpeed.toString(),
-                    enabled = config.metadataMarqueeMode,
+                    enabled = enabled && config.metadataMarqueeMode,
                     onClick = {
+                        if (!enabled) return@ArrowPreference
                         intEditor = IntEditorSpec("滚动速度", "范围：5 ~ 100", config.metadataMarqueeSpeed, 5, 100) {
                             set(config.copy(metadataMarqueeSpeed = it))
                         }
@@ -572,19 +673,21 @@ fun LyricConfigurationMiuix(
                 ArrowPreference(
                     title = "初始滚动延迟",
                     summary = "${config.metadataMarqueeDelay}ms",
-                    enabled = config.metadataMarqueeMode,
+                    enabled = enabled && config.metadataMarqueeMode,
                     onClick = {
+                        if (!enabled) return@ArrowPreference
                         intEditor = IntEditorSpec("初始滚动延迟", "ms 范围：0 ~ 10000", config.metadataMarqueeDelay, 0, 10000) {
                             set(config.copy(metadataMarqueeDelay = it))
                         }
                     },
                 )
-                SwitchPreference(title = "无限循环", enabled = config.metadataMarqueeMode, checked = config.metadataMarqueeInfinite, onCheckedChange = { set(config.copy(metadataMarqueeInfinite = it)) })
+                SwitchPreference(title = "无限循环", enabled = enabled && config.metadataMarqueeMode, checked = config.metadataMarqueeInfinite, onCheckedChange = { set(config.copy(metadataMarqueeInfinite = it)) })
                 ArrowPreference(
                     title = "循环间隔",
                     summary = "${config.metadataMarqueeLoopDelay}ms",
-                    enabled = config.metadataMarqueeMode,
+                    enabled = enabled && config.metadataMarqueeMode,
                     onClick = {
+                        if (!enabled) return@ArrowPreference
                         intEditor = IntEditorSpec("循环间隔", "ms 范围：0 ~ 10000", config.metadataMarqueeLoopDelay, 0, 10000) {
                             set(config.copy(metadataMarqueeLoopDelay = it))
                         }
@@ -592,23 +695,32 @@ fun LyricConfigurationMiuix(
                 )
             }
         }
+        }
 
+        if (section == null || section == LyricConfigSection.VERBATIM) {
         SmallTitle(text = "逐字歌词")
         Card {
-            SwitchPreference(title = "模拟逐行歌词", summary = "将带有字词时间轴的歌词降级为整行时间轴显示", checked = config.syllableLineDisplay, onCheckedChange = { set(config.copy(syllableLineDisplay = it)) })
-            SwitchPreference(title = "相对进度歌词", summary = "当歌词缺少字词时间轴时，将整行作为一个进度单元", checked = config.syllableRelative, onCheckedChange = { set(config.copy(syllableRelative = it)) })
-            SwitchPreference(title = "模拟逐字歌词", enabled = config.syllableRelative, checked = config.syllableHighlight, onCheckedChange = { set(config.copy(syllableHighlight = it)) })
+            SwitchPreference(
+                title = "相对进度歌词",
+                summary = "当歌词缺少字词时间轴时，将整行作为一个进度单元",
+                checked = config.syllableRelative,
+                enabled = enabled,
+                onCheckedChange = { set(config.copy(syllableRelative = it)) },
+            )
+            SwitchPreference(title = "相对进度歌词高亮显示", enabled = enabled && config.syllableRelative, checked = config.syllableHighlight, onCheckedChange = { set(config.copy(syllableHighlight = it)) })
         }
         SmallTitle(text = "歌词动效")
         Card {
-            SwitchPreference(title = "羽化进度样式", checked = config.gradientProgressStyle, onCheckedChange = { set(config.copy(gradientProgressStyle = it)) })
-            SwitchPreference(title = "逐字字词上浮动画", checked = config.wordMotionEnabled, onCheckedChange = { set(config.copy(wordMotionEnabled = it)) })
+            SwitchPreference(title = "羽化进度样式", checked = config.gradientProgressStyle, enabled = enabled, onCheckedChange = { set(config.copy(gradientProgressStyle = it)) })
+            SwitchPreference(title = "逐字字词上浮动画", checked = config.wordMotionEnabled, enabled = enabled, onCheckedChange = { set(config.copy(wordMotionEnabled = it)) })
             if (config.wordMotionEnabled) {
-                SwitchPreference(title = "拉丁文字逐字母上浮", summary = "关闭时按整个单词上浮", checked = config.wordMotionLatinByCharacter, onCheckedChange = { set(config.copy(wordMotionLatinByCharacter = it)) })
+                SwitchPreference(title = "拉丁文字逐字母上浮", summary = "关闭时按整个单词上浮", checked = config.wordMotionLatinByCharacter, enabled = enabled, onCheckedChange = { set(config.copy(wordMotionLatinByCharacter = it)) })
                 ArrowPreference(
                     title = "中日韩上浮系数",
                     summary = "%.2f".format(java.util.Locale.ROOT, config.wordMotionCjkLift),
+                    enabled = enabled,
                     onClick = {
+                        if (!enabled) return@ArrowPreference
                         floatEditor = FloatEditorSpec("中日韩上浮系数", "范围：0 ~ 0.2", config.wordMotionCjkLift, 0f, 0.2f) {
                             set(config.copy(wordMotionCjkLift = it))
                         }
@@ -617,7 +729,9 @@ fun LyricConfigurationMiuix(
                 ArrowPreference(
                     title = "中日韩波长系数",
                     summary = "%.2f".format(java.util.Locale.ROOT, config.wordMotionCjkWave),
+                    enabled = enabled,
                     onClick = {
+                        if (!enabled) return@ArrowPreference
                         floatEditor = FloatEditorSpec("中日韩波长系数", "范围：0 ~ 8", config.wordMotionCjkWave, 0f, 8f) {
                             set(config.copy(wordMotionCjkWave = it))
                         }
@@ -626,7 +740,9 @@ fun LyricConfigurationMiuix(
                 ArrowPreference(
                     title = "拉丁文字上浮系数",
                     summary = "%.2f".format(java.util.Locale.ROOT, config.wordMotionLatinLift),
+                    enabled = enabled,
                     onClick = {
+                        if (!enabled) return@ArrowPreference
                         floatEditor = FloatEditorSpec("拉丁文字上浮系数", "范围：0 ~ 0.2", config.wordMotionLatinLift, 0f, 0.2f) {
                             set(config.copy(wordMotionLatinLift = it))
                         }
@@ -635,7 +751,9 @@ fun LyricConfigurationMiuix(
                 ArrowPreference(
                     title = "拉丁文字波长系数",
                     summary = "%.2f".format(java.util.Locale.ROOT, config.wordMotionLatinWave),
+                    enabled = enabled,
                     onClick = {
+                        if (!enabled) return@ArrowPreference
                         floatEditor = FloatEditorSpec("拉丁文字波长系数", "范围：0 ~ 8", config.wordMotionLatinWave, 0f, 8f) {
                             set(config.copy(wordMotionLatinWave = it))
                         }
@@ -643,28 +761,32 @@ fun LyricConfigurationMiuix(
                 )
             }
         }
+        }
 
+        if (section == null || section == LyricConfigSection.TRANSLATION) {
         SmallTitle(text = "双行内容")
         val nextSupported = config.sourceMode == LyricSourceMode.LYRICON ||
             config.sourceMode == LyricSourceMode.LYRIC_INFO
         if (nextSupported) {
             SmallTitle(text = "下一句歌词")
             Card {
-                SwitchPreference(title = "显示下一句歌词", summary = "占用第二行，开启后不显示翻译", checked = config.nextLyricLine, onCheckedChange = { set(config.copy(nextLyricLine = it)) })
-                SwitchPreference(title = "自动切换翻译", summary = "有翻译的歌曲，显示歌词翻译", enabled = config.nextLyricLine, checked = config.autoSwitchTranslation, onCheckedChange = { set(config.copy(autoSwitchTranslation = it)) })
+                SwitchPreference(title = "显示下一句歌词", summary = "占用第二行，开启后不显示翻译", checked = config.nextLyricLine, enabled = enabled, onCheckedChange = { set(config.copy(nextLyricLine = it)) })
             }
         }
         SmallTitle(text = "翻译")
         Card {
-            val translationEnabled = !nextSupported || !config.nextLyricLine || config.autoSwitchTranslation
-            SwitchPreference(title = "禁用所有翻译", enabled = translationEnabled, checked = config.disableTranslation, onCheckedChange = { set(config.copy(disableTranslation = it)) })
-            SwitchPreference(title = "仅显示翻译", enabled = translationEnabled && !config.swapTranslation, checked = config.translationOnly, onCheckedChange = { set(config.copy(translationOnly = it, swapTranslation = if (it) false else config.swapTranslation)) })
-            SwitchPreference(title = "原词翻译对调位置", enabled = translationEnabled && !config.translationOnly, checked = config.swapTranslation, onCheckedChange = { set(config.copy(swapTranslation = it, translationOnly = if (it) false else config.translationOnly)) })
+            val translationEnabled = !nextSupported || !config.nextLyricLine
+            SwitchPreference(title = "禁用所有翻译", enabled = enabled && translationEnabled, checked = config.disableTranslation, onCheckedChange = { set(config.copy(disableTranslation = it)) })
+            SwitchPreference(title = "仅显示翻译", enabled = enabled && translationEnabled && !config.swapTranslation, checked = config.translationOnly, onCheckedChange = { set(config.copy(translationOnly = it, swapTranslation = if (it) false else config.swapTranslation)) })
+            SwitchPreference(title = "原词翻译对调位置", enabled = enabled && translationEnabled && !config.translationOnly, checked = config.swapTranslation, onCheckedChange = { set(config.copy(swapTranslation = it, translationOnly = if (it) false else config.translationOnly)) })
+        }
         }
 
+        if (section == null || section == LyricConfigSection.ANIMATION) {
         SmallTitle(text = "歌词切换动画")
         Card {
-            OverlayDropdownPreference(title = "歌词切换动画", items = animationLabels, selectedIndex = animationIndex, onSelectedIndexChange = { index -> set(config.copy(animEnabled = index != 0, animId = animationIds.getOrElse(index) { "default" })) })
+            OverlayDropdownPreference(title = "歌词切换动画", items = animationLabels, selectedIndex = animationIndex, enabled = enabled, onSelectedIndexChange = { index -> set(config.copy(animEnabled = index != 0, animId = animationIds.getOrElse(index) { "default" })) })
+        }
         }
     }
 

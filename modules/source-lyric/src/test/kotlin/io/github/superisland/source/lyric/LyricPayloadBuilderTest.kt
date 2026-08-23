@@ -153,7 +153,7 @@ class LyricPayloadBuilderTest {
     }
 
     @Test
-    fun nextLyricPreviewSuppressesTranslationUntilAutoSwitch() {
+    fun nextLyricPreviewOwnsSecondLineInBasicScope() {
         val snapshot = LyricSnapshot(
             publisher = "player",
             line = LyricLine("原词", 0L, 1_000L),
@@ -171,11 +171,11 @@ class LyricPayloadBuilderTest {
         assertEquals("原词", LyricPayloadBuilder.contentFor(snapshot, nextConfig, IslandContentMode.LYRIC, true))
         assertEquals("下一句", LyricPayloadBuilder.contentFor(snapshot, nextConfig, IslandContentMode.LYRIC, false))
 
-        val autoConfig = nextConfig.copy(autoSwitchTranslation = true)
-        // HyperLyric disables the next-line preview once a translation is available, then
-        // resumes the normal two-line layout: original lyric first, translation second.
-        assertEquals("原词", LyricPayloadBuilder.contentFor(snapshot, autoConfig, IslandContentMode.LYRIC, true))
-        assertEquals("译文", LyricPayloadBuilder.contentFor(snapshot, autoConfig, IslandContentMode.LYRIC, false))
+        // Song-level automatic translation switching is intentionally outside the basic
+        // Super Island feature set. A legacy value cannot displace the configured next line.
+        val retiredAutoConfig = nextConfig.copy(autoSwitchTranslation = true)
+        assertEquals("原词", LyricPayloadBuilder.contentFor(snapshot, retiredAutoConfig, IslandContentMode.LYRIC, true))
+        assertEquals("下一句", LyricPayloadBuilder.contentFor(snapshot, retiredAutoConfig, IslandContentMode.LYRIC, false))
     }
 
     @Test
