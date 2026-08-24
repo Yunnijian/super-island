@@ -79,6 +79,7 @@ class LyricIslandConfigCodecTest {
     fun roundTripsHyperLyricMediaCardContract() {
         val config = LyricIslandConfig(
             mediaCard = MediaCardConfig(
+                enabled = false,
                 removeIslandWhitelist = true,
                 notification = NotificationMediaCardConfig(
                     cardSwitcherEnabled = true,
@@ -135,6 +136,7 @@ class LyricIslandConfigCodecTest {
         val encoded = LyricIslandConfigCodec.encode(config)
 
         assertEquals(config.normalized(), LyricIslandConfigCodec.decode(encoded))
+        assertTrue(encoded.contains("\"enabled\":false"))
         assertTrue(encoded.contains("\"removeIslandWhitelist\":true"))
         assertTrue(encoded.contains("\"islandExpanded\""))
     }
@@ -164,6 +166,7 @@ class LyricIslandConfigCodecTest {
         )
 
         val notification = decoded.mediaCard.notification
+        assertTrue(decoded.mediaCard.enabled)
         assertTrue(decoded.mediaCard.removeIslandWhitelist)
         assertTrue(notification.cardSwitcherEnabled)
         assertEquals(MediaCardConstants.CARD_SWITCHER_MULTI, notification.cardSwitcherMode)
@@ -182,6 +185,14 @@ class LyricIslandConfigCodecTest {
         assertEquals(MediaCardConstants.PROGRESS_WAVE, decoded.mediaCard.islandExpanded.progressStyle)
         assertEquals(1, decoded.mediaCard.islandExpanded.backgroundBlur)
         assertTrue(decoded.mediaCard.alwaysOnDisplay.disableMediaCardCollapsing)
+    }
+
+    @Test
+    fun keepsMediaCardEnabledWhenLegacyLyricMasterSwitchIsDisabled() {
+        val decoded = LyricIslandConfigCodec.decode("""{"schema":2,"enabled":false}""")
+
+        assertFalse(decoded.enabled)
+        assertTrue(decoded.mediaCard.enabled)
     }
 
     @Test

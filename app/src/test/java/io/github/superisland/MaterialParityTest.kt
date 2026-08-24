@@ -370,7 +370,19 @@ class MaterialParityTest {
                 "$skin media-card configuration must receive the lyric-owned child page",
                 "MediaCardConfigurationPage" in source,
             )
+            assertTrue(
+                "$skin media-card configuration must expose its own master switch",
+                "启用媒体卡片" in source && "config.mediaCard.enabled" in source,
+            )
         }
+        assertTrue(
+            "Material media-card child controls must follow the media-card master switch",
+            "enabled = config.mediaCard.enabled" in materialMedia,
+        )
+        assertTrue(
+            "Miuix media-card child controls must follow the media-card master switch",
+            "val mediaCardEnabled = config.mediaCard.enabled" in miuixMedia,
+        )
     }
 
     @Test

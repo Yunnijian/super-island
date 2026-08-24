@@ -245,6 +245,7 @@ object LyricIslandConfigCodec {
         val notification = config.notification
         val island = config.islandExpanded
         val aod = config.alwaysOnDisplay
+        put("enabled", config.enabled)
         put("removeIslandWhitelist", config.removeIslandWhitelist)
         put("notification", buildJsonObject {
             put("cardSwitcherEnabled", notification.cardSwitcherEnabled)
@@ -310,6 +311,13 @@ object LyricIslandConfigCodec {
         val n = defaults.notification
         val i = defaults.islandExpanded
         return MediaCardConfig(
+            // The root `enabled` field owns lyric publishing. Media-card enablement is nested
+            // in the current document, or uses the explicit flat port key in legacy imports.
+            enabled = if (media != null) {
+                media.boolean("enabled", defaults.enabled, "key_hook_media_card_enabled")
+            } else {
+                root.boolean("key_hook_media_card_enabled", defaults.enabled)
+            },
             removeIslandWhitelist = mediaRoot.boolean(
                 "removeIslandWhitelist",
                 defaults.removeIslandWhitelist,

@@ -92,6 +92,42 @@ configuration into HyperLyric's original `RootConstants` keys, so the upstream s
 slot reader, dynamic-width coordinator, renderer, album-cover, music-wave, glow and
 fake-transition all read their native preference contract.
 
+### Authorized Media-Card Performance Adaptation
+
+The fixed upstream media-card runtime intercepts several SystemUI transition methods even when
+every notification-center visual option is native. On HyperOS this puts deoptimized hook
+dispatch, card-theme work, and progress-draw interception on the notification, lock-screen, and
+control-center click path. The upstream project reproduces the resulting animation jank.
+
+The port therefore adapts only `HookEntry.installPortSystemUiRuntime` at installation time:
+
+- A port-owned `key_hook_media_card_enabled` master switch defaults to `true` for legacy
+  configurations, gates all media-card hook installation, and is deliberately separate from the
+  lyric-island publisher switch. It is not represented as an upstream `RootConstants` key.
+- `MediaCardElementBehaviorHooker` is installed only when hiding the notification cover shadow or
+  disabling notification/expanded-island cover flipping is selected.
+- `NotificationMediaAmbientFlowHooker` is installed only when notification ambient flow, a
+  non-system notification card theme, or a custom notification background is selected.
+
+These predicates cover every behavior owned by the two hookers. When all corresponding options
+are native, SystemUI receives no hook or deoptimization for those methods and therefore keeps its
+original bind, draw, and click transitions. Once any owned option is selected, the complete
+upstream hooker and all of its algorithms, state transitions, cache behavior, and visual output
+remain unchanged. This is an explicitly authorized performance divergence from the fixed upstream,
+not a replacement implementation. Media-card configuration is already installed at SystemUI
+startup in the upstream chain, so this does not weaken an existing live-setting contract.
+
+Three narrow generated-source adaptations apply only after one of the matching upstream media-card
+features is enabled. `NotificationMediaAmbientFlowHooker` caches an already-applied card theme and
+only repeats custom-flow playback work when playback state changes. `NotificationMediaCoverStyleHooker`
+uses the upstream controller/session identity plus holder/config signatures to skip duplicate
+style and constraint application, while retaining cover rotation playback updates. Finally,
+`NotificationMediaBackgroundController` keeps its upstream asynchronous renderer and cache keys,
+but coalesces completed backgrounds to the latest result and applies it only after two stable
+layout frames; a resize discards the stale result and re-renders. These are scheduling guards
+around repeated view mutation, not replacements for upstream color extraction, layout presets,
+animation values, or rendering algorithms.
+
 HyperLyric App pages are intentionally absent. The existing two-skin Super Island lyric settings
 route owns configuration and mirrors it into HyperLyric's original `RootConstants` keys. There is
 no `PrefsBridge`/`RootApplication` page host and no pending upstream-page integration.

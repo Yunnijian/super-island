@@ -88,7 +88,7 @@ internal fun MediaCardConfigurationMaterial(
             MediaCardConfigurationPage.DIRECTORY ->
                 MediaCardDirectoryMaterial(
                     config = config,
-                    enabled = true,
+                    enabled = config.mediaCard.enabled,
                     onConfigChange = set,
                     onOpenGroup = onPageChange,
                 )
@@ -96,7 +96,7 @@ internal fun MediaCardConfigurationMaterial(
                 MediaNotificationPreview(config.mediaCard.notification)
                 MediaNotificationMaterial(
                     value = config.mediaCard.notification,
-                    enabled = true,
+                    enabled = config.mediaCard.enabled,
                     onChange = { value ->
                         set(config.copy(mediaCard = config.mediaCard.copy(notification = value)))
                     },
@@ -106,7 +106,7 @@ internal fun MediaCardConfigurationMaterial(
                 MediaIslandPreview(config.mediaCard.islandExpanded)
                 MediaIslandMaterial(
                     value = config.mediaCard.islandExpanded,
-                    enabled = true,
+                    enabled = config.mediaCard.enabled,
                     onChange = { value ->
                         set(config.copy(mediaCard = config.mediaCard.copy(islandExpanded = value)))
                     },
@@ -119,7 +119,7 @@ internal fun MediaCardConfigurationMaterial(
                         MediaCardSwitch(
                             title = "禁用媒体卡片折叠",
                             checked = config.mediaCard.alwaysOnDisplay.disableMediaCardCollapsing,
-                            enabled = true,
+                            enabled = config.mediaCard.enabled,
                         ) { value ->
                             set(
                                 config.copy(
@@ -201,6 +201,22 @@ private fun MediaCardDirectoryMaterial(
     onOpenGroup: (MediaCardConfigurationPage) -> Unit,
 ) {
     val notification = config.mediaCard.notification
+    SegmentedColumn(
+        modifier = Modifier.fillMaxWidth(),
+        content = listOf(
+            {
+                MediaCardSwitch(
+                    title = "启用媒体卡片",
+                    checked = config.mediaCard.enabled,
+                    enabled = true,
+                ) { value ->
+                    onConfigChange(
+                        config.copy(mediaCard = config.mediaCard.copy(enabled = value)),
+                    )
+                }
+            },
+        ),
+    )
     SegmentedColumn(
         modifier = Modifier.fillMaxWidth(),
         content = listOf(

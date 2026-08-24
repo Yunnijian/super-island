@@ -186,6 +186,8 @@ object LyricIslandHostConfigSync {
 
         // HyperLyric media-card runtime owns these keys. Keep the host write contract one-to-one
         // with RootConstants so one RemotePreferences commit contains the complete card snapshot.
+        // This port-owned key gates the whole media-card runtime; it has no RootConstants peer.
+        putBoolean("key_hook_media_card_enabled", config.mediaCard.enabled)
         putBoolean("key_hook_remove_island_whitelist", config.mediaCard.removeIslandWhitelist)
         val notification = config.mediaCard.notification
         putBoolean("key_hook_notification_media_card_switcher_enabled", notification.cardSwitcherEnabled)

@@ -122,18 +122,29 @@ internal fun MediaCardConfigurationMiuix(
     onConfigChange: (LyricIslandConfig) -> Unit,
 ) {
     val set: (LyricIslandConfig) -> Unit = { onConfigChange(it.normalized()) }
+    val mediaCardEnabled = config.mediaCard.enabled
     if (page == MediaCardConfigurationPage.DIRECTORY) {
         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Card(modifier = Modifier.fillMaxWidth()) {
-                ArrowPreference(title = "通知中心", onClick = { onPageChange(MediaCardConfigurationPage.NOTIFICATION) })
-                ArrowPreference(title = "超级岛", onClick = { onPageChange(MediaCardConfigurationPage.ISLAND_EXPANDED) })
-                ArrowPreference(title = "息屏显示", onClick = { onPageChange(MediaCardConfigurationPage.AOD) })
+                SwitchPreference(
+                    title = "启用媒体卡片",
+                    checked = mediaCardEnabled,
+                    onCheckedChange = { value ->
+                        set(config.copy(mediaCard = config.mediaCard.copy(enabled = value)))
+                    },
+                )
+            }
+            Card(modifier = Modifier.fillMaxWidth()) {
+                ArrowPreference(title = "通知中心", enabled = mediaCardEnabled, onClick = { onPageChange(MediaCardConfigurationPage.NOTIFICATION) })
+                ArrowPreference(title = "超级岛", enabled = mediaCardEnabled, onClick = { onPageChange(MediaCardConfigurationPage.ISLAND_EXPANDED) })
+                ArrowPreference(title = "息屏显示", enabled = mediaCardEnabled, onClick = { onPageChange(MediaCardConfigurationPage.AOD) })
             }
             Card(modifier = Modifier.fillMaxWidth()) {
                 SwitchPreference(
                     title = "移除下拉小窗白名单",
                     summary = "超级岛媒体卡片",
                     checked = config.mediaCard.removeIslandWhitelist,
+                    enabled = mediaCardEnabled,
                     onCheckedChange = { value ->
                         set(config.copy(mediaCard = config.mediaCard.copy(removeIslandWhitelist = value)))
                     },
@@ -144,6 +155,7 @@ internal fun MediaCardConfigurationMiuix(
                     title = "多媒体卡片切换功能",
                     summary = "通知中心媒体卡片",
                     checked = config.mediaCard.notification.cardSwitcherEnabled,
+                    enabled = mediaCardEnabled,
                     onCheckedChange = { value ->
                         set(
                             config.copy(
@@ -154,12 +166,13 @@ internal fun MediaCardConfigurationMiuix(
                         )
                     },
                 )
-                if (config.mediaCard.notification.cardSwitcherEnabled) {
+                if (mediaCardEnabled && config.mediaCard.notification.cardSwitcherEnabled) {
                     val notification = config.mediaCard.notification
                     MediaDropdown(
                         title = "卡片显示模式",
                         items = listOf("单卡片视图", "多卡片视图"),
                         selected = notification.cardSwitcherMode,
+                        enabled = mediaCardEnabled,
                     ) { mode ->
                         set(
                             config.copy(
@@ -175,6 +188,7 @@ internal fun MediaCardConfigurationMiuix(
                             value = notification.cardSwitcherMaxCount.toFloat(),
                             range = 2f..6f,
                             label = notification.cardSwitcherMaxCount.toString(),
+                            enabled = mediaCardEnabled,
                         ) { maxCount ->
                             set(
                                 config.copy(
@@ -195,17 +209,18 @@ internal fun MediaCardConfigurationMiuix(
     when (page) {
         MediaCardConfigurationPage.NOTIFICATION -> Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
             MediaNotificationPreview(config.mediaCard.notification)
-            MediaNotificationSettings(config.mediaCard.notification) { value -> set(config.copy(mediaCard = config.mediaCard.copy(notification = value))) }
+            MediaNotificationSettings(config.mediaCard.notification, mediaCardEnabled) { value -> set(config.copy(mediaCard = config.mediaCard.copy(notification = value))) }
         }
         MediaCardConfigurationPage.ISLAND_EXPANDED -> Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
             MediaIslandPreview(config.mediaCard.islandExpanded)
-            MediaIslandSettings(config.mediaCard.islandExpanded) { value -> set(config.copy(mediaCard = config.mediaCard.copy(islandExpanded = value))) }
+            MediaIslandSettings(config.mediaCard.islandExpanded, mediaCardEnabled) { value -> set(config.copy(mediaCard = config.mediaCard.copy(islandExpanded = value))) }
         }
         MediaCardConfigurationPage.AOD -> {
             Card(modifier = Modifier.fillMaxWidth()) {
                 SwitchPreference(
                     title = "禁用媒体卡片折叠",
                     checked = config.mediaCard.alwaysOnDisplay.disableMediaCardCollapsing,
+                    enabled = mediaCardEnabled,
                     onCheckedChange = { value -> set(config.copy(mediaCard = config.mediaCard.copy(alwaysOnDisplay = AlwaysOnDisplayMediaCardConfig(value)))) },
                 )
             }
@@ -274,32 +289,33 @@ private fun MediaIslandPreview(value: IslandExpandedMediaCardConfig) {
 @Composable
 private fun MediaNotificationSettings(
     value: NotificationMediaCardConfig,
+    enabled: Boolean,
     onChange: (NotificationMediaCardConfig) -> Unit,
 ) {
-    MediaCardBackground(value.backgroundStyle, value.cardTheme, value.ambientFlowMode, value.backgroundColorAnimation, value.backgroundBlur, value.backgroundAutoInvert, value.softCoverTone, { onChange(value.copy(backgroundStyle = it)) }, { onChange(value.copy(cardTheme = it)) }, { onChange(value.copy(ambientFlowMode = it)) }, { onChange(value.copy(backgroundColorAnimation = it)) }, { onChange(value.copy(backgroundBlur = it)) }, { onChange(value.copy(backgroundAutoInvert = it)) }, { onChange(value.copy(softCoverTone = it)) }, expanded = false)
+    MediaCardBackground(value.backgroundStyle, value.cardTheme, value.ambientFlowMode, value.backgroundColorAnimation, value.backgroundBlur, value.backgroundAutoInvert, value.softCoverTone, { onChange(value.copy(backgroundStyle = it)) }, { onChange(value.copy(cardTheme = it)) }, { onChange(value.copy(ambientFlowMode = it)) }, { onChange(value.copy(backgroundColorAnimation = it)) }, { onChange(value.copy(backgroundBlur = it)) }, { onChange(value.copy(backgroundAutoInvert = it)) }, { onChange(value.copy(softCoverTone = it)) }, enabled = enabled, expanded = false)
     MediaSectionTitle(text = "布局")
     MediaCard(modifier = Modifier.fillMaxWidth()) {
-        MediaDropdown("卡片布局样式", mediaLayoutLabels, mediaLayoutValues.indexOf(value.layoutStyle)) { onChange(value.copy(layoutStyle = mediaLayoutValues[it])) }
-        SwitchPreference(title = "动作按钮左对齐", checked = value.actionAlignLeft, onCheckedChange = { onChange(value.copy(actionAlignLeft = it)) })
-        MediaDropdown("动作按钮顺序", mediaActionOrderLabels, mediaActionOrderValues.indexOf(value.actionOrder)) { onChange(value.copy(actionOrder = mediaActionOrderValues[it])) }
+        MediaDropdown("卡片布局样式", mediaLayoutLabels, mediaLayoutValues.indexOf(value.layoutStyle), enabled) { onChange(value.copy(layoutStyle = mediaLayoutValues[it])) }
+        SwitchPreference(title = "动作按钮左对齐", checked = value.actionAlignLeft, enabled = enabled, onCheckedChange = { onChange(value.copy(actionAlignLeft = it)) })
+        MediaDropdown("动作按钮顺序", mediaActionOrderLabels, mediaActionOrderValues.indexOf(value.actionOrder), enabled) { onChange(value.copy(actionOrder = mediaActionOrderValues[it])) }
     }
     MediaSectionTitle(text = "元素")
     MediaCard(modifier = Modifier.fillMaxWidth()) {
-        MediaDropdown("音频封面样式", mediaCoverLabels, mediaCoverValues.indexOf(value.coverStyle)) { onChange(value.copy(coverStyle = mediaCoverValues[it])) }
-        SwitchPreference(title = "隐藏音频封面的来源标识", checked = value.hideCoverSource, onCheckedChange = { onChange(value.copy(hideCoverSource = it)) })
-        SwitchPreference(title = "隐藏音频封面阴影", checked = value.hideCoverShadow, onCheckedChange = { onChange(value.copy(hideCoverShadow = it)) })
-        SwitchPreference(title = "禁用音频封面翻转动画", checked = value.disableCoverFlip, onCheckedChange = { onChange(value.copy(disableCoverFlip = it)) })
-        SwitchPreference(title = "隐藏设备切换按钮", checked = value.hideDeviceSwitch, onCheckedChange = { onChange(value.copy(hideDeviceSwitch = it)) })
-        SwitchPreference(title = "隐藏自定义动作按钮", checked = value.hideCustomActions, onCheckedChange = { onChange(value.copy(hideCustomActions = it)) })
-        SwitchPreference(title = "隐藏进度时间", checked = value.hideTime, onCheckedChange = { onChange(value.copy(hideTime = it)) })
+        MediaDropdown("音频封面样式", mediaCoverLabels, mediaCoverValues.indexOf(value.coverStyle), enabled) { onChange(value.copy(coverStyle = mediaCoverValues[it])) }
+        SwitchPreference(title = "隐藏音频封面的来源标识", checked = value.hideCoverSource, enabled = enabled, onCheckedChange = { onChange(value.copy(hideCoverSource = it)) })
+        SwitchPreference(title = "隐藏音频封面阴影", checked = value.hideCoverShadow, enabled = enabled, onCheckedChange = { onChange(value.copy(hideCoverShadow = it)) })
+        SwitchPreference(title = "禁用音频封面翻转动画", checked = value.disableCoverFlip, enabled = enabled, onCheckedChange = { onChange(value.copy(disableCoverFlip = it)) })
+        SwitchPreference(title = "隐藏设备切换按钮", checked = value.hideDeviceSwitch, enabled = enabled, onCheckedChange = { onChange(value.copy(hideDeviceSwitch = it)) })
+        SwitchPreference(title = "隐藏自定义动作按钮", checked = value.hideCustomActions, enabled = enabled, onCheckedChange = { onChange(value.copy(hideCustomActions = it)) })
+        SwitchPreference(title = "隐藏进度时间", checked = value.hideTime, enabled = enabled, onCheckedChange = { onChange(value.copy(hideTime = it)) })
     }
     MediaSectionTitle(text = "进度条")
     MediaCard(modifier = Modifier.fillMaxWidth()) {
-        MediaDropdown("进度条样式", mediaProgressLabels, mediaProgressValues.indexOf(value.progressStyle)) { onChange(value.copy(progressStyle = mediaProgressValues[it])) }
+        MediaDropdown("进度条样式", mediaProgressLabels, mediaProgressValues.indexOf(value.progressStyle), enabled) { onChange(value.copy(progressStyle = mediaProgressValues[it])) }
         if (value.progressStyle == MediaCardConstants.PROGRESS_DEFAULT) {
-            SwitchPreference(title = "进度条尾部光辉", summary = "使用小米超级岛媒体卡片进度条拖尾效果", checked = value.progressHeadGlow, onCheckedChange = { onChange(value.copy(progressHeadGlow = it)) })
+            SwitchPreference(title = "进度条尾部光辉", summary = "使用小米超级岛媒体卡片进度条拖尾效果", checked = value.progressHeadGlow, enabled = enabled, onCheckedChange = { onChange(value.copy(progressHeadGlow = it)) })
         } else {
-            MediaDropdown("滑块样式", mediaThumbLabels, mediaThumbValues.indexOf(value.thumbStyle)) { onChange(value.copy(thumbStyle = mediaThumbValues[it])) }
+            MediaDropdown("滑块样式", mediaThumbLabels, mediaThumbValues.indexOf(value.thumbStyle), enabled) { onChange(value.copy(thumbStyle = mediaThumbValues[it])) }
         }
     }
 }
@@ -307,31 +323,32 @@ private fun MediaNotificationSettings(
 @Composable
 private fun MediaIslandSettings(
     value: IslandExpandedMediaCardConfig,
+    enabled: Boolean,
     onChange: (IslandExpandedMediaCardConfig) -> Unit,
 ) {
-    MediaCardBackground(value.backgroundStyle, value.cardTheme, value.ambientFlowMode, value.backgroundColorAnimation, value.backgroundBlur, value.backgroundAutoInvert, value.softCoverTone, { onChange(value.copy(backgroundStyle = it)) }, { onChange(value.copy(cardTheme = it)) }, { onChange(value.copy(ambientFlowMode = it)) }, { onChange(value.copy(backgroundColorAnimation = it)) }, { onChange(value.copy(backgroundBlur = it)) }, { onChange(value.copy(backgroundAutoInvert = it)) }, { onChange(value.copy(softCoverTone = it)) }, expanded = true)
+    MediaCardBackground(value.backgroundStyle, value.cardTheme, value.ambientFlowMode, value.backgroundColorAnimation, value.backgroundBlur, value.backgroundAutoInvert, value.softCoverTone, { onChange(value.copy(backgroundStyle = it)) }, { onChange(value.copy(cardTheme = it)) }, { onChange(value.copy(ambientFlowMode = it)) }, { onChange(value.copy(backgroundColorAnimation = it)) }, { onChange(value.copy(backgroundBlur = it)) }, { onChange(value.copy(backgroundAutoInvert = it)) }, { onChange(value.copy(softCoverTone = it)) }, enabled = enabled, expanded = true)
     MediaSectionTitle(text = "布局")
     MediaCard(modifier = Modifier.fillMaxWidth()) {
-        MediaDropdown("卡片布局样式", mediaLayoutLabels, mediaLayoutValues.indexOf(value.layoutStyle)) { onChange(value.copy(layoutStyle = mediaLayoutValues[it])) }
-        SwitchPreference(title = "动作按钮左对齐", checked = value.actionAlignLeft, onCheckedChange = { onChange(value.copy(actionAlignLeft = it)) })
-        MediaDropdown("动作按钮顺序", mediaActionOrderLabels, mediaActionOrderValues.indexOf(value.actionOrder)) { onChange(value.copy(actionOrder = mediaActionOrderValues[it])) }
+        MediaDropdown("卡片布局样式", mediaLayoutLabels, mediaLayoutValues.indexOf(value.layoutStyle), enabled) { onChange(value.copy(layoutStyle = mediaLayoutValues[it])) }
+        SwitchPreference(title = "动作按钮左对齐", checked = value.actionAlignLeft, enabled = enabled, onCheckedChange = { onChange(value.copy(actionAlignLeft = it)) })
+        MediaDropdown("动作按钮顺序", mediaActionOrderLabels, mediaActionOrderValues.indexOf(value.actionOrder), enabled) { onChange(value.copy(actionOrder = mediaActionOrderValues[it])) }
     }
     MediaSectionTitle(text = "元素")
     MediaCard(modifier = Modifier.fillMaxWidth()) {
-        MediaDropdown("音频封面样式", mediaCoverLabels, mediaCoverValues.indexOf(value.coverStyle)) { onChange(value.copy(coverStyle = mediaCoverValues[it])) }
-        SwitchPreference(title = "隐藏音频封面的来源标识", checked = value.hideCoverSource, onCheckedChange = { onChange(value.copy(hideCoverSource = it)) })
-        SwitchPreference(title = "禁用音频封面翻转动画", checked = value.disableCoverFlip, onCheckedChange = { onChange(value.copy(disableCoverFlip = it)) })
-        SwitchPreference(title = "隐藏设备切换按钮", checked = value.hideDeviceSwitch, onCheckedChange = { onChange(value.copy(hideDeviceSwitch = it)) })
-        SwitchPreference(title = "隐藏自定义动作按钮", checked = value.hideCustomActions, onCheckedChange = { onChange(value.copy(hideCustomActions = it)) })
-        SwitchPreference(title = "隐藏进度时间", checked = value.hideTime, onCheckedChange = { onChange(value.copy(hideTime = it)) })
+        MediaDropdown("音频封面样式", mediaCoverLabels, mediaCoverValues.indexOf(value.coverStyle), enabled) { onChange(value.copy(coverStyle = mediaCoverValues[it])) }
+        SwitchPreference(title = "隐藏音频封面的来源标识", checked = value.hideCoverSource, enabled = enabled, onCheckedChange = { onChange(value.copy(hideCoverSource = it)) })
+        SwitchPreference(title = "禁用音频封面翻转动画", checked = value.disableCoverFlip, enabled = enabled, onCheckedChange = { onChange(value.copy(disableCoverFlip = it)) })
+        SwitchPreference(title = "隐藏设备切换按钮", checked = value.hideDeviceSwitch, enabled = enabled, onCheckedChange = { onChange(value.copy(hideDeviceSwitch = it)) })
+        SwitchPreference(title = "隐藏自定义动作按钮", checked = value.hideCustomActions, enabled = enabled, onCheckedChange = { onChange(value.copy(hideCustomActions = it)) })
+        SwitchPreference(title = "隐藏进度时间", checked = value.hideTime, enabled = enabled, onCheckedChange = { onChange(value.copy(hideTime = it)) })
     }
     MediaSectionTitle(text = "进度条")
     MediaCard(modifier = Modifier.fillMaxWidth()) {
-        MediaDropdown("进度条样式", mediaProgressLabels, mediaProgressValues.indexOf(value.progressStyle)) { onChange(value.copy(progressStyle = mediaProgressValues[it])) }
+        MediaDropdown("进度条样式", mediaProgressLabels, mediaProgressValues.indexOf(value.progressStyle), enabled) { onChange(value.copy(progressStyle = mediaProgressValues[it])) }
         if (value.progressStyle == MediaCardConstants.PROGRESS_DEFAULT) {
-            SwitchPreference(title = "进度条尾部光辉", checked = value.progressHeadGlow, onCheckedChange = { onChange(value.copy(progressHeadGlow = it)) })
+            SwitchPreference(title = "进度条尾部光辉", checked = value.progressHeadGlow, enabled = enabled, onCheckedChange = { onChange(value.copy(progressHeadGlow = it)) })
         } else {
-            MediaDropdown("滑块样式", mediaThumbLabels, mediaThumbValues.indexOf(value.thumbStyle)) { onChange(value.copy(thumbStyle = mediaThumbValues[it])) }
+            MediaDropdown("滑块样式", mediaThumbLabels, mediaThumbValues.indexOf(value.thumbStyle), enabled) { onChange(value.copy(thumbStyle = mediaThumbValues[it])) }
         }
     }
 }
@@ -352,29 +369,30 @@ private fun MediaCardBackground(
     onBlurChange: (Int) -> Unit,
     onAutoInvertChange: (Boolean) -> Unit,
     onToneChange: (Int) -> Unit,
+    enabled: Boolean,
     expanded: Boolean,
 ) {
     MediaSectionTitle(text = "背景")
     MediaCard(modifier = Modifier.fillMaxWidth()) {
-        MediaDropdown("卡片背景样式", mediaBackgroundLabels, mediaBackgroundValues.indexOf(backgroundStyle)) { onBackgroundStyleChange(mediaBackgroundValues[it]) }
+        MediaDropdown("卡片背景样式", mediaBackgroundLabels, mediaBackgroundValues.indexOf(backgroundStyle), enabled) { onBackgroundStyleChange(mediaBackgroundValues[it]) }
         if (backgroundStyle == MediaCardConstants.BACKGROUND_DEFAULT) {
             val themeLabels = if (expanded) {
                 listOf("跟随系统", "始终浅色", "始终深色（默认）")
             } else {
                 listOf("跟随系统（默认）", "始终浅色", "始终深色")
             }
-            MediaDropdown("卡片背景颜色", themeLabels, mediaThemeValues.indexOf(cardTheme)) { onCardThemeChange(mediaThemeValues[it]) }
-            MediaDropdown("卡片动态流光", if (expanded) mediaAmbientExpandedLabels else mediaAmbientNotificationLabels, (if (expanded) mediaAmbientExpandedValues else mediaAmbientNotificationValues).indexOf(ambientFlowMode)) { onAmbientFlowChange((if (expanded) mediaAmbientExpandedValues else mediaAmbientNotificationValues)[it]) }
+            MediaDropdown("卡片背景颜色", themeLabels, mediaThemeValues.indexOf(cardTheme), enabled) { onCardThemeChange(mediaThemeValues[it]) }
+            MediaDropdown("卡片动态流光", if (expanded) mediaAmbientExpandedLabels else mediaAmbientNotificationLabels, (if (expanded) mediaAmbientExpandedValues else mediaAmbientNotificationValues).indexOf(ambientFlowMode), enabled) { onAmbientFlowChange((if (expanded) mediaAmbientExpandedValues else mediaAmbientNotificationValues)[it]) }
         } else {
             if (backgroundStyle == MediaCardConstants.BACKGROUND_SOFT_COVER) {
-                MediaDropdown("柔光封面明暗", mediaToneLabels, mediaToneValues.indexOf(softCoverTone)) { onToneChange(mediaToneValues[it]) }
+                MediaDropdown("柔光封面明暗", mediaToneLabels, mediaToneValues.indexOf(softCoverTone), enabled) { onToneChange(mediaToneValues[it]) }
             }
-            SwitchPreference(title = "背景切换动画", checked = backgroundColorAnimation, onCheckedChange = onColorAnimationChange)
+            SwitchPreference(title = "背景切换动画", checked = backgroundColorAnimation, enabled = enabled, onCheckedChange = onColorAnimationChange)
             if (backgroundStyle == MediaCardConstants.BACKGROUND_BLURRED_COVER) {
-                MediaSlider("背景模糊强度", backgroundBlur.toFloat(), 1f..20f, backgroundBlur.toString()) { onBlurChange(it.roundToInt()) }
+                MediaSlider("背景模糊强度", backgroundBlur.toFloat(), 1f..20f, backgroundBlur.toString(), enabled) { onBlurChange(it.roundToInt()) }
             }
             if (backgroundStyle == MediaCardConstants.BACKGROUND_LINEAR_GRADIENT) {
-                SwitchPreference(title = "亮色封面自动反色", checked = backgroundAutoInvert, onCheckedChange = onAutoInvertChange)
+                SwitchPreference(title = "亮色封面自动反色", checked = backgroundAutoInvert, enabled = enabled, onCheckedChange = onAutoInvertChange)
             }
         }
     }
@@ -386,12 +404,12 @@ private fun MediaCard(modifier: Modifier, content: @Composable ColumnScope.() ->
 }
 
 @Composable
-private fun MediaDropdown(title: String, items: List<String>, selected: Int, onSelected: (Int) -> Unit) {
-    OverlayDropdownPreference(title = title, items = items, selectedIndex = selected.coerceIn(0, items.lastIndex), onSelectedIndexChange = onSelected)
+private fun MediaDropdown(title: String, items: List<String>, selected: Int, enabled: Boolean, onSelected: (Int) -> Unit) {
+    OverlayDropdownPreference(title = title, items = items, selectedIndex = selected.coerceIn(0, items.lastIndex), enabled = enabled, onSelectedIndexChange = onSelected)
 }
 
 @Composable
-private fun MediaSlider(title: String, value: Float, range: ClosedFloatingPointRange<Float>, label: String, onFinished: (Float) -> Unit) {
+private fun MediaSlider(title: String, value: Float, range: ClosedFloatingPointRange<Float>, label: String, enabled: Boolean, onFinished: (Float) -> Unit) {
     var sliderValue by remember(title, value) { mutableFloatStateOf(value.coerceIn(range.start, range.endInclusive)) }
     Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
@@ -404,6 +422,7 @@ private fun MediaSlider(title: String, value: Float, range: ClosedFloatingPointR
             onValueChangeFinished = { onFinished(sliderValue) },
             valueRange = range,
             steps = (range.endInclusive - range.start).roundToInt().coerceAtLeast(1) - 1,
+            enabled = enabled,
             showKeyPoints = true,
             keyPoints = listOf(range.start, (range.start + range.endInclusive) / 2f, range.endInclusive),
             hapticEffect = SliderDefaults.SliderHapticEffect.Step,

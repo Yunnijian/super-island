@@ -66,6 +66,8 @@ object MediaCardConstants {
 }
 
 data class MediaCardConfig(
+    /** Port-owned master switch; defaults to enabled so existing card customizations survive upgrade. */
+    val enabled: Boolean = true,
     /** HyperLyric's media-island mini-window whitelist switch. */
     val removeIslandWhitelist: Boolean = false,
     val notification: NotificationMediaCardConfig = NotificationMediaCardConfig.defaults(),

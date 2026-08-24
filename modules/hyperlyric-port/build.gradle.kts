@@ -149,6 +149,10 @@ val hyperLyricPortAdaptedSources = setOf(
     "common/media/MediaMetadataHelper.kt",
     "root/HookEntry.kt",
     "root/UnlockIslandWhitelist.kt",
+    "root/mediacard/MediaCardRuntimeConfig.kt",
+    "root/mediacard/notification/NotificationMediaAmbientFlowHooker.kt",
+    "root/mediacard/notification/NotificationMediaCoverStyleHooker.kt",
+    "root/mediacard/notification/background/NotificationMediaBackgroundController.kt",
     "root/island/effects/album/IslandAlbumCoverStyleHooker.kt",
     "root/island/effects/color/IslandMusicWaveColorHooker.kt",
     "root/island/effects/glow/HookIslandGlow.kt",
@@ -321,26 +325,39 @@ val generateHyperLyricPortSource = tasks.register<GeneratedHyperLyricSync>("gene
             }
             StatusBarTextColorHooker.hook(module, classLoader)
             MediaCardRuntimeConfig.load(runtime.prefs)
-            MediaCardConfigurationRefreshHooker.hook(module, classLoader)
-            MediaProgressStyleHooker.hook(module, classLoader)
-            MediaCardElementBehaviorHooker.hook(module, classLoader)
-            IslandExpandedMediaAmbientFlowHooker.hook(module, classLoader)
-            IslandExpandedMediaLayoutHooker.hook(module, classLoader)
-            NotificationMediaAmbientFlowHooker.hook(module, classLoader)
-            NotificationMediaCoverStyleHooker.hook(module, classLoader)
-            if (MediaCardRuntimeConfig.current.notification.cardSwitcherEnabled) {
-                NotificationMediaSingleCardSwitcherHooker.hook(module, classLoader)
-            } else {
-                HookLogger.d(TAG, "通知中心多媒体卡片切换功能未启用，跳过媒体卡片切换 Hook")
-            }
-            try {
-                UnlockIslandWhitelist.hook(module, classLoader)
-            } catch (e: Exception) {
-                if (e is ClassNotFoundException || e is NoSuchMethodException) {
-                    HookLogger.w(TAG, "此系统版本不支持超级岛下拉小窗白名单")
+            val mediaCardConfig = MediaCardRuntimeConfig.current
+            if (mediaCardConfig.enabled) {
+                MediaCardConfigurationRefreshHooker.hook(module, classLoader)
+                MediaProgressStyleHooker.hook(module, classLoader)
+                if (shouldInstallMediaCardElementBehavior(mediaCardConfig)) {
+                    MediaCardElementBehaviorHooker.hook(module, classLoader)
                 } else {
-                    HookLogger.e(TAG, "超级岛下拉小窗白名单注入失败", e)
+                    HookLogger.d(TAG, "媒体卡片封面行为均为原生，跳过封面行为 Hook")
                 }
+                IslandExpandedMediaAmbientFlowHooker.hook(module, classLoader)
+                IslandExpandedMediaLayoutHooker.hook(module, classLoader)
+                if (shouldInstallNotificationMediaRendering(mediaCardConfig)) {
+                    NotificationMediaAmbientFlowHooker.hook(module, classLoader)
+                } else {
+                    HookLogger.d(TAG, "通知中心媒体渲染均为原生，跳过渲染 Hook")
+                }
+                NotificationMediaCoverStyleHooker.hook(module, classLoader)
+                if (mediaCardConfig.notification.cardSwitcherEnabled) {
+                    NotificationMediaSingleCardSwitcherHooker.hook(module, classLoader)
+                } else {
+                    HookLogger.d(TAG, "通知中心多媒体卡片切换功能未启用，跳过媒体卡片切换 Hook")
+                }
+                try {
+                    UnlockIslandWhitelist.hook(module, classLoader)
+                } catch (e: Exception) {
+                    if (e is ClassNotFoundException || e is NoSuchMethodException) {
+                        HookLogger.w(TAG, "此系统版本不支持超级岛下拉小窗白名单")
+                    } else {
+                        HookLogger.e(TAG, "超级岛下拉小窗白名单注入失败", e)
+                    }
+                }
+            } else {
+                HookLogger.d(TAG, "媒体卡片总开关关闭，跳过全部媒体卡片 Hook")
             }
             activeMode = runtime.prefs.getInt(
                 RootConstants.KEY_HOOK_LYRIC_MODE,
@@ -384,6 +401,34 @@ val generateHyperLyricPortSource = tasks.register<GeneratedHyperLyricSync>("gene
                 }
             }
         }
+
+        /**
+         * These two upstream hooks deoptimize methods invoked by every media-card
+         * transition. Install them only when their owned behavior is selected.
+         */
+        private fun shouldInstallMediaCardElementBehavior(
+            config: MediaCardRuntimeConfig.Snapshot
+        ): Boolean =
+            config.enabled && (
+                config.notification.hideCoverShadow ||
+                    config.notification.disableCoverFlip ||
+                    config.islandExpanded.disableCoverFlip
+                )
+
+        /**
+         * The notification renderer owns flow, card theme, and custom background.
+         * Its all-native state must leave SystemUI's bind, draw, and click paths untouched.
+         */
+        private fun shouldInstallNotificationMediaRendering(
+            config: MediaCardRuntimeConfig.Snapshot
+        ): Boolean =
+            config.enabled && (
+                config.notification.ambientFlowMode !=
+                    RootConstants.NOTIFICATION_MEDIA_AMBIENT_FLOW_MODE_DISABLED ||
+                    config.notification.cardTheme != RootConstants.MEDIA_CARD_THEME_FOLLOW_SYSTEM ||
+                    config.notification.backgroundStyle !=
+                        RootConstants.NOTIFICATION_MEDIA_BACKGROUND_STYLE_DEFAULT
+                )
     }
 
     private var _prefs: android.content.SharedPreferences? = null
@@ -501,6 +546,107 @@ val generateHyperLyricPortSource = tasks.register<GeneratedHyperLyricSync>("gene
             relativePath = "root/UnlockIslandWhitelist.kt",
             original = "val prefs = (module as? HookEntry)?.prefs ?: return",
             replacement = "val prefs = HookEntry.instance?.prefs ?: return",
+        )
+
+        // The upstream snapshot permanently enables media cards. The host has a separate
+        // master switch, so only this preference read is adapted; absent keys preserve the
+        // upstream enabled default for existing installations.
+        fun replacePortSource(
+            relativePath: String,
+            original: String,
+            replacement: String,
+        ) {
+            val file = generatedRoot.resolve("com/lidesheng/hyperlyric/$relativePath")
+            val source = file.readText()
+            check(source.contains(original)) {
+                "HyperLyric port source changed: $relativePath"
+            }
+            file.writeText(source.replace(original, replacement))
+        }
+        replacePortSource(
+            relativePath = "root/mediacard/MediaCardRuntimeConfig.kt",
+            original = "            fun from(prefs: SharedPreferences) = Snapshot(\n                enabled = true,\n",
+            replacement = "            fun from(prefs: SharedPreferences) = Snapshot(\n                enabled = prefs.getBoolean(\"key_hook_media_card_enabled\", true),\n",
+        )
+
+        // Keep the upstream visual algorithms and cache keys intact, but avoid repeating their
+        // structural mutations for the same controller state on every SystemUI bind callback.
+        replacePortSource(
+            relativePath = "root/mediacard/notification/NotificationMediaAmbientFlowHooker.kt",
+            original = "        val isPlaying = readField(mediaData, \"isPlaying\") == true\n        state.isPlaying = isPlaying\n        configureCustomView(state)\n        syncPlayback(state)\n",
+            replacement = "        val isPlaying = readField(mediaData, \"isPlaying\") == true\n        val playbackChanged = !state.playbackConfigured || state.isPlaying != isPlaying\n        state.isPlaying = isPlaying\n        if (playbackChanged) {\n            configureCustomView(state)\n            syncPlayback(state)\n            state.playbackConfigured = true\n        }\n",
+        )
+        replacePortSource(
+            relativePath = "root/mediacard/notification/NotificationMediaAmbientFlowHooker.kt",
+            original = "        var hasColors: Boolean = false,\n        val colorRequest: AtomicInteger = AtomicInteger()\n",
+            replacement = "        var hasColors: Boolean = false,\n        var playbackConfigured: Boolean = false,\n        val colorRequest: AtomicInteger = AtomicInteger()\n",
+        )
+        replacePortSource(
+            relativePath = "root/mediacard/notification/NotificationMediaAmbientFlowHooker.kt",
+            original = "    private data class ControllerThemeState(val originalContext: Context)\n",
+            replacement = "    private data class ControllerThemeState(\n        val originalContext: Context,\n        val appliedTheme: Int\n    )\n",
+        )
+        replacePortSource(
+            relativePath = "root/mediacard/notification/NotificationMediaAmbientFlowHooker.kt",
+            original = "            val existingState = themeStates[controller]\n            val originalContext = existingState?.originalContext\n                ?: contextField.get(controller) as Context\n",
+            replacement = "            val existingState = themeStates[controller]\n            if (existingState?.appliedTheme == theme ||\n                theme == RootConstants.MEDIA_CARD_THEME_FOLLOW_SYSTEM && existingState == null\n            ) {\n                return\n            }\n            val originalContext = existingState?.originalContext\n                ?: contextField.get(controller) as Context\n",
+        )
+        replacePortSource(
+            relativePath = "root/mediacard/notification/NotificationMediaAmbientFlowHooker.kt",
+            original = "                themeStates[controller] = ControllerThemeState(originalContext)\n",
+            replacement = "                themeStates[controller] = ControllerThemeState(originalContext, theme)\n",
+        )
+
+        replacePortSource(
+            relativePath = "root/mediacard/notification/NotificationMediaCoverStyleHooker.kt",
+            original = "    private val boundSessionIdentities =\n        Collections.synchronizedMap(WeakHashMap<Any, String>())\n",
+            replacement = "    private val boundSessionIdentities =\n        Collections.synchronizedMap(WeakHashMap<Any, String>())\n    private val appliedStyleSignatures =\n        Collections.synchronizedMap(WeakHashMap<Any, StyleSignature>())\n    private val appliedLayoutSignatures =\n        Collections.synchronizedMap(WeakHashMap<Any, LayoutSignature>())\n",
+        )
+        replacePortSource(
+            relativePath = "root/mediacard/notification/NotificationMediaCoverStyleHooker.kt",
+            original = "            if (methodName == \"detach\") {\n                boundSessionIdentities.remove(controller)\n                cleanupStyle(controller)\n",
+            replacement = "            if (methodName == \"detach\") {\n                boundSessionIdentities.remove(controller)\n                appliedStyleSignatures.remove(controller)\n                appliedLayoutSignatures.remove(controller)\n                cleanupStyle(controller)\n",
+        )
+        replacePortSource(
+            relativePath = "root/mediacard/notification/NotificationMediaCoverStyleHooker.kt",
+            original = "    private fun applyStyle(controller: Any, mediaData: Any?) {\n        val api = resolveApi(controller.javaClass.classLoader) ?: return\n        val holder = api.getHolder(controller) ?: return\n        val albumView = api.getAlbumView(holder)\n        val albumImage = api.getAlbumImage(holder)\n        val config = runtimeConfig.notification\n        val layoutStyle = config.layoutStyle\n",
+            replacement = "    private fun applyStyle(controller: Any, mediaData: Any?) {\n        val api = resolveApi(controller.javaClass.classLoader) ?: return\n        val holder = api.getHolder(controller) ?: return\n        val albumView = api.getAlbumView(holder)\n        val albumImage = api.getAlbumImage(holder)\n        val config = runtimeConfig.notification\n        val layoutStyle = config.layoutStyle\n        val currentMediaData = api.getMediaData(controller) ?: mediaData\n        val signature = StyleSignature(\n            holder = holder,\n            mediaIdentity = NotificationMediaDataIdentity.of(currentMediaData),\n            config = config,\n        )\n        if (appliedStyleSignatures[controller] == signature) {\n            syncRotatingCover(api, controller, albumImage, mediaData)\n            return\n        }\n",
+        )
+        replacePortSource(
+            relativePath = "root/mediacard/notification/NotificationMediaCoverStyleHooker.kt",
+            original = "        }\n    }\n\n    private fun applyExpandedMediaSeekBarPadding(seekBar: View) {\n",
+            replacement = "        }\n        appliedStyleSignatures[controller] = signature\n    }\n\n    private fun syncRotatingCover(\n        api: NotificationMediaHostApi,\n        controller: Any,\n        albumImage: ImageView,\n        mediaData: Any?\n    ) {\n        val config = runtimeConfig.notification\n        val unsupportedLayout = config.layoutStyle ==\n            RootConstants.NOTIFICATION_MEDIA_LAYOUT_STYLE_ONEUI ||\n            config.layoutStyle == RootConstants.NOTIFICATION_MEDIA_LAYOUT_STYLE_MIUI ||\n            config.layoutStyle == RootConstants.NOTIFICATION_MEDIA_LAYOUT_STYLE_PIXEL\n        if (!unsupportedLayout &&\n            config.coverStyle == RootConstants.NOTIFICATION_MEDIA_COVER_STYLE_ROTATING_CIRCLE\n        ) {\n            MediaCoverRotationController.attach(\n                albumImage,\n                api.isPlaying(api.getMediaData(controller) ?: mediaData)\n            )\n        }\n    }\n\n    private data class StyleSignature(\n        val holder: Any,\n        val mediaIdentity: String,\n        val config: MediaCardRuntimeConfig.Notification,\n    )\n\n    private data class LayoutSignature(\n        val layout: Any,\n        val config: MediaCardRuntimeConfig.Notification,\n        val uiMode: Int,\n    )\n\n    private fun applyExpandedMediaSeekBarPadding(seekBar: View) {\n",
+        )
+        replacePortSource(
+            relativePath = "root/mediacard/notification/NotificationMediaCoverStyleHooker.kt",
+            original = "    private fun applyLoadedLayout(api: NotificationMediaHostApi, controller: Any) {\n        val config = runtimeConfig.notification\n        val normalLayout = api.getNormalLayout(controller) ?: return\n        val context = api.getLayoutContext(controller)\n        NotificationMediaLayoutController.apply(\n",
+            replacement = "    private fun applyLoadedLayout(api: NotificationMediaHostApi, controller: Any) {\n        val config = runtimeConfig.notification\n        val normalLayout = api.getNormalLayout(controller) ?: return\n        val context = api.getLayoutContext(controller)\n        val signature = LayoutSignature(\n            layout = normalLayout,\n            config = config,\n            uiMode = context.resources.configuration.uiMode,\n        )\n        if (appliedLayoutSignatures[controller] == signature) return\n        NotificationMediaLayoutController.apply(\n",
+        )
+        replacePortSource(
+            relativePath = "root/mediacard/notification/NotificationMediaCoverStyleHooker.kt",
+            original = "            actionsOrder = config.actionOrder\n        )\n    }\n\n    private data class ColorOsAppIconState(\n",
+            replacement = "            actionsOrder = config.actionOrder\n        )\n        appliedLayoutSignatures[controller] = signature\n    }\n\n    private data class ColorOsAppIconState(\n",
+        )
+
+        replacePortSource(
+            relativePath = "root/mediacard/notification/background/NotificationMediaBackgroundController.kt",
+            original = "                applyBackground(mediaBg, rendered.bitmap)\n                NotificationMediaForegroundStyler.apply(controller, holder, rendered.colors)\n                state.customApplied = true\n                state.appliedToken = token\n                state.artworkFingerprint = rendered.artworkFingerprint\n                state.renderPending = false\n",
+            replacement = "                scheduleBackgroundApply(\n                    controller = controller,\n                    state = state,\n                    mediaBg = mediaBg,\n                    holder = holder,\n                    rendered = rendered,\n                    token = token,\n                    style = style,\n                    request = request,\n                    width = width,\n                    height = height,\n                )\n",
+        )
+        replacePortSource(
+            relativePath = "root/mediacard/notification/background/NotificationMediaBackgroundController.kt",
+            original = "    private fun applyBackground(mediaBg: ImageView, bitmap: Bitmap) {\n",
+            replacement = "    private fun scheduleBackgroundApply(\n        controller: Any,\n        state: ControllerState,\n        mediaBg: ImageView,\n        holder: Any,\n        rendered: RenderedNotificationMediaBackground,\n        token: String,\n        style: Int,\n        request: Int,\n        width: Int,\n        height: Int,\n    ) {\n        state.pendingApply?.rendered?.bitmap?.recycle()\n        state.pendingApply = PendingApply(\n            mediaBg = mediaBg,\n            holder = holder,\n            rendered = rendered,\n            token = token,\n            style = style,\n            request = request,\n            width = width,\n            height = height,\n        )\n        schedulePendingBackgroundApply(controller, state)\n    }\n\n    private fun schedulePendingBackgroundApply(controller: Any, state: ControllerState) {\n        if (state.applyScheduled) return\n        val mediaBg = state.pendingApply?.mediaBg ?: return\n        state.applyScheduled = true\n        mediaBg.postOnAnimation {\n            state.applyScheduled = false\n            val pending = state.pendingApply ?: return@postOnAnimation\n            if (\n                states[controller] !== state || state.request.get() != pending.request ||\n                currentStyle() != pending.style || !isActive(controller)\n            ) {\n                state.pendingApply = null\n                pending.rendered.bitmap.recycle()\n                return@postOnAnimation\n            }\n            val width = mediaBg.width\n            val height = mediaBg.height\n            if (width != pending.width || height != pending.height) {\n                state.pendingApply = null\n                pending.rendered.bitmap.recycle()\n                state.renderPending = false\n                state.lastMediaData?.let { data ->\n                    mediaBg.postOnAnimation {\n                        if (states[controller] === state) onBind(controller, data)\n                    }\n                }\n                return@postOnAnimation\n            }\n            if (!mediaBg.isLaidOut || mediaBg.isLayoutRequested || pending.stableFrames++ == 0) {\n                schedulePendingBackgroundApply(controller, state)\n                return@postOnAnimation\n            }\n            state.pendingApply = null\n            applyBackground(mediaBg, pending.rendered.bitmap)\n            NotificationMediaForegroundStyler.apply(controller, pending.holder, pending.rendered.colors)\n            state.customApplied = true\n            state.appliedToken = pending.token\n            state.artworkFingerprint = pending.rendered.artworkFingerprint\n            state.renderPending = false\n        }\n    }\n\n    private fun applyBackground(mediaBg: ImageView, bitmap: Bitmap) {\n",
+        )
+        replacePortSource(
+            relativePath = "root/mediacard/notification/background/NotificationMediaBackgroundController.kt",
+            original = "        states.remove(controller)?.let { state ->\n            state.request.incrementAndGet()\n            restoreMediaBackground(state)\n",
+            replacement = "        states.remove(controller)?.let { state ->\n            state.request.incrementAndGet()\n            state.pendingApply?.rendered?.bitmap?.recycle()\n            state.pendingApply = null\n            restoreMediaBackground(state)\n",
+        )
+        replacePortSource(
+            relativePath = "root/mediacard/notification/background/NotificationMediaBackgroundController.kt",
+            original = "        var layoutRetryScheduled: Boolean = false,\n        val request: AtomicInteger = AtomicInteger()\n    )\n",
+            replacement = "        var layoutRetryScheduled: Boolean = false,\n        var pendingApply: PendingApply? = null,\n        var applyScheduled: Boolean = false,\n        val request: AtomicInteger = AtomicInteger()\n    )\n\n    private data class PendingApply(\n        val mediaBg: ImageView,\n        val holder: Any,\n        val rendered: RenderedNotificationMediaBackground,\n        val token: String,\n        val style: Int,\n        val request: Int,\n        val width: Int,\n        val height: Int,\n        var stableFrames: Int = 0,\n    )\n",
         )
 
         // Some media controllers expose a stable title through the standard custom metadata
