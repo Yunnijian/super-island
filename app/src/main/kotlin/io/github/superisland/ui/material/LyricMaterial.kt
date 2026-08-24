@@ -4,7 +4,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.activity.compose.BackHandler
 import androidx.compose.ui.Alignment
 import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
@@ -148,9 +148,9 @@ private fun MaterialLyricSupportItem(app: LyricSupportApp) {
         onClick = { expanded = !expanded },
         headlineContent = { Text(app.label) },
         supportingContent = {
-            Column {
+            Column(modifier = Modifier.animateContentSize()) {
                 Text(app.displaySummary(), style = MaterialTheme.typography.bodySmall)
-                AnimatedVisibility(visible = expanded) {
+                if (expanded) {
                     Column(modifier = Modifier.padding(top = 10.dp, bottom = 4.dp)) {
                         HorizontalDivider()
                         Text(
