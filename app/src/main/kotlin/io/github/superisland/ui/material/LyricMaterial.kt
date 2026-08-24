@@ -81,7 +81,6 @@ private val sources = listOf(
     LyricSourceMode.LYRIC_INFO,
 )
 private val sourceLabels = listOf("Lyricon", "SuperLyric", "LyricInfo")
-private val lyricModeLabels = listOf("逐字歌词", "分离歌词")
 private val separators = listOf("加号（+）", "空格", "逗号（,）", "顿号（、）", "斜杠（/）", "横杠（-）", "不使用连接符")
 private val separatorKeys = listOf("plus", "space", "comma", "ideographic_comma", "slash", "hyphen", "none")
 private val animationIds = listOf("none", "default", "fade_out_fade_in", "fade_out_up_fade_in_up", "fade_out_down_fade_in_down", "fade_out_left_fade_in_right", "fade_out_left_fade_in_up", "fade_out_left_zoom_in", "fade_out_left_landing", "fade_out_right_fade_in_left", "fade_out_right_fade_in_up", "fade_out_right_zoom_in", "fade_out_right_landing", "fade_out_left_zoom_in_right", "fade_out_right_zoom_in_left", "slide_out_left_slide_in_right", "slide_out_left_fade_in_up", "slide_out_left_zoom_in", "slide_out_left_landing", "slide_out_right_slide_in_left", "slide_out_right_fade_in_up", "slide_out_right_zoom_in", "slide_out_right_landing", "flip_out_x_flip_in_x", "flip_out_y_flip_in_y", "rotate_out_rotate_in", "zoom_out_zoom_in")
@@ -326,7 +325,7 @@ private fun LyricMaterialDetail(
         ) {
             if (section == LyricConfigSection.SOURCE) {
             item {
-                SegmentedColumn(Modifier.fillMaxWidth(), title = "小米超级岛歌词自定义配置", content = listOf(
+                SegmentedColumn(Modifier.fillMaxWidth(), content = listOf(
                     { dropdown("歌词源", sourceLabels, sources.selected(config.sourceMode.publicPickerMode())) { set(config.copy(sourceMode = sources.getOrElse(it) { LyricSourceMode.LYRICON })) } },
                     { if (config.sourceMode == LyricSourceMode.LYRICON && support.lyriconProviders.isEmpty() && support.loaded) Text("未发现 Lyricon 歌词提供器", style = MaterialTheme.typography.bodySmall) },
                     { if (config.sourceMode == LyricSourceMode.SUPER_LYRIC && !support.superLyricInstalled && support.loaded) Text("未安装 SuperLyric\n请安装并启用 SuperLyric 模块以使用该歌词源", style = MaterialTheme.typography.bodySmall) },
@@ -471,13 +470,17 @@ private fun LyricMaterialDetail(
                 ))
             }
             }
-            if (section == LyricConfigSection.ISLAND) {
+            if (section == LyricConfigSection.CONTENT_LAYOUT) {
             item {
-                SegmentedColumn(Modifier.fillMaxWidth(), title = "内容布局", content = listOf(
+                SegmentedColumn(Modifier.fillMaxWidth(), title = "音乐信息", content = listOf(
                     { materialFieldRow("第一行", summarizeFields(config.musicInfoFirstLine, LyricMusicInfoLayout.FIELD_TITLE)) { editingFieldRow = 0 } },
                     { materialFieldRow("第二行", summarizeFields(config.musicInfoSecondLine, LyricMusicInfoLayout.FIELD_ARTIST)) { editingFieldRow = 1 } },
                     { dropdown("字段连接符", separators, separatorKeys.selected(config.musicInfoSeparator)) { set(config.copy(musicInfoSeparator = separatorKeys.getOrElse(it) { "hyphen" })) } },
                     { switch("居中显示", "", config.centerMusicInfo, true) { set(config.copy(centerMusicInfo = it)) } },
+                ))
+            }
+            item {
+                SegmentedColumn(Modifier.fillMaxWidth(), title = "歌词", content = listOf(
                     { switch("居中显示", "", config.centerLyric, !config.rightLyric) { set(config.copy(centerLyric = it, rightLyric = if (it) false else config.rightLyric)) } },
                     { switch("歌词右对齐", "", config.rightLyric, !config.centerLyric) { set(config.copy(rightLyric = it, centerLyric = if (it) false else config.centerLyric)) } },
                     { dropdown("占位符格式", LyricPlaceholder.entries.map { it.display }, config.placeholder.ordinal) { set(config.copy(placeholder = LyricPlaceholder.entries.getOrElse(it) { LyricPlaceholder.COUNTDOWN })) } },
@@ -634,7 +637,6 @@ private fun LyricMaterialDirectory(
         ) {
             SegmentedColumn(
                 modifier = Modifier.fillMaxWidth(),
-                title = "小米超级岛歌词",
                 content = listOf(
                     {
                         SegmentedSwitchItem(
@@ -645,34 +647,11 @@ private fun LyricMaterialDirectory(
                             onCheckedChange = onEnabledChange,
                         )
                     },
-                    {
-                        SegmentedDropdownItem(
-                            title = "歌词模式",
-                            items = lyricModeLabels,
-                            selectedIndex = config.lyricMode.coerceIn(0, lyricModeLabels.lastIndex),
-                            enabled = enabled,
-                            onItemSelected = { mode ->
-                                onConfigChange(config.copy(lyricMode = mode).normalized())
-                            },
-                        )
-                    },
-                    {
-                        SegmentedDropdownItem(
-                            title = "歌词源",
-                            items = sourceLabels,
-                            selectedIndex = sources.selected(config.sourceMode.publicPickerMode()),
-                            enabled = enabled,
-                            onItemSelected = { source ->
-                                onConfigChange(config.copy(sourceMode = sources.getOrElse(source) { LyricSourceMode.LYRICON }).normalized())
-                            },
-                        )
-                    },
                 ),
             )
             val sections = LyricConfigSection.entries
                 .filter {
-                    it != LyricConfigSection.SOURCE &&
-                        (it != LyricConfigSection.PROVIDER || config.sourceMode == LyricSourceMode.LYRICON)
+                    it != LyricConfigSection.PROVIDER || config.sourceMode == LyricSourceMode.LYRICON
                 }
             SegmentedColumn(
                 modifier = Modifier.fillMaxWidth(),
@@ -711,6 +690,7 @@ private fun lyricSectionSummary(
         LyricSourceMode.LYRICON -> "Lyricon"
     }
     LyricConfigSection.ISLAND -> if (config.widthMode == 1) "动态长度" else "固定长度"
+    LyricConfigSection.CONTENT_LAYOUT -> null
     LyricConfigSection.PROVIDER -> "Lyricon 歌词提供器与时间偏移"
     LyricConfigSection.TEXT_STYLE,
     LyricConfigSection.SCROLL,

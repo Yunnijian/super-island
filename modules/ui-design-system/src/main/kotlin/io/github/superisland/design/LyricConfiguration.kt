@@ -171,6 +171,7 @@ private fun LyricInlineDualSliderRow(
 enum class LyricConfigSection(val title: String) {
     SOURCE("歌词源"),
     ISLAND("超级岛"),
+    CONTENT_LAYOUT("内容布局"),
     TEXT_STYLE("文字样式"),
     SCROLL("滚动显示"),
     VERBATIM("逐字歌词"),
@@ -219,6 +220,7 @@ private fun lyricSectionSummary(section: LyricConfigSection, config: LyricIsland
         LyricSourceMode.MEDIA_FALLBACK -> "LyricInfo"
     }
     LyricConfigSection.ISLAND -> if (config.widthMode == 1) "动态长度" else "固定长度"
+    LyricConfigSection.CONTENT_LAYOUT -> null
     LyricConfigSection.PROVIDER -> "Lyricon 歌词提供器与时间偏移"
     LyricConfigSection.TEXT_STYLE,
     LyricConfigSection.SCROLL,
@@ -320,61 +322,69 @@ fun LyricConfigurationMiuix(
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         if (section == null || section == LyricConfigSection.SOURCE || section == LyricConfigSection.PROVIDER) {
-        Card {
-            OverlayDropdownPreference(
-                title = "歌词源",
-                items = sourceLabels,
-                selectedIndex = sourceIndex,
-                enabled = enabled,
-                onSelectedIndexChange = { set(config.copy(sourceMode = sourceValues.getOrElse(it) { LyricSourceMode.LYRICON })) },
-            )
+            Card {
+                OverlayDropdownPreference(
+                    title = "歌词源",
+                    items = sourceLabels,
+                    selectedIndex = sourceIndex,
+                    enabled = enabled,
+                    onSelectedIndexChange = { set(config.copy(sourceMode = sourceValues.getOrElse(it) { LyricSourceMode.LYRICON })) },
+                )
+            }
             if (config.sourceMode == LyricSourceMode.LYRICON) {
                 SmallTitle(text = "歌词提供器")
-                if (support.loaded && support.lyriconProviders.isEmpty()) {
-                    Text(text = "未发现 Lyricon 歌词提供器")
-                }
-                support.lyriconProviders.forEach { provider ->
-                    val delay = config.lyriconProviderDelays[provider.packageName]
-                        ?: config.lyriconProviderDelayMs
-                    Text(
-                        text = "${provider.label}  v${provider.versionName}" +
-                            provider.providerAuthor.orEmpty().takeIf { it.isNotBlank() }?.let { "，作者 $it" }.orEmpty(),
-                    )
-                    Text(
-                        buildString {
-                            append("v").append(provider.versionName)
-                            provider.providerAuthor?.takeIf { it.isNotBlank() }?.let { append("，作者 ").append(it) }
-                            provider.providerCategory?.takeIf { it.isNotBlank() }?.let { append("，").append(it) }
-                            append("；正数延后显示，负数提前显示")
-                        },
-                    )
-                    LyricInlineSliderRow("歌词时间偏移", delay.toFloat(), -5000f..5000f, 19, enabled, "${delay}ms") { value ->
-                        val next = config.lyriconProviderDelays.toMutableMap()
-                        next[provider.packageName] = value.toInt().coerceIn(-5000, 5000)
-                        set(config.copy(lyriconProviderDelays = next))
+                Card {
+                    if (support.loaded && support.lyriconProviders.isEmpty()) {
+                        Text(text = "未发现 Lyricon 歌词提供器")
+                    }
+                    support.lyriconProviders.forEach { provider ->
+                        val delay = config.lyriconProviderDelays[provider.packageName]
+                            ?: config.lyriconProviderDelayMs
+                        Text(
+                            text = "${provider.label}  v${provider.versionName}" +
+                                provider.providerAuthor.orEmpty().takeIf { it.isNotBlank() }?.let { "，作者 $it" }.orEmpty(),
+                        )
+                        Text(
+                            buildString {
+                                append("v").append(provider.versionName)
+                                provider.providerAuthor?.takeIf { it.isNotBlank() }?.let { append("，作者 ").append(it) }
+                                provider.providerCategory?.takeIf { it.isNotBlank() }?.let { append("，").append(it) }
+                                append("；正数延后显示，负数提前显示")
+                            },
+                        )
+                        LyricInlineSliderRow("歌词时间偏移", delay.toFloat(), -5000f..5000f, 19, enabled, "${delay}ms") { value ->
+                            val next = config.lyriconProviderDelays.toMutableMap()
+                            next[provider.packageName] = value.toInt().coerceIn(-5000, 5000)
+                            set(config.copy(lyriconProviderDelays = next))
+                        }
                     }
                 }
             } else if (config.sourceMode == LyricSourceMode.SUPER_LYRIC) {
                 if (!support.superLyricInstalled) {
                     SmallTitle(text = "未安装 SuperLyric")
-                    Text(text = "请安装并启用 SuperLyric 模块以使用该歌词源")
+                    Card {
+                        Text(text = "请安装并启用 SuperLyric 模块以使用该歌词源")
+                    }
                 }
                 SmallTitle(text = "API 支持列表")
-                if (support.superLyricApiApps.isEmpty() && support.loaded) {
-                    Text(text = "未发现 SuperLyric 支持的应用")
-                }
-                support.superLyricApiApps.forEach { app ->
-                    Text(text = "${app.label}  v${app.versionName} (${app.versionCode})")
+                Card {
+                    if (support.superLyricApiApps.isEmpty() && support.loaded) {
+                        Text(text = "未发现 SuperLyric 支持的应用")
+                    }
+                    support.superLyricApiApps.forEach { app ->
+                        Text(text = "${app.label}  v${app.versionName} (${app.versionCode})")
+                    }
                 }
                 SmallTitle(text = "Hook 支持列表")
-                if (support.superLyricHookApps.isEmpty() && support.loaded) {
-                    Text(text = "未发现 SuperLyric 支持的应用")
-                }
-                support.superLyricHookApps.forEach { app ->
-                    Text(text = "${app.label}  v${app.versionName} (${app.versionCode})")
+                Card {
+                    if (support.superLyricHookApps.isEmpty() && support.loaded) {
+                        Text(text = "未发现 SuperLyric 支持的应用")
+                    }
+                    support.superLyricHookApps.forEach { app ->
+                        Text(text = "${app.label}  v${app.versionName} (${app.versionCode})")
+                    }
                 }
             }
-        }
         }
 
         if (section == null || section == LyricConfigSection.ISLAND) {
@@ -514,8 +524,7 @@ fun LyricConfigurationMiuix(
         }
         }
 
-        if (section == null || section == LyricConfigSection.ISLAND) {
-        SmallTitle(text = "内容布局")
+        if (section == null || section == LyricConfigSection.CONTENT_LAYOUT) {
         SmallTitle(text = "音乐信息")
         Card {
             ArrowPreference(
