@@ -29,8 +29,10 @@ android {
 
 dependencies {
     implementation(project(":core-model"))
+    implementation(project(":hyperlyric-port"))
     implementation(project(":source-lyric"))
     implementation(platform(libs.androidx.compose.bom))
+    implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.compose.material.icons.extended)
     // Non-visual dependencies used by the verbatim KernelSU Miuix theme adapter: dynamic
     // palette resolution and status/navigation bar appearance. Miuix remains the only UI

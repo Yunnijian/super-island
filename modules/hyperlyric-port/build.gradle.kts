@@ -112,6 +112,37 @@ val hyperLyricApplicationOnlySources = setOf(
     "utils/BackupRestoreManager.kt",
     "utils/LyricProviderManager.kt",
 )
+// The media-card preview is a functional settings component. It remains generated from the
+// fixed upstream source while the surrounding HyperLyric settings pages stay excluded.
+val hyperLyricPreviewSources = setOf(
+    "ui/anim/MediaAlbumArtModifiers.kt",
+    "ui/page/hooksettings/media/preview/MediaPreviewCard.kt",
+    "ui/page/hooksettings/media/preview/PreviewMediaStyleConfig.kt",
+)
+val hyperLyricAppUiExcludedSources =
+    hyperLyricSourceRoot.resolve("com/lidesheng/hyperlyric/ui").walkTopDown()
+        .filter { it.isFile && it.extension == "kt" }
+        .map { it.relativeTo(hyperLyricSourceRoot.resolve("com/lidesheng/hyperlyric")).invariantSeparatorsPath }
+        .filterNot { it in hyperLyricPreviewSources }
+        .toSet()
+val hyperLyricPreviewResources = setOf(
+    "drawable-xxhdpi/media_album_cover_1.jpg",
+    "drawable-xxhdpi/media_album_cover_2.jpg",
+    "drawable-xxhdpi/media_app_icon.png",
+    "drawable-xxhdpi/preview_bg_soft_dark_1.png",
+    "drawable-xxhdpi/preview_bg_soft_light_1.png",
+    "drawable-xxhdpi/preview_bg_soft_dark_2.png",
+    "drawable-xxhdpi/preview_bg_soft_light_2.png",
+    "drawable-nodpi/preview_flow_dark.jpg",
+    "drawable-nodpi/preview_flow_light.jpg",
+    "drawable/ic_media_seamless.xml",
+    "drawable/ic_media_fav.xml",
+    "drawable/ic_media_prev.xml",
+    "drawable/ic_media_play.xml",
+    "drawable/ic_media_pause.xml",
+    "drawable/ic_media_next.xml",
+    "drawable/ic_media_lyric.xml",
+)
 // Every generated upstream source must remain byte-for-byte identical unless this small,
 // audited set needs the current module's LSPosed service or preferences owner.
 val hyperLyricPortAdaptedSources = setOf(
@@ -128,7 +159,8 @@ val hyperLyricAppUiSourcePrefix = "ui/"
 fun isHyperLyricPortExcludedSource(relativePath: String): Boolean =
     relativePath in hyperLyricExcludedSources ||
         relativePath in hyperLyricApplicationOnlySources ||
-        relativePath.startsWith(hyperLyricAppUiSourcePrefix)
+        (relativePath.startsWith(hyperLyricAppUiSourcePrefix) &&
+            relativePath !in hyperLyricPreviewSources)
 val hyperLyricGeneratedSourceDir = layout.buildDirectory.dir("generated/source/hyperlyric")
 val hyperLyricGeneratedAidlDir = layout.buildDirectory.dir("generated/aidl/hyperlyric")
 val hyperLyricGeneratedResDir = layout.buildDirectory.dir("generated/res/hyperlyric")
@@ -146,7 +178,7 @@ val verifyHyperLyricReference = tasks.register("verifyHyperLyricReference") {
         check(commit == hyperLyricReferenceCommit) {
             "HyperLyric reference mismatch: expected $hyperLyricReferenceCommit, got $commit"
         }
-        check(hyperLyricExcludedSources.size == 10) {
+        check(hyperLyricExcludedSources.size == 8) {
             "HyperLyric exclusions changed without review: $hyperLyricExcludedSources"
         }
         check(
@@ -171,10 +203,10 @@ val generateHyperLyricPortSource = tasks.register<GeneratedHyperLyricSync>("gene
     generatedDirectory.set(hyperLyricGeneratedSourceDir)
     from(hyperLyricSourceRoot) {
         include("**/*.kt")
-        (hyperLyricExcludedSources + hyperLyricApplicationOnlySources).forEach { excluded ->
+        (hyperLyricExcludedSources + hyperLyricApplicationOnlySources + hyperLyricAppUiExcludedSources)
+            .forEach { excluded ->
             exclude("com/lidesheng/hyperlyric/$excluded")
         }
-        exclude("com/lidesheng/hyperlyric/ui/**")
     }
     // HyperLyric's default app flavor is online; use that exact source set rather than a local
     // lyric-provider substitute.
@@ -211,18 +243,25 @@ val generateHyperLyricPortSource = tasks.register<GeneratedHyperLyricSync>("gene
         ) {
             "Excluded HyperLyric source was generated"
         }
-        check(generatedSources.none { it.startsWith(hyperLyricAppUiSourcePrefix) }) {
-            "HyperLyric App UI source was generated"
+        check(
+            generatedSources
+                .filter { it.startsWith(hyperLyricAppUiSourcePrefix) }
+                .toSet() == hyperLyricPreviewSources,
+        ) {
+            "Unexpected HyperLyric App UI source was generated"
         }
         val visualResourceReferences = generatedRoot.walkTopDown()
             .filter { it.isFile && it.extension == "kt" }
             .filter { source ->
-                Regex("""R\\.(drawable|mipmap|xml|font|raw)\\.""").containsMatchIn(source.readText())
+                Regex("""R\.(drawable|mipmap|xml|font|raw)\.""").containsMatchIn(source.readText())
             }
             .map { it.relativeTo(generatedRoot).invariantSeparatorsPath }
             .toList()
-        check(visualResourceReferences.isEmpty()) {
-            "HyperLyric source still references a non-portable visual resource: $visualResourceReferences"
+        check(
+            visualResourceReferences.toSet() ==
+                setOf("com/lidesheng/hyperlyric/ui/page/hooksettings/media/preview/MediaPreviewCard.kt"),
+        ) {
+            "HyperLyric source has an unexpected visual-resource dependency: $visualResourceReferences"
         }
 
         // Explicit feature removals approved for this port: Live Update and its Focus-whitelist
@@ -573,28 +612,32 @@ val generateHyperLyricPortAidl = tasks.register<GeneratedHyperLyricSync>("genera
 val generateHyperLyricPortResources = tasks.register<GeneratedHyperLyricSync>("generateHyperLyricPortResources") {
     dependsOn(verifyHyperLyricReference)
     generatedDirectory.set(hyperLyricGeneratedResDir)
-    // HyperLyric images, launcher icons, media-preview artwork, and App-page animation assets are
-    // deliberately not packaged. Values are the only non-visual resources required to compile the
-    // directly ported source; lyric-island runtime rendering is code-driven and needs no static art.
+    // Only the assets directly referenced by the explicitly approved media-card preview are
+    // packaged. Other upstream icons, screenshots, artwork, and App-page animation assets remain
+    // excluded.
     from(hyperLyricMainRoot.resolve("res")) {
         include("values*/**/*.xml")
+        hyperLyricPreviewResources.forEach(::include)
     }
     doLast {
         val expected = hyperLyricMainRoot.resolve("res").walkTopDown()
             .filter { it.isFile }
-            .filter { it.relativeTo(hyperLyricMainRoot.resolve("res")).invariantSeparatorsPath.startsWith("values") }
             .map { it.relativeTo(hyperLyricMainRoot.resolve("res")).invariantSeparatorsPath }
+            .filter { it.startsWith("values") || it in hyperLyricPreviewResources }
             .toSet()
         val generated = hyperLyricGeneratedResDir.get().asFile.walkTopDown()
             .filter { it.isFile }
             .map { it.relativeTo(hyperLyricGeneratedResDir.get().asFile).invariantSeparatorsPath }
             .toSet()
         check(generated == expected) {
-            "HyperLyric generated values changed; missing=${expected - generated}, " +
+            "HyperLyric generated resources changed; missing=${expected - generated}, " +
                 "unexpected=${generated - expected}"
         }
-        check(generated.none { it.startsWith("drawable") || it.startsWith("mipmap") || it.startsWith("xml") }) {
-            "HyperLyric visual or manifest resource was generated: $generated"
+        check(
+            generated.filter { it.startsWith("drawable") || it.startsWith("mipmap") || it.startsWith("xml") }
+                .toSet() == hyperLyricPreviewResources,
+        ) {
+            "HyperLyric generated an unapproved visual or manifest resource: $generated"
         }
     }
 }

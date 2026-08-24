@@ -90,6 +90,8 @@ dependencies {
     implementation(project(":source-screenrecord"))
     implementation(project(":ui-design-system"))
     implementation(libs.androidx.activity.compose)
+    implementation(libs.androidx.appcompat)
+    implementation(libs.androidx.constraintlayout.compose)
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.compose)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
@@ -253,13 +255,85 @@ val generateKernelSuMaterialThemeSource = tasks.register<Sync>("generateKernelSu
     }
 }
 
+// Material keeps its own visual component boundary. This source is generated from the same
+// HyperLyric media-card preview as the Miuix host; only the Card/Text/Icon imports and their
+// equivalent Material argument names differ.
+val hyperLyricMaterialPreviewGeneratedDir = layout.buildDirectory.dir("generated/source/hyperlyricMaterialPreview")
+val generateHyperLyricMaterialPreview = tasks.register<Sync>("generateHyperLyricMaterialPreview") {
+    dependsOn(":hyperlyric-port:verifyHyperLyricReference")
+    val sourceRoot = superIslandUpstreamsDir.get().resolve(
+        "HyperLyric/app/src/main/java/com/lidesheng/hyperlyric/ui/page/hooksettings/media/preview",
+    )
+    inputs.dir(sourceRoot)
+    from(sourceRoot) {
+        include("MediaPreviewCard.kt", "PreviewMediaStyleConfig.kt")
+        into("io/github/superisland/ui/material/preview")
+    }
+    into(hyperLyricMaterialPreviewGeneratedDir)
+
+    doLast {
+        val output = hyperLyricMaterialPreviewGeneratedDir.get().asFile.resolve(
+            "io/github/superisland/ui/material/preview/MediaPreviewCard.kt",
+        )
+        val original = output.readText()
+        val required = listOf(
+            "package com.lidesheng.hyperlyric.ui.page.hooksettings.media.preview",
+            "import top.yukonga.miuix.kmp.basic.Card",
+            "import top.yukonga.miuix.kmp.basic.CardDefaults",
+            "import top.yukonga.miuix.kmp.basic.Icon",
+            "import top.yukonga.miuix.kmp.basic.Text",
+            "fun MediaPreviewCard(",
+            "CardDefaults.defaultColors(",
+            "cornerRadius = 24.dp",
+        )
+        check(required.all(original::contains)) {
+            "HyperLyric Material preview source changed outside the audited UI adaptation"
+        }
+        output.writeText(
+            original
+                .replace(
+                    "package com.lidesheng.hyperlyric.ui.page.hooksettings.media.preview",
+                    "package io.github.superisland.ui.material.preview",
+                )
+                .replace("import top.yukonga.miuix.kmp.basic.Card", "import androidx.compose.material3.Card")
+                .replace("import top.yukonga.miuix.kmp.basic.CardDefaults", "import androidx.compose.material3.CardDefaults")
+                .replace("import top.yukonga.miuix.kmp.basic.Icon", "import androidx.compose.material3.Icon")
+                .replace("import top.yukonga.miuix.kmp.basic.Text", "import androidx.compose.material3.Text")
+                .replace("fun MediaPreviewCard(", "fun MaterialMediaPreviewCard(")
+                .replace("CardDefaults.defaultColors(", "CardDefaults.cardColors(")
+                .replace("color = defaultLightColor,", "containerColor = defaultLightColor,")
+                .replace("color = defaultDarkColor,", "containerColor = defaultDarkColor,")
+                .replace("CardDefaults.cardColors(color = Color.Transparent)", "CardDefaults.cardColors(containerColor = Color.Transparent)")
+                .replace("cornerRadius = 24.dp", "shape = RoundedCornerShape(24.dp)"),
+        )
+        val colorConfig = output.parentFile.resolve("PreviewMediaStyleConfig.kt")
+        val originalColorConfig = colorConfig.readText()
+        check(
+            originalColorConfig.contains(
+                "package com.lidesheng.hyperlyric.ui.page.hooksettings.media.preview",
+            ),
+        ) {
+            "HyperLyric Material preview color configuration changed"
+        }
+        colorConfig.writeText(
+            originalColorConfig.replace(
+                "package com.lidesheng.hyperlyric.ui.page.hooksettings.media.preview",
+                "package io.github.superisland.ui.material.preview",
+            ),
+        )
+    }
+}
+
 android.sourceSets.named("main") {
     java.srcDir(kernelSuMaterialGeneratedDir.get().asFile)
     kotlin.srcDir(kernelSuMaterialGeneratedDir.get().asFile)
+    java.srcDir(hyperLyricMaterialPreviewGeneratedDir.get().asFile)
+    kotlin.srcDir(hyperLyricMaterialPreviewGeneratedDir.get().asFile)
 }
 
 tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach {
     dependsOn(generateKernelSuMaterialThemeSource)
+    dependsOn(generateHyperLyricMaterialPreview)
 }
 
 // Kept in lock-step with KernelSU Manager's Material theme layer. The expressive theme-mode

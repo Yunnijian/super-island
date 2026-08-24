@@ -183,5 +183,59 @@ object LyricIslandHostConfigSync {
         putFloat("key_hook_word_motion_latin_wave", config.wordMotionLatinWave)
         putBoolean("key_hook_anim_enable", config.animEnabled)
         putString("key_hook_anim_id", config.animId)
+
+        // HyperLyric media-card runtime owns these keys. Keep the host write contract one-to-one
+        // with RootConstants so one RemotePreferences commit contains the complete card snapshot.
+        putBoolean("key_hook_remove_island_whitelist", config.mediaCard.removeIslandWhitelist)
+        val notification = config.mediaCard.notification
+        putBoolean("key_hook_notification_media_card_switcher_enabled", notification.cardSwitcherEnabled)
+        putInt("key_hook_notification_media_card_switcher_mode", notification.cardSwitcherMode)
+        putInt("key_hook_notification_media_card_switcher_max_count", notification.cardSwitcherMaxCount)
+        putInt("key_hook_notification_media_layout_style", notification.layoutStyle)
+        putInt("key_hook_notification_media_ambient_flow_mode", notification.ambientFlowMode)
+        putInt("key_hook_notification_media_card_theme", notification.cardTheme)
+        putInt("key_hook_notification_media_cover_style", notification.coverStyle)
+        putInt("key_hook_notification_media_progress_style", notification.progressStyle)
+        putBoolean("key_hook_notification_media_progress_head_glow", notification.progressHeadGlow)
+        putInt("key_hook_notification_media_thumb_style", notification.thumbStyle)
+        putBoolean("key_hook_notification_media_hide_cover_source", notification.hideCoverSource)
+        putBoolean("key_hook_notification_media_hide_cover_shadow", notification.hideCoverShadow)
+        putBoolean("key_hook_notification_media_disable_cover_flip", notification.disableCoverFlip)
+        putBoolean("key_hook_notification_media_hide_device_switch", notification.hideDeviceSwitch)
+        putBoolean("key_hook_notification_media_hide_custom_actions", notification.hideCustomActions)
+        putBoolean("key_hook_notification_media_hide_time", notification.hideTime)
+        putBoolean("key_hook_notification_media_action_align_left", notification.actionAlignLeft)
+        putInt("key_hook_notification_media_action_order", notification.actionOrder)
+        putInt("key_hook_notification_media_background_style", notification.backgroundStyle)
+        putInt("key_hook_notification_media_background_blur", notification.backgroundBlur)
+        putBoolean("key_hook_notification_media_background_color_animation", notification.backgroundColorAnimation)
+        putBoolean("key_hook_notification_media_background_auto_invert", notification.backgroundAutoInvert)
+        putInt("key_hook_notification_media_soft_cover_tone", notification.softCoverTone)
+
+        val island = config.mediaCard.islandExpanded
+        putInt("key_hook_island_expanded_media_layout_style", island.layoutStyle)
+        putInt("key_hook_island_expanded_media_ambient_flow_mode", island.ambientFlowMode)
+        putInt("key_hook_island_expanded_media_card_theme", island.cardTheme)
+        putInt("key_hook_island_expanded_media_cover_style", island.coverStyle)
+        putInt("key_hook_island_expanded_media_progress_style", island.progressStyle)
+        putBoolean("key_hook_island_expanded_media_progress_head_glow", island.progressHeadGlow)
+        putInt("key_hook_island_expanded_media_thumb_style", island.thumbStyle)
+        putBoolean("key_hook_island_expanded_media_hide_cover_source", island.hideCoverSource)
+        putBoolean("key_hook_island_expanded_media_disable_cover_flip", island.disableCoverFlip)
+        putBoolean("key_hook_island_expanded_media_hide_device_switch", island.hideDeviceSwitch)
+        putBoolean("key_hook_island_expanded_media_hide_custom_actions", island.hideCustomActions)
+        putBoolean("key_hook_island_expanded_media_hide_time", island.hideTime)
+        putBoolean("key_hook_island_expanded_media_action_align_left", island.actionAlignLeft)
+        putInt("key_hook_island_expanded_media_action_order", island.actionOrder)
+        putInt("key_hook_island_expanded_media_background_style", island.backgroundStyle)
+        putInt("key_hook_island_expanded_media_background_blur", island.backgroundBlur)
+        putBoolean("key_hook_island_expanded_media_background_color_animation", island.backgroundColorAnimation)
+        putBoolean("key_hook_island_expanded_media_background_auto_invert", island.backgroundAutoInvert)
+        putInt("key_hook_island_expanded_media_soft_cover_tone", island.softCoverTone)
+
+        putBoolean(
+            "key_hook_aod_disable_media_card_collapsing",
+            config.mediaCard.alwaysOnDisplay.disableMediaCardCollapsing,
+        )
     }
 }

@@ -22,6 +22,7 @@ object LyricIslandConfigCodec {
         return buildJsonObject {
             put("schema", SCHEMA)
             put("enabled", v.enabled)
+            put("mediaCard", encodeMediaCard(v.mediaCard))
             // HyperLyric persists provider ids (lyricon/superlyric/lyricinfo), not Kotlin enum
             // names. Keep the wire representation importable by the upstream hook.
             put("source", v.sourceMode.wireValue)
@@ -110,6 +111,7 @@ object LyricIslandConfigCodec {
             )
             require(schema in 1..SCHEMA)
             val defaults = if (schema == 1) legacyDefaults() else LyricIslandConfig()
+            val mediaCard = decodeMediaCard(json, defaults.mediaCard)
             val source = sourceModeOrDefault(
                 json.string("source", "key_hook_lyric_source"),
                 defaults.sourceMode,
@@ -142,6 +144,7 @@ object LyricIslandConfigCodec {
             }
             LyricIslandConfig(
                 enabled = json.boolean("enabled", defaults.enabled),
+                mediaCard = mediaCard,
                 sourceMode = source,
                 lyriconProviderDelayMs = json.int("lyriconProviderDelayMs", defaults.lyriconProviderDelayMs, "key_hook_lyricon_provider_delay_default"),
                 lyriconProviderDelays = providerDelays,
@@ -236,6 +239,140 @@ object LyricIslandConfigCodec {
                 bold = json.boolean("bold", defaults.bold),
             ).normalized()
         }.getOrDefault(LyricIslandConfig())
+    }
+
+    private fun encodeMediaCard(config: MediaCardConfig): JsonObject = buildJsonObject {
+        val notification = config.notification
+        val island = config.islandExpanded
+        val aod = config.alwaysOnDisplay
+        put("removeIslandWhitelist", config.removeIslandWhitelist)
+        put("notification", buildJsonObject {
+            put("cardSwitcherEnabled", notification.cardSwitcherEnabled)
+            put("cardSwitcherMode", notification.cardSwitcherMode)
+            put("cardSwitcherMaxCount", notification.cardSwitcherMaxCount)
+            put("layoutStyle", notification.layoutStyle)
+            put("ambientFlowMode", notification.ambientFlowMode)
+            put("cardTheme", notification.cardTheme)
+            put("coverStyle", notification.coverStyle)
+            put("progressStyle", notification.progressStyle)
+            put("progressHeadGlow", notification.progressHeadGlow)
+            put("thumbStyle", notification.thumbStyle)
+            put("hideCoverSource", notification.hideCoverSource)
+            put("hideCoverShadow", notification.hideCoverShadow)
+            put("disableCoverFlip", notification.disableCoverFlip)
+            put("hideDeviceSwitch", notification.hideDeviceSwitch)
+            put("hideCustomActions", notification.hideCustomActions)
+            put("hideTime", notification.hideTime)
+            put("actionAlignLeft", notification.actionAlignLeft)
+            put("actionOrder", notification.actionOrder)
+            put("backgroundStyle", notification.backgroundStyle)
+            put("backgroundBlur", notification.backgroundBlur)
+            put("backgroundColorAnimation", notification.backgroundColorAnimation)
+            put("backgroundAutoInvert", notification.backgroundAutoInvert)
+            put("softCoverTone", notification.softCoverTone)
+        })
+        put("islandExpanded", buildJsonObject {
+            put("layoutStyle", island.layoutStyle)
+            put("ambientFlowMode", island.ambientFlowMode)
+            put("cardTheme", island.cardTheme)
+            put("coverStyle", island.coverStyle)
+            put("progressStyle", island.progressStyle)
+            put("progressHeadGlow", island.progressHeadGlow)
+            put("thumbStyle", island.thumbStyle)
+            put("hideCoverSource", island.hideCoverSource)
+            put("disableCoverFlip", island.disableCoverFlip)
+            put("hideDeviceSwitch", island.hideDeviceSwitch)
+            put("hideCustomActions", island.hideCustomActions)
+            put("hideTime", island.hideTime)
+            put("actionAlignLeft", island.actionAlignLeft)
+            put("actionOrder", island.actionOrder)
+            put("backgroundStyle", island.backgroundStyle)
+            put("backgroundBlur", island.backgroundBlur)
+            put("backgroundColorAnimation", island.backgroundColorAnimation)
+            put("backgroundAutoInvert", island.backgroundAutoInvert)
+            put("softCoverTone", island.softCoverTone)
+        })
+        put("alwaysOnDisplay", buildJsonObject {
+            put("disableMediaCardCollapsing", aod.disableMediaCardCollapsing)
+        })
+    }
+
+    private fun decodeMediaCard(root: JsonObject, defaults: MediaCardConfig): MediaCardConfig {
+        val media = root["mediaCard"] as? JsonObject
+        val mediaRoot = media ?: root
+        val notification = (media?.get("notification") as? JsonObject) ?: media ?: root
+        val island = (media?.get("islandExpanded") as? JsonObject) ?: media ?: root
+        val aod = (media?.get("alwaysOnDisplay") as? JsonObject) ?: media ?: root
+        fun JsonObject.intAt(name: String, default: Int, vararg aliases: String): Int =
+            int(name, default, *aliases)
+        fun JsonObject.booleanAt(name: String, default: Boolean, vararg aliases: String): Boolean =
+            boolean(name, default, *aliases)
+        val n = defaults.notification
+        val i = defaults.islandExpanded
+        return MediaCardConfig(
+            removeIslandWhitelist = mediaRoot.boolean(
+                "removeIslandWhitelist",
+                defaults.removeIslandWhitelist,
+                "key_hook_remove_island_whitelist",
+            ),
+            notification = NotificationMediaCardConfig(
+                cardSwitcherEnabled = notification.booleanAt("cardSwitcherEnabled", n.cardSwitcherEnabled, "key_hook_notification_media_card_switcher_enabled"),
+                cardSwitcherMode = notification.intAt("cardSwitcherMode", n.cardSwitcherMode, "key_hook_notification_media_card_switcher_mode"),
+                cardSwitcherMaxCount = notification.intAt("cardSwitcherMaxCount", n.cardSwitcherMaxCount, "key_hook_notification_media_card_switcher_max_count"),
+                layoutStyle = notification.intAt("layoutStyle", n.layoutStyle, "key_hook_notification_media_layout_style"),
+                ambientFlowMode = notification.intAt("ambientFlowMode", n.ambientFlowMode, "key_hook_notification_media_ambient_flow_mode"),
+                cardTheme = notification.intAt("cardTheme", n.cardTheme, "key_hook_notification_media_card_theme"),
+                coverStyle = notification.intAt("coverStyle", n.coverStyle, "key_hook_notification_media_cover_style"),
+                progressStyle = notification.intAt("progressStyle", n.progressStyle, "key_hook_notification_media_progress_style"),
+                progressHeadGlow = notification.booleanAt(
+                    "progressHeadGlow",
+                    n.progressHeadGlow,
+                    "key_hook_notification_media_progress_head_glow",
+                ) || notification.intAt(
+                    "progressStyle",
+                    n.progressStyle,
+                    "key_hook_notification_media_progress_style",
+                ) == 2,
+                thumbStyle = notification.intAt("thumbStyle", n.thumbStyle, "key_hook_notification_media_thumb_style"),
+                hideCoverSource = notification.booleanAt("hideCoverSource", n.hideCoverSource, "key_hook_notification_media_hide_cover_source"),
+                hideCoverShadow = notification.booleanAt("hideCoverShadow", n.hideCoverShadow, "key_hook_notification_media_hide_cover_shadow"),
+                disableCoverFlip = notification.booleanAt("disableCoverFlip", n.disableCoverFlip, "key_hook_notification_media_disable_cover_flip"),
+                hideDeviceSwitch = notification.booleanAt("hideDeviceSwitch", n.hideDeviceSwitch, "key_hook_notification_media_hide_device_switch"),
+                hideCustomActions = notification.booleanAt("hideCustomActions", n.hideCustomActions, "key_hook_notification_media_hide_custom_actions"),
+                hideTime = notification.booleanAt("hideTime", n.hideTime, "key_hook_notification_media_hide_time"),
+                actionAlignLeft = notification.booleanAt("actionAlignLeft", n.actionAlignLeft, "key_hook_notification_media_action_align_left"),
+                actionOrder = notification.intAt("actionOrder", n.actionOrder, "key_hook_notification_media_action_order"),
+                backgroundStyle = notification.intAt("backgroundStyle", n.backgroundStyle, "key_hook_notification_media_background_style"),
+                backgroundBlur = notification.intAt("backgroundBlur", n.backgroundBlur, "key_hook_notification_media_background_blur"),
+                backgroundColorAnimation = notification.booleanAt("backgroundColorAnimation", n.backgroundColorAnimation, "key_hook_notification_media_background_color_animation"),
+                backgroundAutoInvert = notification.booleanAt("backgroundAutoInvert", n.backgroundAutoInvert, "key_hook_notification_media_background_auto_invert"),
+                softCoverTone = notification.intAt("softCoverTone", n.softCoverTone, "key_hook_notification_media_soft_cover_tone"),
+            ),
+            islandExpanded = IslandExpandedMediaCardConfig(
+                layoutStyle = island.intAt("layoutStyle", i.layoutStyle, "key_hook_island_expanded_media_layout_style"),
+                ambientFlowMode = island.intAt("ambientFlowMode", i.ambientFlowMode, "key_hook_island_expanded_media_ambient_flow_mode"),
+                cardTheme = island.intAt("cardTheme", i.cardTheme, "key_hook_island_expanded_media_card_theme"),
+                coverStyle = island.intAt("coverStyle", i.coverStyle, "key_hook_island_expanded_media_cover_style"),
+                progressStyle = island.intAt("progressStyle", i.progressStyle, "key_hook_island_expanded_media_progress_style"),
+                progressHeadGlow = island.booleanAt("progressHeadGlow", i.progressHeadGlow, "key_hook_island_expanded_media_progress_head_glow"),
+                thumbStyle = island.intAt("thumbStyle", i.thumbStyle, "key_hook_island_expanded_media_thumb_style"),
+                hideCoverSource = island.booleanAt("hideCoverSource", i.hideCoverSource, "key_hook_island_expanded_media_hide_cover_source"),
+                disableCoverFlip = island.booleanAt("disableCoverFlip", i.disableCoverFlip, "key_hook_island_expanded_media_disable_cover_flip"),
+                hideDeviceSwitch = island.booleanAt("hideDeviceSwitch", i.hideDeviceSwitch, "key_hook_island_expanded_media_hide_device_switch"),
+                hideCustomActions = island.booleanAt("hideCustomActions", i.hideCustomActions, "key_hook_island_expanded_media_hide_custom_actions"),
+                hideTime = island.booleanAt("hideTime", i.hideTime, "key_hook_island_expanded_media_hide_time"),
+                actionAlignLeft = island.booleanAt("actionAlignLeft", i.actionAlignLeft, "key_hook_island_expanded_media_action_align_left"),
+                actionOrder = island.intAt("actionOrder", i.actionOrder, "key_hook_island_expanded_media_action_order"),
+                backgroundStyle = island.intAt("backgroundStyle", i.backgroundStyle, "key_hook_island_expanded_media_background_style"),
+                backgroundBlur = island.intAt("backgroundBlur", i.backgroundBlur, "key_hook_island_expanded_media_background_blur"),
+                backgroundColorAnimation = island.booleanAt("backgroundColorAnimation", i.backgroundColorAnimation, "key_hook_island_expanded_media_background_color_animation"),
+                backgroundAutoInvert = island.booleanAt("backgroundAutoInvert", i.backgroundAutoInvert, "key_hook_island_expanded_media_background_auto_invert"),
+                softCoverTone = island.intAt("softCoverTone", i.softCoverTone, "key_hook_island_expanded_media_soft_cover_tone"),
+            ),
+            alwaysOnDisplay = AlwaysOnDisplayMediaCardConfig(
+                disableMediaCardCollapsing = aod.boolean("disableMediaCardCollapsing", defaults.alwaysOnDisplay.disableMediaCardCollapsing, "key_hook_aod_disable_media_card_collapsing"),
+            ),
+        ).normalized()
     }
 
     private fun JsonObject.value(key: String, vararg aliases: String): JsonPrimitive? {

@@ -76,6 +76,115 @@ class LyricIslandConfigCodecTest {
     }
 
     @Test
+    fun roundTripsHyperLyricMediaCardContract() {
+        val config = LyricIslandConfig(
+            mediaCard = MediaCardConfig(
+                removeIslandWhitelist = true,
+                notification = NotificationMediaCardConfig(
+                    cardSwitcherEnabled = true,
+                    cardSwitcherMode = MediaCardConstants.CARD_SWITCHER_SINGLE,
+                    cardSwitcherMaxCount = 6,
+                    layoutStyle = MediaCardConstants.LAYOUT_PIXEL,
+                    ambientFlowMode = MediaCardConstants.NOTIFICATION_AMBIENT_CUSTOM_FULL,
+                    cardTheme = MediaCardConstants.THEME_ALWAYS_LIGHT,
+                    coverStyle = MediaCardConstants.COVER_ROTATING_CIRCLE,
+                    progressStyle = MediaCardConstants.PROGRESS_WAVE,
+                    progressHeadGlow = true,
+                    thumbStyle = MediaCardConstants.THUMB_VERTICAL,
+                    hideCoverSource = true,
+                    hideCoverShadow = true,
+                    disableCoverFlip = true,
+                    hideDeviceSwitch = true,
+                    hideCustomActions = true,
+                    hideTime = true,
+                    actionAlignLeft = true,
+                    actionOrder = MediaCardConstants.ACTION_ORDER_PLAY_LEFT,
+                    backgroundStyle = MediaCardConstants.BACKGROUND_SOFT_COVER,
+                    backgroundBlur = 20,
+                    backgroundColorAnimation = true,
+                    backgroundAutoInvert = true,
+                    softCoverTone = MediaCardConstants.SOFT_COVER_FOLLOW_SYSTEM,
+                ),
+                islandExpanded = IslandExpandedMediaCardConfig(
+                    layoutStyle = MediaCardConstants.LAYOUT_IOS,
+                    ambientFlowMode = MediaCardConstants.ISLAND_EXPANDED_AMBIENT_COVER_COLOR,
+                    cardTheme = MediaCardConstants.THEME_ALWAYS_DARK,
+                    coverStyle = MediaCardConstants.COVER_CIRCLE,
+                    progressStyle = MediaCardConstants.PROGRESS_WAVE,
+                    progressHeadGlow = false,
+                    thumbStyle = MediaCardConstants.THUMB_HIDDEN,
+                    hideCoverSource = true,
+                    disableCoverFlip = true,
+                    hideDeviceSwitch = true,
+                    hideCustomActions = true,
+                    hideTime = true,
+                    actionAlignLeft = true,
+                    actionOrder = MediaCardConstants.ACTION_ORDER_CUSTOM_RIGHT,
+                    backgroundStyle = MediaCardConstants.BACKGROUND_LINEAR_GRADIENT,
+                    backgroundBlur = 1,
+                    backgroundColorAnimation = true,
+                    backgroundAutoInvert = true,
+                    softCoverTone = MediaCardConstants.SOFT_COVER_LIGHT,
+                ),
+                alwaysOnDisplay = AlwaysOnDisplayMediaCardConfig(
+                    disableMediaCardCollapsing = true,
+                ),
+            ),
+        )
+
+        val encoded = LyricIslandConfigCodec.encode(config)
+
+        assertEquals(config.normalized(), LyricIslandConfigCodec.decode(encoded))
+        assertTrue(encoded.contains("\"removeIslandWhitelist\":true"))
+        assertTrue(encoded.contains("\"islandExpanded\""))
+    }
+
+    @Test
+    fun importsFlatHyperLyricMediaCardKeysWithRuntimeNormalization() {
+        val decoded = LyricIslandConfigCodec.decode(
+            """
+            {
+              "schema": 2,
+              "key_hook_remove_island_whitelist": true,
+              "key_hook_notification_media_card_switcher_enabled": true,
+              "key_hook_notification_media_card_switcher_mode": 99,
+              "key_hook_notification_media_card_switcher_max_count": 99,
+              "key_hook_notification_media_layout_style": 99,
+              "key_hook_notification_media_ambient_flow_mode": -1,
+              "key_hook_notification_media_progress_style": 2,
+              "key_hook_notification_media_background_blur": 99,
+              "key_hook_notification_media_soft_cover_tone": 99,
+              "key_hook_island_expanded_media_layout_style": 1,
+              "key_hook_island_expanded_media_ambient_flow_mode": 1,
+              "key_hook_island_expanded_media_progress_style": 99,
+              "key_hook_island_expanded_media_background_blur": -1,
+              "key_hook_aod_disable_media_card_collapsing": true
+            }
+            """.trimIndent(),
+        )
+
+        val notification = decoded.mediaCard.notification
+        assertTrue(decoded.mediaCard.removeIslandWhitelist)
+        assertTrue(notification.cardSwitcherEnabled)
+        assertEquals(MediaCardConstants.CARD_SWITCHER_MULTI, notification.cardSwitcherMode)
+        assertEquals(MediaCardConstants.CARD_SWITCHER_MAX_COUNT, notification.cardSwitcherMaxCount)
+        assertEquals(MediaCardConstants.LAYOUT_SYSTEM, notification.layoutStyle)
+        assertEquals(MediaCardConstants.NOTIFICATION_AMBIENT_DISABLED, notification.ambientFlowMode)
+        assertEquals(MediaCardConstants.PROGRESS_DEFAULT, notification.progressStyle)
+        assertTrue(notification.progressHeadGlow)
+        assertEquals(20, notification.backgroundBlur)
+        assertEquals(MediaCardConstants.SOFT_COVER_FOLLOW_SYSTEM, notification.softCoverTone)
+        assertEquals(MediaCardConstants.LAYOUT_IOS, decoded.mediaCard.islandExpanded.layoutStyle)
+        assertEquals(
+            MediaCardConstants.ISLAND_EXPANDED_AMBIENT_DISABLED,
+            decoded.mediaCard.islandExpanded.ambientFlowMode,
+        )
+        assertEquals(MediaCardConstants.PROGRESS_WAVE, decoded.mediaCard.islandExpanded.progressStyle)
+        assertEquals(1, decoded.mediaCard.islandExpanded.backgroundBlur)
+        assertTrue(decoded.mediaCard.alwaysOnDisplay.disableMediaCardCollapsing)
+    }
+
+    @Test
     fun encodesHyperLyricWireValuesAndProviderIds() {
         val encoded = LyricIslandConfigCodec.encode(
             LyricIslandConfig(

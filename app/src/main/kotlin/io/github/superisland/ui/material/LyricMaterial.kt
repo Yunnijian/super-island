@@ -117,7 +117,7 @@ private fun lyricSliderKeyPointFractions(valueRange: ClosedFloatingPointRange<Fl
     }
 
 @Composable
-private fun materialLyricSliderKeyPointModifier(
+internal fun materialLyricSliderKeyPointModifier(
     valueRange: ClosedFloatingPointRange<Float>,
     enabled: Boolean,
 ): Modifier {
@@ -179,7 +179,7 @@ private fun MaterialLyricSupportItem(app: LyricSupportApp) {
 }
 
 @Composable
-private fun MaterialInlineSliderItem(
+internal fun MaterialInlineSliderItem(
     title: String,
     value: Float,
     valueRange: ClosedFloatingPointRange<Float>,
@@ -417,6 +417,15 @@ private fun LyricMaterialDetail(
             contentPadding = PaddingValues(bottom = 12.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
+            if (section == LyricConfigSection.MEDIA_CARD) {
+                item {
+                    MediaCardConfigurationMaterial(
+                        config = config,
+                        enabled = config.enabled,
+                        onConfigChange = set,
+                    )
+                }
+            }
             if (section == LyricConfigSection.SOURCE) {
             item {
                 SegmentedColumn(Modifier.fillMaxWidth(), content = listOf(
@@ -529,7 +538,6 @@ private fun LyricMaterialDetail(
                 item {
                     SegmentedColumn(
                         Modifier.fillMaxWidth(),
-                        title = "歌词提供器",
                         content = support.lyriconProviders.map { provider ->
                             {
                                 val delay = config.lyriconProviderDelays[provider.packageName]
@@ -679,7 +687,7 @@ private fun LyricMaterialDetail(
             }
             if (section == LyricConfigSection.TEXT_STYLE) {
             item {
-                SegmentedColumn(Modifier.fillMaxWidth(), title = "文字样式", content = listOf(
+                SegmentedColumn(Modifier.fillMaxWidth(), content = listOf(
                     { dropdown("文字颜色", listOf("默认", "封面色", "封面渐变色", "跟随状态栏颜色"), config.textColorStyle) { set(config.copy(textColorStyle = it)) } },
                     {
                         dropdown(
@@ -701,7 +709,7 @@ private fun LyricMaterialDetail(
             }
             if (section == LyricConfigSection.SCROLL) {
             item {
-                SegmentedColumn(Modifier.fillMaxWidth(), title = "滚动显示", content = listOf(
+                SegmentedColumn(Modifier.fillMaxWidth(), content = listOf(
                     { switch("歌词滚动", "针对没有时间轴的歌词", config.marqueeMode, true) { set(config.copy(marqueeMode = it)) } },
                     { MaterialInlineSliderItem("滚动速度", config.marqueeSpeed.toFloat(), 5f..100f, config.enabled && config.marqueeMode, config.marqueeSpeed.toString(), { set(config.copy(marqueeSpeed = it.roundToInt())) }) },
                     { MaterialInlineSliderItem("初始滚动延迟", config.marqueeDelay.toFloat(), 0f..5000f, config.enabled && config.marqueeMode, "${config.marqueeDelay}ms", { set(config.copy(marqueeDelay = it.roundToInt())) }) },
@@ -724,7 +732,7 @@ private fun LyricMaterialDetail(
             }
             if (section == LyricConfigSection.VERBATIM) {
             item {
-                SegmentedColumn(Modifier.fillMaxWidth(), title = "逐字歌词", content = listOf(
+                SegmentedColumn(Modifier.fillMaxWidth(), content = listOf(
                     { switch("模拟逐行歌词", "将带有字词时间轴的歌词降级为整行时间轴显示", config.syllableLineDisplay, true) { enabled -> set(config.copy(syllableLineDisplay = enabled, syllableRelative = if (enabled) false else config.syllableRelative)) } },
                     { switch("相对进度歌词", "当歌词缺少字词时间轴时，将整行作为一个进度单元", config.syllableRelative, true) { enabled -> set(config.copy(syllableRelative = enabled, syllableLineDisplay = false)) } },
                     { switch("相对进度歌词高亮显示", "", config.syllableHighlight, config.syllableRelative) { set(config.copy(syllableHighlight = it)) } },
@@ -760,7 +768,7 @@ private fun LyricMaterialDetail(
             if (section == LyricConfigSection.ANIMATION) {
             item {
                 val index = animationIds.indexOf(config.animId).takeIf { config.animEnabled && it >= 0 } ?: 0
-                SegmentedColumn(Modifier.fillMaxWidth(), title = "歌词切换动画", content = listOf({ dropdown("歌词切换动画", animationLabels, index) { i -> set(config.copy(animEnabled = i != 0, animId = animationIds.getOrElse(i) { "default" })) } }))
+                SegmentedColumn(Modifier.fillMaxWidth(), content = listOf({ dropdown("歌词切换动画", animationLabels, index) { i -> set(config.copy(animEnabled = i != 0, animId = animationIds.getOrElse(i) { "default" })) } }))
             }
             }
         }
@@ -873,6 +881,7 @@ private fun lyricSectionSummary(
     section: LyricConfigSection,
     config: LyricIslandConfig,
 ): String? = when (section) {
+    LyricConfigSection.MEDIA_CARD -> "通知中心、超级岛、息屏显示"
     LyricConfigSection.SOURCE -> when (config.sourceMode) {
         LyricSourceMode.SUPER_LYRIC -> "SuperLyric"
         LyricSourceMode.LYRIC_INFO -> "LyricInfo"

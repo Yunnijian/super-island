@@ -21,9 +21,10 @@ of that first batch.
 
 The migration target is source code. Upstream launcher icons, preview images, media-demo artwork,
 and App-page animation assets are not copied. The generated Android resource set is restricted to
-the `values*/` XML files needed for source compilation. A static visual resource can be added only
-when the Super Island lyric runtime itself has a file-level dependency on it; that dependency must
-be recorded here before generation is widened.
+the `values*/` XML files needed for source compilation, plus the 16 static files directly read by
+the migrated media-card preview. A static visual resource can be added only when a migrated
+Super Island runtime or functional configuration component has a file-level dependency on it; that
+dependency must be recorded here before generation is widened.
 
 No HyperLyric App page, preview composable, contributor route, navigator or `Application` class is
 generated. They are application UI/lifecycle code, not Super Island runtime owners. No Super Island
@@ -44,6 +45,27 @@ lyric runtime source or asset is excluded by this rule.
 | `structure/` | 1 | Native slot structure injection |
 | `view/` | 1 | Width-constrained wrapper |
 | `app/src/online/java/` | 15 | HyperLyric's default online lyric-provider source set |
+| `root/mediacard/` | 90 | Complete notification-center, expanded-island, AOD, card-switcher, palette, layout and background runtime |
+| `root/UnlockIslandWhitelist.kt` | 1 | Super Island media-card mini-window whitelist runtime |
+| `root/HookEntry.kt` media-card branch | 1 | Original media-card load ordering and install-time card-switcher gate |
+| `ui/anim/MediaAlbumArtModifiers.kt` | 1 | Media-card preview cover-flip animation |
+| `ui/page/hooksettings/media/preview/` | 2 | Media-card functional preview and palette contract |
+
+The `root/mediacard/` files are generated verbatim from the fixed checkout. The one
+`UnlockIslandWhitelist.kt` host adaptation only resolves its preferences through the bound port
+`HookEntry.instance`; its hook target, state, preference listener and enable/disable behavior
+remain upstream. The existing host configuration writes all 44 media-card keys read by these
+runtime files in the same RemotePreferences transaction as the lyric settings document.
+
+`RootConstants` also declares expanded-iOS geometry debug keys, but this fixed release has no
+runtime reader or settings call site for any of them. They are therefore not exposed as inert
+host settings.
+
+The Miuix settings host calls the generated `MediaPreviewCard` directly. The Material host
+generates the same source into its own package, with only package and Miuix-to-Material `Card`,
+`Text`, and `Icon` API substitutions; its preview state, animation, cover flip, action behavior,
+progress preview, palette values, and arguments remain upstream. Its directly referenced preview
+artwork and vector controls are generated from the same fixed checkout.
 
 ## Explicitly Excluded
 

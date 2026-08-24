@@ -216,6 +216,8 @@ object LyricAlbumCoverStyle {
  */
 data class LyricIslandConfig(
     val enabled: Boolean = false,
+    /** HyperLyric media-card settings; runtime implementation is supplied by :hyperlyric-port. */
+    val mediaCard: MediaCardConfig = MediaCardConfig(),
     val sourceMode: LyricSourceMode = LyricSourceMode.LYRICON,
     val lyriconProviderDelayMs: Int = 0,
     /** HyperLyric stores a separate delay under key_hook_lyricon_provider_delay_<package>. */
@@ -333,6 +335,7 @@ data class LyricIslandConfig(
         val normalizedDynamicMin = dynamicMinWidth.coerceIn(minWidth, maxWidth)
         val normalizedDynamicMax = dynamicMaxWidth.coerceIn(normalizedDynamicMin, maxWidth)
         return copy(
+            mediaCard = mediaCard.normalized(),
             lyricMode = lyricMode.coerceIn(0, 1),
             lyriconProviderDelayMs = lyriconProviderDelayMs.coerceIn(-5000, 5000),
             lyriconProviderDelays = lyriconProviderDelays.asSequence()

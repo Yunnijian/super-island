@@ -42,6 +42,27 @@
   `91fec4f1f0e3a77ed3a597ecdf43a3d1de12844c864d8da30e0315f1704cfd8d`；同一 APK 已覆盖安装并重载
   SystemUI/XMSF，安装后的异常扫描为空。真机确认歌词更新时左槽歌曲标题保持不被歌词覆盖；原始截图
   与脱敏日志位于外部证据目录。
+- 媒体卡片的完整运行时已按同一固定 Release 接入超级岛歌词：`root/mediacard/**` 的 90 个源文件逐字
+  生成，`UnlockIslandWhitelist` 保留原始 Hook 状态机和偏好监听，仅通过端口绑定的 `HookEntry.instance`
+  解析宿主偏好。现有 Miuix/Material 歌词页新增“媒体卡片”入口，覆盖通知中心、超级岛、息屏显示、下拉
+  小窗白名单与多卡片切换；配置模型、持久化及 RemotePreferences 一次提交对齐媒体卡片运行时实际读取的
+  44 个 `RootConstants` 键。通知中心与展开超级岛的动态流光编码已分别保持上游不同的默认/禁用 wire value。
+  本次 `./scripts/check.sh` 通过（766 actionable tasks），benchmark SHA-256 为
+  `8a3dec40153c6a9180696a51885da46e196564dabd64435fc2772def0b4d08ab`，lint 为 0 errors。
+  尚未安装该 APK 或执行媒体卡片真机验收，等待用户明确要求后再按 testing 契约进行。
+- 媒体卡片详情页已补齐固定 Release 的功能预览：Miuix 直接调用生成的
+  `MediaPreviewCard`，封面翻转动画与原始上游文件逐字一致；Material 从同一原始文件生成，
+  仅替换包名及对应的 Material `Card`、`Text`、`Icon` API。通知中心与展开超级岛配置都会即时
+  驱动预览。两套皮肤均已移除与页面顶栏重复的正文标题；每个配置组各自使用一个
+  `Card`/`SegmentedColumn`，由父级 12dp 间距分隔，小标题复用常驻超级岛的皮肤原生布局。
+  `AGENTS.md` 已记录相同的标题、容器与间距硬规则。本次 `./scripts/check.sh` 通过（767 actionable
+  tasks），benchmark SHA-256 为
+  `266c1c69b68eb4a3e76789f393f8c17659c53ebd5b6916ed00377678ddefd6b4`。该 APK 已于
+  2026-08-24 19:54:22 CST 覆盖安装至 `songyuan` / `1e7b9e0b`，设备 base APK SHA-256 一致；
+  SystemUI `5707 -> 20231`、XMSF `6575/6945 -> 20776/20890` 已重载。新 SystemUI 日志确认
+  上游 `HookEntry` 启用且 lyric source 为 `superlyric`，模块关联的 Hook/链接异常扫描为空。
+  原始安装证据位于外部目录 `media_card_preview_install_2026-08-24`。预览点击、封面翻转和两套
+  皮肤的真机视觉验收仍待手动执行。
 
 ## 2026-08-23 歌词配置与渲染回归
 

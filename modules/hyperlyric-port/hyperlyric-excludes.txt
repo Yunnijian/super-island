@@ -7,6 +7,4 @@ service/LyricTileService.kt
 service/source/AppLyricSink.kt
 service/utils/NotificationBuilder.kt
 service/utils/FocusNotificationBuilder.kt
-ui/anim/MediaAlbumArtModifiers.kt
 ui/page/DynamicIslandNotificationPage.kt
-ui/page/hooksettings/media/preview/MediaPreviewCard.kt

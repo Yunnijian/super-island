@@ -296,6 +296,7 @@ private fun LyricSupportAppIcon(app: LyricSupportApp) {
 
 /** Entry pages mirror HyperLyric's compact settings surface. */
 enum class LyricConfigSection(val title: String) {
+    MEDIA_CARD("媒体卡片"),
     SOURCE("歌词源"),
     ISLAND("超级岛"),
     CONTENT_LAYOUT("内容布局"),
@@ -338,6 +339,7 @@ fun LyricSectionEntryPageMiuix(
 }
 
 private fun lyricSectionSummary(section: LyricConfigSection, config: LyricIslandConfig): String? = when (section) {
+    LyricConfigSection.MEDIA_CARD -> "通知中心、超级岛、息屏显示"
     LyricConfigSection.SOURCE -> when (config.sourceMode) {
         LyricSourceMode.LYRICON -> "Lyricon"
         LyricSourceMode.SUPER_LYRIC -> "SuperLyric"
@@ -448,6 +450,13 @@ fun LyricConfigurationMiuix(
         modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(if (section == LyricConfigSection.SOURCE) 0.dp else 12.dp),
     ) {
+        if (section == LyricConfigSection.MEDIA_CARD) {
+            MediaCardConfigurationMiuix(
+                config = config,
+                enabled = enabled,
+                onConfigChange = set,
+            )
+        }
         if (section == null || section == LyricConfigSection.SOURCE) {
             Card(modifier = sourceCardModifier) {
                 OverlayDropdownPreference(
@@ -488,7 +497,9 @@ fun LyricConfigurationMiuix(
         }
 
         if ((section == null || section == LyricConfigSection.PROVIDER) && config.sourceMode == LyricSourceMode.LYRICON) {
-            LyricSettingsTitle(text = "歌词提供器")
+            if (section == null) {
+                LyricSettingsTitle(text = "歌词提供器")
+            }
             LyricSettingsCard {
                 if (support.loaded && support.lyriconProviders.isEmpty()) {
                     BasicComponent(
@@ -740,7 +751,9 @@ fun LyricConfigurationMiuix(
         }
 
         if (section == null || section == LyricConfigSection.VERBATIM) {
-        LyricSettingsTitle(text = "逐字歌词")
+        if (section == null) {
+            LyricSettingsTitle(text = "逐字歌词")
+        }
         LyricSettingsCard {
             SwitchPreference(
                 title = "模拟逐行歌词",
@@ -786,7 +799,9 @@ fun LyricConfigurationMiuix(
                 SwitchPreference(title = "显示下一句歌词", summary = "占用第二行，开启后不显示翻译", checked = config.nextLyricLine, enabled = enabled, onCheckedChange = { set(config.copy(nextLyricLine = it)) })
             }
         }
-        LyricSettingsTitle(text = "翻译")
+        if (section == null) {
+            LyricSettingsTitle(text = "翻译")
+        }
         LyricSettingsCard {
             val translationEnabled = !nextSupported || !config.nextLyricLine
             SwitchPreference(title = "禁用所有翻译", enabled = enabled && translationEnabled, checked = config.disableTranslation, onCheckedChange = { set(config.copy(disableTranslation = it)) })
@@ -796,7 +811,9 @@ fun LyricConfigurationMiuix(
         }
 
         if (section == null || section == LyricConfigSection.ANIMATION) {
-        LyricSettingsTitle(text = "歌词切换动画")
+        if (section == null) {
+            LyricSettingsTitle(text = "歌词切换动画")
+        }
         LyricSettingsCard {
             OverlayDropdownPreference(title = "歌词切换动画", items = animationLabels, selectedIndex = animationIndex, enabled = enabled, onSelectedIndexChange = { index -> set(config.copy(animEnabled = index != 0, animId = animationIds.getOrElse(index) { "default" })) })
         }
