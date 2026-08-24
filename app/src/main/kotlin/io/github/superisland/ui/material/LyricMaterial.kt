@@ -4,11 +4,13 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.activity.compose.BackHandler
 import androidx.compose.ui.Alignment
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -28,6 +30,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LargeFlexibleTopAppBar
@@ -44,6 +47,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.ArrowDownward
 import androidx.compose.material.icons.filled.ArrowUpward
+import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.compositionLocalOf
@@ -53,10 +57,13 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.foundation.layout.width
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.LayoutDirection
 import java.util.Locale
 import kotlin.math.roundToInt
 import io.github.superisland.source.lyric.IslandContentMode
@@ -67,9 +74,13 @@ import io.github.superisland.source.lyric.LyricMusicInfoLayout
 import io.github.superisland.source.lyric.LyricPlaceholder
 import io.github.superisland.source.lyric.LyricSourceMode
 import io.github.superisland.design.displaySummary
+import io.github.superisland.design.LyricSupportApp
 import io.github.superisland.design.LyricConfigSection
 import io.github.superisland.design.rememberLyricSupportSnapshot
+import io.github.superisland.design.rememberLyricSupportAppIcon
+import io.github.superisland.design.sourcePromptSummary
 import me.weishu.kernelsu.ui.component.material.SegmentedColumn
+import me.weishu.kernelsu.ui.component.AppIconImage
 import me.weishu.kernelsu.ui.component.material.SegmentedDropdownItem
 import me.weishu.kernelsu.ui.component.material.SegmentedListItem
 import me.weishu.kernelsu.ui.component.material.SegmentedSwitchItem
@@ -97,6 +108,75 @@ private val contentModes = listOf(
 )
 
 private val LocalLyricControlsEnabled = compositionLocalOf { true }
+
+private fun lyricSliderKeyPointFractions(valueRange: ClosedFloatingPointRange<Float>): List<Float> =
+    if (valueRange.start == -50f && valueRange.endInclusive == 100f) {
+        listOf(0f, 1f / 3f, 2f / 3f, 1f)
+    } else {
+        listOf(0f, 0.25f, 0.5f, 0.75f, 1f)
+    }
+
+@Composable
+private fun materialLyricSliderKeyPointModifier(
+    valueRange: ClosedFloatingPointRange<Float>,
+    enabled: Boolean,
+): Modifier {
+    val color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = if (enabled) 0.65f else 0.35f)
+    val fractions = lyricSliderKeyPointFractions(valueRange).filter { it > 0f && it < 1f }
+    return Modifier.drawWithContent {
+        drawContent()
+        val trackInset = 10.dp.toPx()
+        val trackWidth = (size.width - trackInset * 2f).coerceAtLeast(0f)
+        fractions.forEach { fraction ->
+            val fromStart = trackInset + trackWidth * fraction
+            val x = if (layoutDirection == LayoutDirection.Ltr) fromStart else size.width - fromStart
+            drawCircle(
+                color = color,
+                radius = 2.dp.toPx(),
+                center = Offset(x, size.height / 2f),
+            )
+        }
+    }
+}
+
+@Composable
+private fun MaterialLyricSupportItem(app: LyricSupportApp) {
+    var expanded by remember(app.packageName) { mutableStateOf(false) }
+    val icon = rememberLyricSupportAppIcon(app)
+    val packageInfo = app.packageInfo
+    SegmentedListItem(
+        onClick = { expanded = !expanded },
+        headlineContent = { Text(app.label) },
+        supportingContent = {
+            Column {
+                Text(app.displaySummary(), style = MaterialTheme.typography.bodySmall)
+                AnimatedVisibility(visible = expanded) {
+                    Column(modifier = Modifier.padding(top = 10.dp, bottom = 4.dp)) {
+                        HorizontalDivider()
+                        Text(
+                            text = app.usage,
+                            style = MaterialTheme.typography.bodySmall,
+                            modifier = Modifier.padding(top = 10.dp),
+                        )
+                    }
+                }
+            }
+        },
+        leadingContent = {
+            if (packageInfo != null) {
+                AppIconImage(
+                    packageInfo = packageInfo,
+                    label = app.label,
+                    modifier = Modifier.width(40.dp).height(40.dp),
+                )
+            } else if (icon != null) {
+                Image(bitmap = icon, contentDescription = null, modifier = Modifier.width(40.dp).height(40.dp))
+            } else {
+                Icon(Icons.Filled.MusicNote, contentDescription = null)
+            }
+        },
+    )
+}
 
 @Composable
 private fun MaterialInlineSliderItem(
@@ -132,7 +212,9 @@ private fun MaterialInlineSliderItem(
                     valueRange = valueRange,
                     steps = 0,
                     enabled = enabled,
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.fillMaxWidth().then(
+                        materialLyricSliderKeyPointModifier(valueRange, enabled),
+                    ),
                 )
             }
         },
@@ -163,7 +245,9 @@ private fun MaterialInlineDualSliderItem(
                         valueRange = -50f..100f,
                         steps = 0,
                         enabled = enabled,
-                        modifier = Modifier.weight(1f),
+                        modifier = Modifier.weight(1f).then(
+                            materialLyricSliderKeyPointModifier(-50f..100f, enabled),
+                        ),
                         onValueChangeFinished = {
                             onValueChangeFinished(firstValue.roundToInt(), secondValue.roundToInt())
                         },
@@ -177,7 +261,9 @@ private fun MaterialInlineDualSliderItem(
                         valueRange = -50f..100f,
                         steps = 0,
                         enabled = enabled,
-                        modifier = Modifier.weight(1f),
+                        modifier = Modifier.weight(1f).then(
+                            materialLyricSliderKeyPointModifier(-50f..100f, enabled),
+                        ),
                         onValueChangeFinished = {
                             onValueChangeFinished(firstValue.roundToInt(), secondValue.roundToInt())
                         },
@@ -335,27 +421,106 @@ private fun LyricMaterialDetail(
             item {
                 SegmentedColumn(Modifier.fillMaxWidth(), content = listOf(
                     { dropdown("歌词源", sourceLabels, sources.selected(config.sourceMode.publicPickerMode())) { set(config.copy(sourceMode = sources.getOrElse(it) { LyricSourceMode.LYRICON })) } },
-                    { if (config.sourceMode == LyricSourceMode.LYRICON && support.lyriconProviders.isEmpty() && support.loaded) Text("未发现 Lyricon 歌词提供器", style = MaterialTheme.typography.bodySmall) },
-                    { if (config.sourceMode == LyricSourceMode.SUPER_LYRIC && !support.superLyricInstalled && support.loaded) Text("未安装 SuperLyric\n请安装并启用 SuperLyric 模块以使用该歌词源", style = MaterialTheme.typography.bodySmall) },
                 ))
             }
+            item {
+                SegmentedColumn(
+                    modifier = Modifier.fillMaxWidth(),
+                    content = listOf(
+                        {
+                            SegmentedListItem(
+                                headlineContent = { Text("歌词源说明") },
+                                supportingContent = {
+                                    Text(
+                                        text = config.sourceMode.sourcePromptSummary(),
+                                        style = MaterialTheme.typography.bodySmall,
+                                    )
+                                },
+                            )
+                        },
+                    ),
+                )
+            }
             if (config.sourceMode == LyricSourceMode.SUPER_LYRIC) {
-                item {
-                    SegmentedColumn(
-                        Modifier.fillMaxWidth(),
-                        title = "API 支持列表",
-                        content = support.superLyricApiApps.map { app ->
-                            { Text("${app.label}  v${app.versionName} (${app.versionCode})") }
-                        },
-                    )
+                when {
+                    !support.superLyricInstalled && support.loaded -> item {
+                        SegmentedColumn(
+                            modifier = Modifier.fillMaxWidth(),
+                            content = listOf(
+                                {
+                                    SegmentedListItem(
+                                        headlineContent = { Text("未安装 SuperLyric") },
+                                        supportingContent = {
+                                            Text(
+                                                "请安装并启用 SuperLyric 模块以使用该歌词源",
+                                                style = MaterialTheme.typography.bodySmall,
+                                            )
+                                        },
+                                    )
+                                },
+                            ),
+                        )
+                    }
+                    support.loaded && support.superLyricApiApps.isEmpty() && support.superLyricHookApps.isEmpty() -> item {
+                        SegmentedColumn(
+                            modifier = Modifier.fillMaxWidth(),
+                            content = listOf(
+                                {
+                                    SegmentedListItem(
+                                        headlineContent = { Text("未发现 SuperLyric 支持的应用") },
+                                        supportingContent = {
+                                            Text(
+                                                "请安装受支持的音乐应用，或给予本应用获取应用列表权限",
+                                                style = MaterialTheme.typography.bodySmall,
+                                            )
+                                        },
+                                    )
+                                },
+                            ),
+                        )
+                    }
+                    else -> {
+                        if (support.superLyricApiApps.isNotEmpty()) {
+                            item {
+                                SegmentedColumn(
+                                    Modifier.fillMaxWidth(),
+                                    title = "API 支持列表",
+                                    content = support.superLyricApiApps.map { app ->
+                                        { MaterialLyricSupportItem(app) }
+                                    },
+                                )
+                            }
+                        }
+                        if (support.superLyricHookApps.isNotEmpty()) {
+                            item {
+                                SegmentedColumn(
+                                    Modifier.fillMaxWidth(),
+                                    title = "Hook 支持列表",
+                                    content = support.superLyricHookApps.map { app ->
+                                        { MaterialLyricSupportItem(app) }
+                                    },
+                                )
+                            }
+                        }
+                    }
                 }
+            } else if (config.sourceMode == LyricSourceMode.LYRICON && support.loaded && support.lyriconProviders.isEmpty()) {
                 item {
                     SegmentedColumn(
                         Modifier.fillMaxWidth(),
-                        title = "Hook 支持列表",
-                        content = support.superLyricHookApps.map { app ->
-                            { Text("${app.label}  v${app.versionName} (${app.versionCode})") }
-                        },
+                        content = listOf(
+                            {
+                                SegmentedListItem(
+                                    headlineContent = { Text("未发现 Lyricon 歌词提供器") },
+                                    supportingContent = {
+                                        Text(
+                                            "请安装 Lyricon Central 和兼容的 LyricProvider",
+                                            style = MaterialTheme.typography.bodySmall,
+                                        )
+                                    },
+                                )
+                            },
+                        ),
                     )
                 }
             }
@@ -436,7 +601,12 @@ private fun LyricMaterialDetail(
                                                     ),
                                                 )
                                             },
-                                            modifier = Modifier.fillMaxWidth(),
+                                            modifier = Modifier.fillMaxWidth().then(
+                                                materialLyricSliderKeyPointModifier(
+                                                    islandWidthMin.toFloat()..islandWidthMax.toFloat(),
+                                                    config.enabled,
+                                                ),
+                                            ),
                                         )
                                     } else {
                                         Slider(
@@ -448,7 +618,12 @@ private fun LyricMaterialDetail(
                                             onValueChangeFinished = {
                                                 set(config.copy(rightContentMaxWidth = fixedIslandWidth.roundToInt()))
                                             },
-                                            modifier = Modifier.fillMaxWidth(),
+                                            modifier = Modifier.fillMaxWidth().then(
+                                                materialLyricSliderKeyPointModifier(
+                                                    islandWidthMin.toFloat()..islandWidthMax.toFloat(),
+                                                    config.enabled,
+                                                ),
+                                            ),
                                         )
                                     }
                                 }

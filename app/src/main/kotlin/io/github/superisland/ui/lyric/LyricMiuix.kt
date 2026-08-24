@@ -1,6 +1,7 @@
 package io.github.superisland.ui.lyric
 
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Arrangement
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.fadeIn
@@ -59,6 +60,7 @@ fun LyricMiuix(
                     .padding(paddingValues)
                     .verticalScroll(rememberScrollState())
                     .padding(horizontal = 18.dp, vertical = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 AppFeatureMasterSwitch(
                     title = "启用",
@@ -77,6 +79,7 @@ fun LyricMiuix(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(paddingValues)
+                    .padding(horizontal = if (page == LyricConfigSection.SOURCE) 0.dp else 18.dp, vertical = 12.dp)
                     .alpha(if (config.enabled) 1f else 0.55f),
             ) {
                 LyricConfigurationMiuix(

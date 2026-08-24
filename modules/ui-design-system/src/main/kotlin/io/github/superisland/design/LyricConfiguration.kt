@@ -1,7 +1,12 @@
 package io.github.superisland.design
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -9,6 +14,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.ui.Alignment
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
@@ -18,8 +24,17 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import io.github.superisland.source.lyric.IslandContentMode
 import io.github.superisland.source.lyric.LyricIslandConfig
 import io.github.superisland.source.lyric.LyricIslandWidthPolicy
@@ -29,6 +44,11 @@ import io.github.superisland.source.lyric.LyricPlaceholder
 import io.github.superisland.source.lyric.LyricSourceMode
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.Button
+import top.yukonga.miuix.kmp.basic.BasicComponent
+import top.yukonga.miuix.kmp.basic.CardDefaults
+import top.yukonga.miuix.kmp.basic.HorizontalDivider
+import top.yukonga.miuix.kmp.basic.Icon
+import top.yukonga.miuix.kmp.basic.IconButton
 import top.yukonga.miuix.kmp.basic.RangeSlider
 import top.yukonga.miuix.kmp.basic.Slider
 import top.yukonga.miuix.kmp.basic.SliderDefaults
@@ -39,6 +59,9 @@ import top.yukonga.miuix.kmp.overlay.OverlayDialog
 import top.yukonga.miuix.kmp.preference.ArrowPreference
 import top.yukonga.miuix.kmp.preference.OverlayDropdownPreference
 import top.yukonga.miuix.kmp.preference.SwitchPreference
+import top.yukonga.miuix.kmp.icon.MiuixIcons
+import top.yukonga.miuix.kmp.icon.extended.Close
+import top.yukonga.miuix.kmp.theme.MiuixTheme
 import kotlin.math.roundToInt
 
 // MEDIA_FALLBACK is retained only for decoding old configurations. HyperLyric's basic source
@@ -169,6 +192,108 @@ private fun LyricInlineDualSliderRow(
     }
 }
 
+@Composable
+private fun LyricSettingsTitle(text: String) {
+    SmallTitle(
+        text = text,
+        insideMargin = PaddingValues(start = 12.dp, top = 8.dp, end = 12.dp, bottom = 0.dp),
+    )
+}
+
+@Composable
+private fun LyricSettingsCard(content: @Composable ColumnScope.() -> Unit) {
+    Card(modifier = Modifier.fillMaxWidth(), content = content)
+}
+
+private val sourceCardModifier =
+    Modifier
+        .padding(horizontal = 12.dp)
+        .padding(bottom = 12.dp)
+        .fillMaxWidth()
+
+@Composable
+private fun LyricSourcePromptCard(source: LyricSourceMode) {
+    var dismissed by remember(source) { mutableStateOf(false) }
+    AnimatedVisibility(
+        visible = !dismissed,
+        enter = expandVertically() + fadeIn(),
+        exit = shrinkVertically() + fadeOut(),
+    ) {
+        Card(
+            modifier = sourceCardModifier,
+            colors = CardDefaults.defaultColors(
+                color = MiuixTheme.colorScheme.tertiaryContainer,
+                contentColor = MiuixTheme.colorScheme.onTertiaryContainer,
+            ),
+        ) {
+            Row(
+                modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 12.dp).fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = source.sourcePromptSummary(),
+                    color = MiuixTheme.colorScheme.onTertiaryContainer,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.weight(1f).padding(end = 8.dp),
+                )
+                IconButton(
+                    onClick = { dismissed = true },
+                    minWidth = 16.dp,
+                    minHeight = 16.dp,
+                ) {
+                    Icon(
+                        imageVector = MiuixIcons.Demibold.Close,
+                        contentDescription = "关闭",
+                        tint = MiuixTheme.colorScheme.onTertiaryContainer,
+                        modifier = Modifier.height(16.dp),
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun LyricSupportAppCard(app: LyricSupportApp) {
+    var expanded by remember(app.packageName) { mutableStateOf(false) }
+    Card(
+        modifier = sourceCardModifier,
+        onClick = { expanded = !expanded },
+        showIndication = false,
+    ) {
+        BasicComponent(
+            title = app.label,
+            summary = app.displaySummary(),
+            startAction = { LyricSupportAppIcon(app) },
+        )
+        AnimatedVisibility(visible = expanded) {
+            Column(modifier = Modifier.padding(bottom = 16.dp)) {
+                HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+                BasicComponent(
+                    summary = app.usage,
+                    insideMargin = PaddingValues(start = 16.dp, end = 16.dp, top = 10.dp, bottom = 0.dp),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun LyricSupportAppIcon(app: LyricSupportApp) {
+    val icon = rememberLyricSupportAppIcon(app)
+    val iconModifier = Modifier.size(40.dp).clip(RoundedCornerShape(8.dp))
+    if (icon != null) {
+        Image(bitmap = icon, contentDescription = null, modifier = iconModifier)
+    } else {
+        Box(
+            modifier = iconModifier.background(
+                MiuixTheme.colorScheme.onSurfaceVariantSummary.copy(alpha = 0.15f),
+            ),
+        )
+    }
+}
+
 /** Entry pages mirror HyperLyric's compact settings surface. */
 enum class LyricConfigSection(val title: String) {
     SOURCE("歌词源"),
@@ -188,7 +313,7 @@ fun LyricSectionEntryPageMiuix(
     enabled: Boolean,
     onSectionSelected: (LyricConfigSection) -> Unit,
 ) {
-    SmallTitle(text = "自定义配置")
+    LyricSettingsTitle(text = "自定义配置")
     Card(modifier = Modifier.fillMaxWidth()) {
         LyricConfigSection.entries
             .filter { it != LyricConfigSection.PROVIDER || config.sourceMode == LyricSourceMode.LYRICON }
@@ -321,10 +446,10 @@ fun LyricConfigurationMiuix(
     )
     Column(
         modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()),
-        verticalArrangement = Arrangement.spacedBy(10.dp),
+        verticalArrangement = Arrangement.spacedBy(if (section == LyricConfigSection.SOURCE) 0.dp else 12.dp),
     ) {
-        if (section == null || section == LyricConfigSection.SOURCE || section == LyricConfigSection.PROVIDER) {
-            Card {
+        if (section == null || section == LyricConfigSection.SOURCE) {
+            Card(modifier = sourceCardModifier) {
                 OverlayDropdownPreference(
                     title = "歌词源",
                     items = sourceLabels,
@@ -333,67 +458,65 @@ fun LyricConfigurationMiuix(
                     onSelectedIndexChange = { set(config.copy(sourceMode = sourceValues.getOrElse(it) { LyricSourceMode.LYRICON })) },
                 )
             }
-            if (config.sourceMode == LyricSourceMode.LYRICON) {
-                SmallTitle(text = "歌词提供器")
-                Card {
-                    if (support.loaded && support.lyriconProviders.isEmpty()) {
-                        Text(text = "未发现 Lyricon 歌词提供器")
-                    }
-                    support.lyriconProviders.forEach { provider ->
-                        val delay = config.lyriconProviderDelays[provider.packageName]
-                            ?: config.lyriconProviderDelayMs
-                        Text(
-                            text = "${provider.label}  v${provider.versionName}" +
-                                provider.providerAuthor.orEmpty().takeIf { it.isNotBlank() }?.let { "，作者 $it" }.orEmpty(),
-                        )
-                        Text(
-                            buildString {
-                                append("v").append(provider.versionName)
-                                provider.providerAuthor?.takeIf { it.isNotBlank() }?.let { append("，作者 ").append(it) }
-                                provider.providerCategory?.takeIf { it.isNotBlank() }?.let { append("，").append(it) }
-                                append("；正数延后显示，负数提前显示")
-                            },
-                        )
-                        LyricInlineSliderRow("歌词时间偏移", delay.toFloat(), -5000f..5000f, enabled, "${delay}ms") { value ->
-                            val next = config.lyriconProviderDelays.toMutableMap()
-                            next[provider.packageName] = (value / 50f).roundToInt()
-                                .times(50)
-                                .coerceIn(-5000, 5000)
-                            set(config.copy(lyriconProviderDelays = next))
-                        }
-                    }
-                }
-            } else if (config.sourceMode == LyricSourceMode.SUPER_LYRIC) {
+            LyricSourcePromptCard(config.sourceMode)
+            if (config.sourceMode == LyricSourceMode.SUPER_LYRIC) {
                 if (!support.superLyricInstalled) {
-                    SmallTitle(text = "未安装 SuperLyric")
-                    Card {
-                        Text(text = "请安装并启用 SuperLyric 模块以使用该歌词源")
+                    Card(modifier = sourceCardModifier) {
+                        BasicComponent(
+                            title = "未安装 SuperLyric",
+                            summary = "请安装并启用 SuperLyric 模块以使用该歌词源",
+                        )
+                    }
+                } else if (support.loaded && support.superLyricApiApps.isEmpty() && support.superLyricHookApps.isEmpty()) {
+                    Card(modifier = sourceCardModifier) {
+                        BasicComponent(
+                            title = "未发现 SuperLyric 支持的应用",
+                            summary = "请安装受支持的音乐应用，或给予本应用获取应用列表权限",
+                        )
+                    }
+                } else {
+                    if (support.superLyricApiApps.isNotEmpty()) {
+                        SmallTitle(text = "API 支持列表")
+                        support.superLyricApiApps.forEach { app -> LyricSupportAppCard(app) }
+                    }
+                    if (support.superLyricHookApps.isNotEmpty()) {
+                        SmallTitle(text = "Hook 支持列表")
+                        support.superLyricHookApps.forEach { app -> LyricSupportAppCard(app) }
                     }
                 }
-                SmallTitle(text = "API 支持列表")
-                Card {
-                    if (support.superLyricApiApps.isEmpty() && support.loaded) {
-                        Text(text = "未发现 SuperLyric 支持的应用")
-                    }
-                    support.superLyricApiApps.forEach { app ->
-                        Text(text = "${app.label}  v${app.versionName} (${app.versionCode})")
-                    }
+            }
+        }
+
+        if ((section == null || section == LyricConfigSection.PROVIDER) && config.sourceMode == LyricSourceMode.LYRICON) {
+            LyricSettingsTitle(text = "歌词提供器")
+            LyricSettingsCard {
+                if (support.loaded && support.lyriconProviders.isEmpty()) {
+                    BasicComponent(
+                        title = "未发现 Lyricon 歌词提供器",
+                        summary = "请安装 Lyricon Central 和兼容的 LyricProvider",
+                    )
                 }
-                SmallTitle(text = "Hook 支持列表")
-                Card {
-                    if (support.superLyricHookApps.isEmpty() && support.loaded) {
-                        Text(text = "未发现 SuperLyric 支持的应用")
-                    }
-                    support.superLyricHookApps.forEach { app ->
-                        Text(text = "${app.label}  v${app.versionName} (${app.versionCode})")
+                support.lyriconProviders.forEach { provider ->
+                    val delay = config.lyriconProviderDelays[provider.packageName]
+                        ?: config.lyriconProviderDelayMs
+                    BasicComponent(
+                        title = provider.label,
+                        summary = provider.displaySummary(),
+                    )
+                    LyricInlineSliderRow("歌词时间偏移", delay.toFloat(), -5000f..5000f, enabled, "${delay}ms") { value ->
+                        val next = config.lyriconProviderDelays.toMutableMap()
+                        next[provider.packageName] = (value / 50f).roundToInt()
+                            .times(50)
+                            .coerceIn(-5000, 5000)
+                        set(config.copy(lyriconProviderDelays = next))
                     }
                 }
             }
         }
 
         if (section == null || section == LyricConfigSection.ISLAND) {
-        SmallTitle(text = "布局")
-        Card {
+        LyricSettingsTitle(text = "布局")
+        LyricSettingsCard {
             OverlayDropdownPreference(
                 title = "超级岛长度模式",
                 items = listOf("固定长度", "动态长度"),
@@ -477,13 +600,13 @@ fun LyricConfigurationMiuix(
                 }
             }
         }
-        Card {
+        LyricSettingsCard {
             LyricInlineDualSliderRow("左侧内容内边距", config.leftPaddingLeft, config.leftPaddingRight, enabled) { left, right -> set(config.copy(leftPaddingLeft = left, leftPaddingRight = right)) }
             LyricInlineDualSliderRow("右侧内容内边距", config.rightPaddingLeft, config.rightPaddingRight, enabled) { left, right -> set(config.copy(rightPaddingLeft = left, rightPaddingRight = right)) }
         }
 
-        SmallTitle(text = "内容")
-        Card {
+        LyricSettingsTitle(text = "内容")
+        LyricSettingsCard {
             SwitchPreference(
                 title = "分离歌词",
                 checked = config.lyricMode == 1,
@@ -491,7 +614,7 @@ fun LyricConfigurationMiuix(
                 onCheckedChange = { set(config.copy(lyricMode = if (it) 1 else 0)) },
             )
         }
-        Card {
+        LyricSettingsCard {
             OverlayDropdownPreference(
                 title = "音频封面",
                 items = LyricAlbumCoverStyle.pickerLabels,
@@ -530,8 +653,8 @@ fun LyricConfigurationMiuix(
         }
 
         if (section == null || section == LyricConfigSection.CONTENT_LAYOUT) {
-        SmallTitle(text = "音乐信息")
-        Card {
+        LyricSettingsTitle(text = "音乐信息")
+        LyricSettingsCard {
             ArrowPreference(
                 title = "第一行",
                 summary = summarizeFields(config.musicInfoFirstLine, LyricMusicInfoLayout.FIELD_TITLE),
@@ -554,8 +677,8 @@ fun LyricConfigurationMiuix(
             )
             SwitchPreference(title = "居中显示", checked = config.centerMusicInfo, enabled = enabled, onCheckedChange = { set(config.copy(centerMusicInfo = it)) })
         }
-        SmallTitle(text = "歌词")
-        Card {
+        LyricSettingsTitle(text = "歌词")
+        LyricSettingsCard {
             SwitchPreference(title = "居中显示", checked = config.centerLyric, enabled = enabled && !config.rightLyric, onCheckedChange = { set(config.copy(centerLyric = it, rightLyric = if (it) false else config.rightLyric)) })
             SwitchPreference(title = "歌词右对齐", checked = config.rightLyric, enabled = enabled && !config.centerLyric, onCheckedChange = { set(config.copy(rightLyric = it, centerLyric = if (it) false else config.centerLyric)) })
             OverlayDropdownPreference(title = "占位符格式", items = placeholders, selectedIndex = config.placeholder.ordinal, enabled = enabled, onSelectedIndexChange = { set(config.copy(placeholder = LyricPlaceholder.entries.getOrElse(it) { LyricPlaceholder.COUNTDOWN })) })
@@ -563,16 +686,16 @@ fun LyricConfigurationMiuix(
         }
 
         if (section == null || section == LyricConfigSection.TEXT_STYLE) {
-        SmallTitle(text = "文字样式")
-        Card {
-            SmallTitle(text = "基础样式")
+        LyricSettingsTitle(text = "文字样式")
+        LyricSettingsTitle(text = "基础样式")
+        LyricSettingsCard {
             LyricInlineSliderRow("大小", config.textSizeSp, 8f..16f, enabled, config.textSizeSp.toInt().toString()) { set(config.copy(textSizeSp = it.roundToInt().toFloat())) }
             LyricInlineSliderRow("多行模式下文字大小比例", config.textSizeRatio * 100f, 10f..100f, enabled, "${(config.textSizeRatio * 100).toInt()}%") { set(config.copy(textSizeRatio = it.roundToInt() / 100f)) }
             LyricInlineSliderRow("羽化边缘长度", config.fadingEdgeLengthDp.toFloat(), 0f..100f, enabled, config.fadingEdgeLengthDp.toString()) { set(config.copy(fadingEdgeLengthDp = it.roundToInt())) }
             OverlayDropdownPreference(title = "文字颜色", items = textColors, selectedIndex = config.textColorStyle.coerceIn(0, 3), enabled = enabled, onSelectedIndexChange = { set(config.copy(textColorStyle = it)) })
         }
-        Card {
-            SmallTitle(text = "字体样式")
+        LyricSettingsTitle(text = "字体样式")
+        LyricSettingsCard {
             OverlayDropdownPreference(
                 title = "字体",
                 items = listOf("默认", "自定义"),
@@ -590,9 +713,9 @@ fun LyricConfigurationMiuix(
         }
 
         if (section == null || section == LyricConfigSection.SCROLL) {
-        SmallTitle(text = "滚动显示")
-        SmallTitle(text = "歌词滚动")
-        Card {
+        LyricSettingsTitle(text = "滚动显示")
+        LyricSettingsTitle(text = "歌词滚动")
+        LyricSettingsCard {
             SwitchPreference(title = "歌词滚动", summary = "针对没有时间轴的歌词", checked = config.marqueeMode, enabled = enabled, onCheckedChange = { set(config.copy(marqueeMode = it)) })
             LyricInlineSliderRow("滚动速度", config.marqueeSpeed.toFloat(), 5f..100f, enabled && config.marqueeMode, config.marqueeSpeed.toString()) { set(config.copy(marqueeSpeed = it.roundToInt())) }
             LyricInlineSliderRow("初始滚动延迟", config.marqueeDelay.toFloat(), 0f..5000f, enabled && config.marqueeMode, "${config.marqueeDelay}ms") { set(config.copy(marqueeDelay = it.roundToInt())) }
@@ -601,8 +724,8 @@ fun LyricConfigurationMiuix(
             SwitchPreference(title = "结束时在末尾停止", enabled = enabled && config.marqueeMode, checked = config.marqueeStopEnd, onCheckedChange = { set(config.copy(marqueeStopEnd = it)) })
         }
         if (config.lyricMode == 0) {
-            SmallTitle(text = "歌曲信息滚动")
-            Card {
+            LyricSettingsTitle(text = "歌曲信息滚动")
+            LyricSettingsCard {
                 SwitchPreference(
                     title = "歌曲信息滚动",
                     summary = "针对歌曲信息",
@@ -619,8 +742,8 @@ fun LyricConfigurationMiuix(
         }
 
         if (section == null || section == LyricConfigSection.VERBATIM) {
-        SmallTitle(text = "逐字歌词")
-        Card {
+        LyricSettingsTitle(text = "逐字歌词")
+        LyricSettingsCard {
             SwitchPreference(
                 title = "模拟逐行歌词",
                 summary = "将带有字词时间轴的歌词降级为整行时间轴显示",
@@ -642,8 +765,8 @@ fun LyricConfigurationMiuix(
             )
             SwitchPreference(title = "相对进度歌词高亮显示", enabled = enabled && config.syllableRelative, checked = config.syllableHighlight, onCheckedChange = { set(config.copy(syllableHighlight = it)) })
         }
-        SmallTitle(text = "歌词动效")
-        Card {
+        LyricSettingsTitle(text = "歌词动效")
+        LyricSettingsCard {
             SwitchPreference(title = "羽化进度样式", checked = config.gradientProgressStyle, enabled = enabled, onCheckedChange = { set(config.copy(gradientProgressStyle = it)) })
             SwitchPreference(title = "逐字字词上浮动画", checked = config.wordMotionEnabled, enabled = enabled, onCheckedChange = { set(config.copy(wordMotionEnabled = it)) })
             if (config.wordMotionEnabled) {
@@ -657,17 +780,17 @@ fun LyricConfigurationMiuix(
         }
 
         if (section == null || section == LyricConfigSection.TRANSLATION) {
-        SmallTitle(text = "双行内容")
+        LyricSettingsTitle(text = "双行内容")
         val nextSupported = config.sourceMode == LyricSourceMode.LYRICON ||
             config.sourceMode == LyricSourceMode.LYRIC_INFO
         if (nextSupported) {
-            SmallTitle(text = "下一句歌词")
-            Card {
+            LyricSettingsTitle(text = "下一句歌词")
+            LyricSettingsCard {
                 SwitchPreference(title = "显示下一句歌词", summary = "占用第二行，开启后不显示翻译", checked = config.nextLyricLine, enabled = enabled, onCheckedChange = { set(config.copy(nextLyricLine = it)) })
             }
         }
-        SmallTitle(text = "翻译")
-        Card {
+        LyricSettingsTitle(text = "翻译")
+        LyricSettingsCard {
             val translationEnabled = !nextSupported || !config.nextLyricLine
             SwitchPreference(title = "禁用所有翻译", enabled = enabled && translationEnabled, checked = config.disableTranslation, onCheckedChange = { set(config.copy(disableTranslation = it)) })
             SwitchPreference(title = "仅显示翻译", enabled = enabled && translationEnabled && !config.swapTranslation, checked = config.translationOnly, onCheckedChange = { set(config.copy(translationOnly = it, swapTranslation = if (it) false else config.swapTranslation)) })
@@ -676,8 +799,8 @@ fun LyricConfigurationMiuix(
         }
 
         if (section == null || section == LyricConfigSection.ANIMATION) {
-        SmallTitle(text = "歌词切换动画")
-        Card {
+        LyricSettingsTitle(text = "歌词切换动画")
+        LyricSettingsCard {
             OverlayDropdownPreference(title = "歌词切换动画", items = animationLabels, selectedIndex = animationIndex, enabled = enabled, onSelectedIndexChange = { index -> set(config.copy(animEnabled = index != 0, animId = animationIds.getOrElse(index) { "default" })) })
         }
         }
