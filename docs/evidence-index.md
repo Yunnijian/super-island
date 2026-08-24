@@ -5,6 +5,8 @@
 
 ## 当前证据入口
 
+- `artifacts/qq_custom_title_2026-08-24/`：通用 `CUSTOM_FIELD_TITLE` 标题优先级的固定上游生成期
+  适配、完整 benchmark 门禁、同包安装与进程重载、歌词更新前后的标题保持截图及脱敏异常扫描。
 - `artifacts/hyperlyric_release_song_info_20260824/`：HyperLyric GitHub Release `1937-7.2`
   固定源码、完整 benchmark 门禁、设备 APK 身份核验、SystemUI/XMSF 重载、歌曲信息两行的
   截图和脱敏异常扫描。

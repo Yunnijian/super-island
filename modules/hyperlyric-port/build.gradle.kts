@@ -115,11 +115,13 @@ val hyperLyricApplicationOnlySources = setOf(
 // Every generated upstream source must remain byte-for-byte identical unless this small,
 // audited set needs the current module's LSPosed service or preferences owner.
 val hyperLyricPortAdaptedSources = setOf(
+    "common/media/MediaMetadataHelper.kt",
     "root/HookEntry.kt",
     "root/UnlockIslandWhitelist.kt",
     "root/island/effects/album/IslandAlbumCoverStyleHooker.kt",
     "root/island/effects/color/IslandMusicWaveColorHooker.kt",
     "root/island/effects/glow/HookIslandGlow.kt",
+    "root/media/CurrentMediaInfoResolver.kt",
     "utils/LogManager.kt",
 )
 val hyperLyricAppUiSourcePrefix = "ui/"
@@ -461,6 +463,70 @@ val generateHyperLyricPortSource = tasks.register<GeneratedHyperLyricSync>("gene
             original = "val prefs = (module as? HookEntry)?.prefs ?: return",
             replacement = "val prefs = HookEntry.instance?.prefs ?: return",
         )
+
+        // Some media controllers expose a stable title through the standard custom metadata
+        // field while updating TITLE and DISPLAY_TITLE with lyric text. Keep the complete
+        // upstream fallback order when that optional field is absent.
+        val mediaMetadataHelper = generatedRoot.resolve(
+            "com/lidesheng/hyperlyric/common/media/MediaMetadataHelper.kt"
+        )
+        val originalMediaMetadataHelper = mediaMetadataHelper.readText()
+        val mediaInfoTitleField = """        val title: String = "",
+"""
+        check(originalMediaMetadataHelper.contains(mediaInfoTitleField)) {
+            "HyperLyric MediaInfo title field changed"
+        }
+        val mediaInfoWithCustomTitleField = """        val title: String = "",
+        val customTitle: String? = null,
+"""
+        val mediaInfoBuilder = """        val mediaDescription = description
+        val artwork = extractAlbumArt()
+        return MediaInfo(
+            title = getString(MediaMetadata.METADATA_KEY_TITLE)
+                ?: getString(MediaMetadata.METADATA_KEY_DISPLAY_TITLE)
+                ?: mediaDescription.title?.toString().orEmpty(),
+"""
+        check(originalMediaMetadataHelper.contains(mediaInfoBuilder)) {
+            "HyperLyric MediaMetadata title fallback changed"
+        }
+        val mediaInfoBuilderWithCustomField = """        val mediaDescription = description
+        val artwork = extractAlbumArt()
+        val customTitle = getString("android.media.metadata.CUSTOM_FIELD_TITLE")
+            ?.takeIf(String::isNotBlank)
+        return MediaInfo(
+            customTitle = customTitle,
+            title = customTitle
+                ?: getString(MediaMetadata.METADATA_KEY_TITLE)
+                ?: getString(MediaMetadata.METADATA_KEY_DISPLAY_TITLE)
+                ?: mediaDescription.title?.toString().orEmpty(),
+"""
+        val mediaMetadataWithCustomTitle = originalMediaMetadataHelper
+            .replace(mediaInfoTitleField, mediaInfoWithCustomTitleField)
+            .replace(mediaInfoBuilder, mediaInfoBuilderWithCustomField)
+        check(mediaMetadataWithCustomTitle.contains("customTitle = getString(\"android.media.metadata.CUSTOM_FIELD_TITLE\")")) {
+            "HyperLyric custom metadata title was not generated"
+        }
+        mediaMetadataHelper.writeText(mediaMetadataWithCustomTitle)
+
+        val currentMediaInfoResolver = generatedRoot.resolve(
+            "com/lidesheng/hyperlyric/root/media/CurrentMediaInfoResolver.kt"
+        )
+        val originalCurrentMediaInfoResolver = currentMediaInfoResolver.readText()
+        val sourcePreferredTitle = """            title = sourceInfo.title ?: normalizeText(sessionInfo.title),
+"""
+        check(originalCurrentMediaInfoResolver.contains(sourcePreferredTitle)) {
+            "HyperLyric current media title precedence changed"
+        }
+        val customTitlePreferred = """            title = sessionInfo.customTitle ?: sourceInfo.title ?: normalizeText(sessionInfo.title),
+"""
+        val currentMediaInfoResolverWithCustomTitle = originalCurrentMediaInfoResolver.replace(
+            sourcePreferredTitle,
+            customTitlePreferred,
+        )
+        check(currentMediaInfoResolverWithCustomTitle.contains(customTitlePreferred)) {
+            "HyperLyric custom metadata title precedence was not generated"
+        }
+        currentMediaInfoResolver.writeText(currentMediaInfoResolverWithCustomTitle)
 
         val logManager = generatedRoot.resolve("com/lidesheng/hyperlyric/utils/LogManager.kt")
         val originalLogManager = logManager.readText()

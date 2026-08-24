@@ -35,6 +35,13 @@
   benchmark SHA-256 为 `706a284dcc673220e1ca01af10f9dcf84aa903e65e578501578b15b5c01c595f`；同一 APK
   已覆盖安装，设备 base APK 哈希一致，SystemUI `16113 -> 25458`、XMSF `16390 -> 25883` 已重载，
   重载后模块异常扫描为空。动态长度、封面、律动、滚动、歌词分离与下拉状态栏性能仍待真机手动验收。
+- MediaSession 的 `android.media.metadata.CUSTOM_FIELD_TITLE` 现作为通用的非空稳定标题字段：
+  它仅在存在时覆盖 SuperLyric source title，否则完整保留 Release 原始的 source title、`TITLE`、
+  `DISPLAY_TITLE` 与 description 回退顺序，不按播放器包名分支。本次完整 `./scripts/check.sh` 通过
+  （766 actionable tasks），benchmark SHA-256 为
+  `91fec4f1f0e3a77ed3a597ecdf43a3d1de12844c864d8da30e0315f1704cfd8d`；同一 APK 已覆盖安装并重载
+  SystemUI/XMSF，安装后的异常扫描为空。真机确认歌词更新时左槽歌曲标题保持不被歌词覆盖；原始截图
+  与脱敏日志位于外部证据目录。
 
 ## 2026-08-23 歌词配置与渲染回归
 
