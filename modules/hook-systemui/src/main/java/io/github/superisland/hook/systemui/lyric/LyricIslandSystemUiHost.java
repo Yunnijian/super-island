@@ -108,9 +108,9 @@ public final class LyricIslandSystemUiHost {
     private static final Runnable NATIVE_REFRESH = () -> {
         NATIVE_REFRESH_PENDING.set(false);
         try {
-            LyricIslandNativeRenderer.refreshAll();
+            com.lidesheng.hyperlyric.port.HyperLyricIslandRuntime.refreshSettings();
         } catch (Throwable error) {
-            Log.w(TAG, "Could not refresh native lyric slots", error);
+            Log.w(TAG, "Could not refresh upstream HyperLyric slots", error);
         }
     };
 
@@ -129,21 +129,14 @@ public final class LyricIslandSystemUiHost {
             // LyricInfo is resolved by the fallback poller, but it still needs the same
             // position clock for progress, word highlighting and next-line transitions. The
             // previous gate stopped after the first fallback snapshot, leaving a frozen line.
-            if (!enabled || (config.getSourceMode() != LyricSourceMode.SUPER_LYRIC
-                    && config.getSourceMode() != LyricSourceMode.LYRICON
-                    && config.getSourceMode() != LyricSourceMode.LYRIC_INFO
-                    && config.getSourceMode() != LyricSourceMode.MEDIA_FALLBACK)) return;
+            if (!enabled || config.getSourceMode() != LyricSourceMode.MEDIA_FALLBACK) return;
             LyricSnapshot snapshot = latestSnapshot;
             if (snapshot != null && !snapshot.getStopped() && CLOCK.isActive()) {
-                // Once the player's native island owns the lyric slot, publishing a Focus SBN on
-                // every clock tick only cancels the same fallback notification and traverses the
-                // OEM tree again. Content changes still arrive through onSnapshot; ticks only
-                // advance the in-place rich renderer and keep shade scrolling responsive.
-                boolean nativeAttached = LyricIslandNativeRenderer.hasAttachedSlot();
+                boolean nativeAttached = com.lidesheng.hyperlyric.port.HyperLyricIslandRuntime
+                        .hasAttachedNativeSlot();
                 if (!nativeAttached && config.getSourceMode() == LyricSourceMode.MEDIA_FALLBACK) {
                     publishIfNeeded(true);
                 }
-                if (nativeAttached) LyricIslandNativeRenderer.updatePositions();
                 MAIN_HANDLER.postDelayed(this, POSITION_TICK_MS);
             }
         }
@@ -166,8 +159,7 @@ public final class LyricIslandSystemUiHost {
                     }
                     final LyricSnapshot resolvedSnapshot = resolved;
                     MAIN_HANDLER.post(() -> {
-                        if (!enabled || (config.getSourceMode() != LyricSourceMode.LYRIC_INFO
-                                && config.getSourceMode() != LyricSourceMode.MEDIA_FALLBACK)) return;
+                        if (!enabled || config.getSourceMode() != LyricSourceMode.MEDIA_FALLBACK) return;
                         if (resolvedSnapshot == null) {
                             latestSnapshot = null;
                             CLOCK.reset();
@@ -175,6 +167,8 @@ public final class LyricIslandSystemUiHost {
                             return;
                         }
                         latestSnapshot = resolvedSnapshot;
+                        com.lidesheng.hyperlyric.port.HyperLyricIslandRuntime
+                                .submitFallbackSnapshot(resolvedSnapshot);
                         // LyricResolver already read the MediaSession on FALLBACK_EXECUTOR. Do
                         // not query the same controller again on the SystemUI main looper.
                         CLOCK.update(resolvedSnapshot.getPlayback(), android.os.SystemClock.elapsedRealtime());
@@ -239,6 +233,7 @@ public final class LyricIslandSystemUiHost {
         if (!configChanged && nextEnabled == enabled) return;
         config = nextConfig;
         enabled = nextEnabled;
+        com.lidesheng.hyperlyric.port.HyperLyricIslandRuntime.refreshSettings();
         if (enabled) {
             if (!wasEnabled || sourceChanged) {
                 if (wasEnabled) stopListening();
@@ -262,22 +257,19 @@ public final class LyricIslandSystemUiHost {
 
     private static synchronized void startSources() {
         MAIN_HANDLER.removeCallbacks(FALLBACK_TICK);
+        SuperLyricBridge.INSTANCE.removeSnapshotListener(SNAPSHOT_LISTENER);
+        SuperLyricBridge.INSTANCE.stop();
         LyriconBridge.INSTANCE.removeSnapshotListener(LYRICON_SNAPSHOT_LISTENER);
         LyriconBridge.INSTANCE.stop();
-        if (config.getSourceMode() == LyricSourceMode.SUPER_LYRIC) {
-            startListening();
-        } else if (config.getSourceMode() == LyricSourceMode.LYRICON) {
-            LyriconBridge.INSTANCE.addSnapshotListener(LYRICON_SNAPSHOT_LISTENER);
-            LyriconBridge.INSTANCE.start(
-                    appContext,
-                    config.getLyriconProviderDelays(),
-                    config.getLyriconProviderDelayMs());
-            MAIN_HANDLER.removeCallbacks(POSITION_TICK);
-            MAIN_HANDLER.post(POSITION_TICK);
-            Log.i(TAG, "Lyricon subscriber started");
-        } else {
+        MAIN_HANDLER.removeCallbacks(POSITION_TICK);
+        if (config.getSourceMode() == LyricSourceMode.MEDIA_FALLBACK) {
             MAIN_HANDLER.post(FALLBACK_TICK);
-            Log.i(TAG, "MediaSession lyric fallback started");
+            Log.i(TAG, "Explicit MediaSession lyric fallback started");
+        } else {
+            // The fixed HyperLyric SourceManager owns SuperLyric, Lyricon and LyricInfo. Keeping
+            // a parallel local receiver here previously caused two render owners and duplicate
+            // metadata refreshes while lyrics advanced.
+            Log.i(TAG, "Upstream HyperLyric source runtime owns lyric input");
         }
     }
 
@@ -338,10 +330,14 @@ public final class LyricIslandSystemUiHost {
             if (effective.getStopped()) {
                 CLOCK.reset();
                 cancelNotification();
-                LyricIslandNativeRenderer.clearAll();
+                com.lidesheng.hyperlyric.port.HyperLyricIslandRuntime.clear();
                 return;
             }
             scheduleArtworkResolve(effective, sourceMode);
+            // HyperLyric resolves the media-session metadata independently of the lyric
+            // provider on every media update. Provider fields may be non-empty but stale (or
+            // contain the lyric title), so do not gate this refresh on blankness.
+            schedulePlaybackResolve(effective);
             applySnapshotPlayback(effective, sourceMode, false);
             publishIfNeeded(false);
             if (CLOCK.isActive()) {
@@ -355,6 +351,10 @@ public final class LyricIslandSystemUiHost {
         LyricSnapshot snapshot = latestSnapshot;
         Context context = appContext;
         if (!enabled || context == null || snapshot == null || snapshot.getStopped()) return;
+        if (config.getSourceMode() != LyricSourceMode.MEDIA_FALLBACK) {
+            enqueueNotificationCancel(context);
+            return;
+        }
         long now = android.os.SystemClock.elapsedRealtime();
         if (snapshot.getPlayback() != null) {
             if (positionTick) {
@@ -374,7 +374,8 @@ public final class LyricIslandSystemUiHost {
         // A bound native player slot receives position updates directly from POSITION_TICK. Do
         // not rebuild/cancel the fallback notification every 120ms while the shade animation is
         // running; that Binder work is only needed when content/config changes.
-        if (positionTick && !contentChanged && LyricIslandNativeRenderer.hasAttachedSlot()) return;
+        if (positionTick && !contentChanged && com.lidesheng.hyperlyric.port.HyperLyricIslandRuntime
+                .hasAttachedNativeSlot()) return;
         if (positionTick && !contentChanged && now - lastPublishElapsed < PUBLISH_INTERVAL_MS) return;
         if (!positionTick && !contentChanged && now - lastPublishElapsed < 16L) return;
         publish(context, snapshot, line, position, contentHash);
@@ -469,10 +470,10 @@ public final class LyricIslandSystemUiHost {
             MAIN_HANDLER.post(() -> {
                 PLAYBACK_QUERY_RUNNING.set(false);
                 final LyricSnapshot current = latestSnapshot;
-                if (!enabled || config.getSourceMode() != LyricSourceMode.SUPER_LYRIC
+                if (!enabled || config.getSourceMode() == LyricSourceMode.MEDIA_FALLBACK
                         || current == null || current.getStopped() || !key.equals(mediaKey(current))) {
                     if (enabled && current != null && !current.getStopped()
-                            && config.getSourceMode() == LyricSourceMode.SUPER_LYRIC
+                            && config.getSourceMode() != LyricSourceMode.MEDIA_FALLBACK
                             && !key.equals(mediaKey(current))) {
                         schedulePlaybackResolve(current);
                     }
@@ -481,15 +482,17 @@ public final class LyricIslandSystemUiHost {
                 playbackCacheKey = key;
                 playbackCache = result;
                 playbackCacheElapsed = android.os.SystemClock.elapsedRealtime();
-                String title = current.getTitle();
-                String artist = current.getArtist();
-                String album = current.getAlbum();
-                // SuperLyric publishers do not always include title/artist/album in the Binder
-                // callback. HyperLyric reads the same public MediaSession metadata for its info
-                // row, so fill only missing fields and preserve an explicit provider value.
-                if (isBlank(title)) title = resolvedMediaState.getTitle();
-                if (isBlank(artist)) artist = resolvedMediaState.getArtist();
-                if (isBlank(album)) album = resolvedMediaState.getAlbum();
+                // Match HyperLyric's CurrentMediaInfoResolver: source-provided fields are
+                // authoritative for the current lyric event, while MediaSession only fills a
+                // field that the source did not expose. Some players rewrite MediaSession.title
+                // with the current lyric line, so unconditionally preferring it makes the
+                // configured music-information "title" row display lyrics.
+                String title = isBlank(current.getTitle()) || isCurrentLyricTitle(current)
+                        ? resolvedMediaState.getTitle() : current.getTitle();
+                String artist = isBlank(current.getArtist())
+                        ? resolvedMediaState.getArtist() : current.getArtist();
+                String album = isBlank(current.getAlbum())
+                        ? resolvedMediaState.getAlbum() : current.getAlbum();
                 latestSnapshot = current.copy(
                         current.getPublisher(),
                         current.getLine(),
@@ -502,7 +505,9 @@ public final class LyricIslandSystemUiHost {
                         result,
                         current.getStopped());
                 CLOCK.update(result, android.os.SystemClock.elapsedRealtime());
-                lastAppliedProviderPlayback = result;
+                if (config.getSourceMode() == LyricSourceMode.SUPER_LYRIC) {
+                    lastAppliedProviderPlayback = result;
+                }
                 publishIfNeeded(false);
                 if (CLOCK.isActive()) {
                     MAIN_HANDLER.removeCallbacks(POSITION_TICK);
@@ -514,6 +519,13 @@ public final class LyricIslandSystemUiHost {
 
     private static boolean isBlank(String value) {
         return value == null || value.trim().isEmpty();
+    }
+
+    private static boolean isCurrentLyricTitle(LyricSnapshot snapshot) {
+        if (snapshot == null || snapshot.getLine() == null) return false;
+        String title = snapshot.getTitle();
+        String lyric = snapshot.getLine().getText();
+        return !isBlank(title) && !isBlank(lyric) && title.trim().equals(lyric.trim());
     }
 
     private static void scheduleArtworkResolve(
@@ -584,26 +596,20 @@ public final class LyricIslandSystemUiHost {
             // lyric-only gate (or by a missing lyric line/placeholder).
             String primary;
             String secondary;
-            if (currentConfig.getLyricMode() == 1) {
-                primary = LyricPayloadBuilder.INSTANCE.contentFor(
-                        snapshot, currentConfig, io.github.superisland.source.lyric.IslandContentMode.LYRIC, true);
-                secondary = LyricPayloadBuilder.INSTANCE.contentFor(
-                        snapshot, currentConfig, io.github.superisland.source.lyric.IslandContentMode.LYRIC, false);
-            } else {
-                primary = LyricPayloadBuilder.INSTANCE.contentFor(
-                        snapshot, currentConfig, currentConfig.getContentLeft(), true);
-                secondary = LyricPayloadBuilder.INSTANCE.contentFor(
-                        snapshot, currentConfig, currentConfig.getContentRight(), false);
-            }
+            primary = LyricPayloadBuilder.INSTANCE.contentFor(
+                    snapshot, currentConfig, currentConfig.contentModeForSlot(true), true);
+            secondary = LyricPayloadBuilder.INSTANCE.contentFor(
+                    snapshot, currentConfig, currentConfig.contentModeForSlot(false), false);
             if (primary.isBlank() && secondary.isBlank()) {
                 cancelNotification();
-                LyricIslandNativeRenderer.clearAll();
+                com.lidesheng.hyperlyric.port.HyperLyricIslandRuntime.clear();
                 return;
             }
             Integer progress = LyricProgress.INSTANCE.lineProgress(line, position);
             boolean showProgress = currentConfig.getShowProgress() && progress != null;
             int progressValue = progress == null ? 0 : progress;
-            boolean nativeAttached = LyricIslandNativeRenderer.hasAttachedSlot();
+            boolean nativeAttached = com.lidesheng.hyperlyric.port.HyperLyricIslandRuntime
+                    .hasAttachedNativeSlot();
             boolean fallbackMode = currentConfig.getSourceMode() == LyricSourceMode.MEDIA_FALLBACK;
             if (fallbackMode) {
                 // Keep the fallback's two lines identical to the resolved native slot contract.
@@ -612,7 +618,7 @@ public final class LyricIslandSystemUiHost {
                 String fallbackRight = secondary;
                 if (fallbackLeft.isBlank() || fallbackRight.isBlank()) {
                     cancelNotification();
-                    LyricIslandNativeRenderer.clearAll();
+                    com.lidesheng.hyperlyric.port.HyperLyricIslandRuntime.clear();
                     return;
                 }
                 FocusNotificationRequest request = new FocusNotificationRequest(
@@ -652,16 +658,12 @@ public final class LyricIslandSystemUiHost {
                 enqueueNotificationCancel(context);
             } else {
                 cancelNotification();
-                LyricIslandNativeRenderer.clearAll();
+                com.lidesheng.hyperlyric.port.HyperLyricIslandRuntime.clear();
                 return;
             }
             lastPublishElapsed = android.os.SystemClock.elapsedRealtime();
             lastPublishedPosition = position;
             lastPublishedContentHash = contentHash;
-            // Word-level providers can emit several snapshots within one frame. Match
-            // HyperLyric's debounced content coordinator so each frame performs at most one
-            // native-tree reconciliation while the latest snapshot remains authoritative.
-            if (nativeAttached) scheduleNativeRefresh();
         } catch (Throwable error) {
             Log.e(TAG, "Could not publish lyric island", error);
         }
@@ -686,22 +688,10 @@ public final class LyricIslandSystemUiHost {
         if (active) {
             String left;
             String right;
-            boolean duplicateLyricSlots = currentConfig.getLyricMode() == 0
-                    && currentConfig.getContentLeft() == io.github.superisland.source.lyric.IslandContentMode.LYRIC
-                    && currentConfig.getContentRight() == io.github.superisland.source.lyric.IslandContentMode.LYRIC;
-            if (currentConfig.getLyricMode() == 1) {
-                left = LyricPayloadBuilder.INSTANCE.contentFor(
-                        snapshot, currentConfig,
-                        io.github.superisland.source.lyric.IslandContentMode.LYRIC, true);
-                right = LyricPayloadBuilder.INSTANCE.contentFor(
-                        snapshot, currentConfig,
-                        io.github.superisland.source.lyric.IslandContentMode.LYRIC, false);
-            } else {
-                left = duplicateLyricSlots && currentConfig.getSlot() == io.github.superisland.source.lyric.LyricSlot.RIGHT
-                        ? "" : LyricPayloadBuilder.INSTANCE.contentFor(snapshot, currentConfig, currentConfig.getContentLeft(), true);
-                right = duplicateLyricSlots && currentConfig.getSlot() != io.github.superisland.source.lyric.LyricSlot.RIGHT
-                        ? "" : LyricPayloadBuilder.INSTANCE.contentFor(snapshot, currentConfig, currentConfig.getContentRight(), false);
-            }
+            left = LyricPayloadBuilder.INSTANCE.contentFor(
+                    snapshot, currentConfig, currentConfig.contentModeForSlot(true), true);
+            right = LyricPayloadBuilder.INSTANCE.contentFor(
+                    snapshot, currentConfig, currentConfig.contentModeForSlot(false), false);
             active = !left.isBlank() || !right.isBlank();
         }
         nativeActiveSnapshot = snapshot;
@@ -733,18 +723,14 @@ public final class LyricIslandSystemUiHost {
         LyricSnapshot snapshot = latestSnapshot;
         return snapshot == null ? "" : LyricPayloadBuilder.INSTANCE.contentFor(
                 snapshot, config,
-                config.getLyricMode() == 1
-                        ? io.github.superisland.source.lyric.IslandContentMode.LYRIC
-                        : config.getContentLeft(), true);
+                config.contentModeForSlot(true), true);
     }
 
     public static String nativeSecondaryText() {
         LyricSnapshot snapshot = latestSnapshot;
         return snapshot == null ? "" : LyricPayloadBuilder.INSTANCE.contentFor(
                 snapshot, config,
-                config.getLyricMode() == 1
-                        ? io.github.superisland.source.lyric.IslandContentMode.LYRIC
-                        : config.getContentRight(), false);
+                config.contentModeForSlot(false), false);
     }
 
     public static String nativePublisher() {
@@ -765,7 +751,7 @@ public final class LyricIslandSystemUiHost {
     }
 
     public static boolean nativeSlotAttached() {
-        return LyricIslandNativeRenderer.hasAttachedSlot();
+        return com.lidesheng.hyperlyric.port.HyperLyricIslandRuntime.hasAttachedNativeSlot();
     }
 
     /** Cancels only the optional Focus fallback; native island slots remain untouched. */
@@ -840,45 +826,40 @@ public final class LyricIslandSystemUiHost {
         }
     }
 
-    /** Called by the bounded DynamicIslandContentView hook after OEM layout updates. */
+    /** Legacy bridge entry; active SystemUI hooks are owned by upstream SystemUIHookRegistry. */
     public static void renderNative(ViewGroup root) {
-        LyricIslandNativeRenderer.render(root, null);
+        com.lidesheng.hyperlyric.port.HyperLyricIslandRuntime.refreshSettings();
     }
 
-    /** Called by the DynamicIslandContentView hook with the OEM island data object. */
+    /** Legacy bridge entry; island data is consumed by upstream RealIslandHooker. */
     public static void renderNative(ViewGroup root, Object islandData) {
-        LyricIslandNativeRenderer.render(root, islandData);
+        com.lidesheng.hyperlyric.port.HyperLyricIslandRuntime.refreshSettings();
+    }
+
+    /** The retired local hook path never re-enters OEM width calculation. */
+    public static boolean isNativeRelayoutInProgress() {
+        return false;
     }
 
     public static void clearNative(ViewGroup root) {
-        boolean cleared = LyricIslandNativeRenderer.clearRoot(root);
-        if (cleared && !LyricIslandNativeRenderer.hasAttachedSlot()) {
-            // A layout mismatch or player switch may happen without a new Binder line. Restore
-            // the explicitly documented Focus fallback only after the native surface is gone.
-            MAIN_HANDLER.post(() -> publishIfNeeded(false));
-        }
+        com.lidesheng.hyperlyric.port.HyperLyricIslandRuntime.clear();
     }
 
     /** Restores all OEM roots when the Dynamic Island plugin is unloaded. */
     public static void clearNativeAll() {
-        LyricIslandNativeRenderer.clearAll();
+        com.lidesheng.hyperlyric.port.HyperLyricIslandRuntime.clear();
     }
 
     public static void refreshNativeAll() {
-        if (Looper.myLooper() == Looper.getMainLooper()) {
-            LyricIslandNativeRenderer.rebindAll();
-        } else {
-            MAIN_HANDLER.post(LyricIslandNativeRenderer::rebindAll);
-        }
+        com.lidesheng.hyperlyric.port.HyperLyricIslandRuntime.refreshSettings();
     }
 
     public static void freezeNative(ViewGroup root) {
-        LyricIslandNativeRenderer.freeze(root);
+        // Fake/real-island transition freezing is handled by upstream FakeIslandTransitionHooker.
     }
 
     public static void renderAndFreezeNative(ViewGroup root, Object islandData) {
-        LyricIslandNativeRenderer.render(root, islandData);
-        LyricIslandNativeRenderer.freeze(root);
+        com.lidesheng.hyperlyric.port.HyperLyricIslandRuntime.refreshSettings();
     }
 
     /** Coalesces fake-transition callbacks before touching the SystemUI view tree. */
@@ -892,7 +873,7 @@ public final class LyricIslandSystemUiHost {
                 NATIVE_FREEZE_RENDER_PENDING.remove(root);
             }
             try {
-                renderAndFreezeNative(root, islandData);
+                com.lidesheng.hyperlyric.port.HyperLyricIslandRuntime.refreshSettings();
             } catch (Throwable error) {
                 clearNative(root);
                 Log.w(TAG, "Could not render frozen native lyric island", error);
@@ -915,6 +896,5 @@ public final class LyricIslandSystemUiHost {
 
     private static void cancelNotification() {
         enqueueNotificationCancel(appContext);
-        LyricIslandNativeRenderer.clearAll();
     }
 }

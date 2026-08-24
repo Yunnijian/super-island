@@ -137,12 +137,14 @@ public final class SuperIslandXposedModule extends XposedModule {
             }
             installResidentIslandHost(defaultClassLoader);
             try {
-                installLyricNativeRendererHook(defaultClassLoader, "SystemUI default loader");
-                systemUiLyricNativeLoader = defaultClassLoader;
+                com.lidesheng.hyperlyric.port.HyperLyricIslandRuntime.prepare(
+                        this,
+                        getRemotePreferences(
+                                io.github.superisland.publisher.focus.LyricIslandContract
+                                        .REMOTE_PREFERENCES),
+                        defaultClassLoader);
             } catch (Throwable error) {
-                // Dynamic Island is an optional ROM surface. A missing/drifted class leaves the
-                // audited Focus fallback untouched and must not disable the other SystemUI hooks.
-                log(Log.WARN, TAG, "Native lyric Dynamic Island hook unavailable", error);
+                log(Log.WARN, TAG, "HyperLyric package-load chain unavailable", error);
             }
             installPluginLoadHook(defaultClassLoader);
             installFocusHooksIfPresent(defaultClassLoader, "SystemUI default loader");
@@ -658,6 +660,13 @@ public final class SuperIslandXposedModule extends XposedModule {
                         .setExceptionMode(
                                 io.github.libxposed.api.XposedInterface.ExceptionMode.PROTECTIVE)
                         .intercept(chain -> {
+                            // triggerSystemRelayout re-enters this OEM method to make its width
+                            // calculation consume the newly injected wrapper. Do not enqueue a
+                            // second render from that controlled re-entry.
+                            if (io.github.superisland.hook.systemui.lyric
+                                    .LyricIslandSystemUiHost.isNativeRelayoutInProgress()) {
+                                return chain.proceed();
+                            }
                             Object result = chain.proceed();
                             try {
                                 Object data = method.getParameterTypes().length == 0
@@ -678,6 +687,10 @@ public final class SuperIslandXposedModule extends XposedModule {
                         .setExceptionMode(
                                 io.github.libxposed.api.XposedInterface.ExceptionMode.PROTECTIVE)
                         .intercept(chain -> {
+                            if (io.github.superisland.hook.systemui.lyric
+                                    .LyricIslandSystemUiHost.isNativeRelayoutInProgress()) {
+                                return chain.proceed();
+                            }
                             // Width is calculated from the current children. Inject once before
                             // OEM measurement. The normal updateBigIslandView callback performs
                             // the post-rebuild reconciliation; dispatching both sides here made
@@ -970,9 +983,8 @@ public final class SuperIslandXposedModule extends XposedModule {
                     latest = PENDING_NATIVE_DATA.remove(root);
                 }
                 try {
-                    // LyricIslandNativeRenderer owns the complete media/pending-intent gate. The
-                    // posted/coalesced dispatch keeps expensive OEM tree work off the hook call
-                    // stack and lets one frame absorb bursty width/update callbacks.
+                    // Retained only for binary compatibility with an older local hook path.
+                    // Production lyrics are installed by HyperLyric's SystemUIHookRegistry.
                     io.github.superisland.hook.systemui.lyric.LyricIslandSystemUiHost
                             .renderNative(root, latest);
                 } catch (Throwable error) {
@@ -1048,19 +1060,6 @@ public final class SuperIslandXposedModule extends XposedModule {
             Context pluginContext = getPluginContext(focusPlugin, pluginInstance);
             Context systemUiContext = getSystemUiContext(focusPlugin);
             ClassLoader pluginClassLoader = pluginContext.getClassLoader();
-            boolean nativeHookInstalled = false;
-            try {
-                installLyricNativeRendererHook(pluginClassLoader, "MIUI SystemUI plugin loader");
-                nativeHookInstalled = true;
-            } catch (Throwable error) {
-                // Focus auth hooks remain useful when this ROM does not expose Dynamic Island.
-                log(Log.WARN, TAG, "Native lyric hook unavailable in plugin loader", error);
-            }
-            if (nativeHookInstalled) {
-                synchronized (lyricNativePluginLoaders) {
-                    lyricNativePluginLoaders.put(pluginInstance, pluginClassLoader);
-                }
-            }
             installFocusHooksIfPresent(pluginClassLoader, "MIUI SystemUI plugin loader");
             SystemUiFocusSupportBridge bridge =
                     installFocusSupportBridge(pluginClassLoader, systemUiContext);
@@ -1127,10 +1126,6 @@ public final class SuperIslandXposedModule extends XposedModule {
     }
 
     private void deactivateFocusPluginInstance(Object pluginInstance) {
-        ClassLoader nativePluginLoader;
-        synchronized (lyricNativePluginLoaders) {
-            nativePluginLoader = lyricNativePluginLoaders.remove(pluginInstance);
-        }
         SystemUiFocusSupportBridge bridge;
         synchronized (focusPluginInstances) {
             bridge = focusPluginInstances.remove(pluginInstance);
@@ -1151,21 +1146,6 @@ public final class SuperIslandXposedModule extends XposedModule {
             }
         }
         if (pluginLoader != null) uninstallFocusNotificationGateHooks(pluginLoader);
-        if (nativePluginLoader != null
-                && nativePluginLoader != systemUiLyricNativeLoader
-                && !hasOtherLyricNativePluginOwner(nativePluginLoader)) {
-            uninstallLyricNativeRendererHooks(nativePluginLoader);
-            io.github.superisland.hook.systemui.lyric.LyricIslandSystemUiHost.clearNativeAll();
-        }
-    }
-
-    private boolean hasOtherLyricNativePluginOwner(ClassLoader classLoader) {
-        synchronized (lyricNativePluginLoaders) {
-            for (ClassLoader owner : lyricNativePluginLoaders.values()) {
-                if (owner == classLoader) return true;
-            }
-        }
-        return false;
     }
 
     private void installFocusHooksIfPresent(ClassLoader classLoader, String loaderLabel) {

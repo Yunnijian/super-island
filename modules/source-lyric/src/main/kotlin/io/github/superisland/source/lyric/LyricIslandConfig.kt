@@ -176,6 +176,16 @@ object LyricIslandWidthPolicy {
         return width.coerceIn(min, max)
     }
 
+    /** Same left-slot compensation used by HyperLyric's SuperIslandWidthPolicy. */
+    fun leftContentWidthOffsetDp(showAlbum: Boolean, showRhythm: Boolean): Int =
+        componentWidth(showRhythm) - componentWidth(showAlbum)
+
+    fun baseWidthFromLeftContentWidth(
+        leftContentWidthDp: Float,
+        showAlbum: Boolean,
+        showRhythm: Boolean,
+    ): Float = leftContentWidthDp - leftContentWidthOffsetDp(showAlbum, showRhythm)
+
     private fun componentWidth(visible: Boolean): Int =
         if (visible) SIDE_COMPONENT_WIDTH_DP else 0
 }
@@ -239,7 +249,7 @@ data class LyricIslandConfig(
 
     // Text/style
     val textSizeSp: Float = 12f,
-    val textSizeRatio: Float = 0.85f,
+    val textSizeRatio: Float = 0.7f,
     val textColorStyle: Int = 0,
     val textColor: Int = Color.WHITE,
     val highlightColor: Int = Color.WHITE,
@@ -247,30 +257,30 @@ data class LyricIslandConfig(
     val fontWeight: Int = 600,
     val fontItalic: Boolean = false,
     val narrowLatinFont: Boolean = false,
-    val fadingEdgeLengthDp: Int = 10,
+    val fadingEdgeLengthDp: Int = 15,
     val gradientProgressStyle: Boolean = true,
-    val placeholder: LyricPlaceholder = LyricPlaceholder.NAME_ARTIST,
+    val placeholder: LyricPlaceholder = LyricPlaceholder.COUNTDOWN,
 
     // Lyric scrolling
     val marqueeMode: Boolean = false,
-    val marqueeSpeed: Int = 40,
-    val marqueeDelay: Int = 300,
-    val marqueeLoopDelay: Int = 700,
-    val marqueeInfinite: Boolean = true,
-    val marqueeStopEnd: Boolean = false,
+    val marqueeSpeed: Int = 30,
+    val marqueeDelay: Int = 1500,
+    val marqueeLoopDelay: Int = 1000,
+    val marqueeInfinite: Boolean = false,
+    val marqueeStopEnd: Boolean = true,
     val metadataMarqueeMode: Boolean = true,
-    val metadataMarqueeSpeed: Int = 40,
-    val metadataMarqueeDelay: Int = 300,
-    val metadataMarqueeLoopDelay: Int = 700,
+    val metadataMarqueeSpeed: Int = 10,
+    val metadataMarqueeDelay: Int = 4000,
+    val metadataMarqueeLoopDelay: Int = 5000,
     val metadataMarqueeInfinite: Boolean = true,
 
     // Verbatim lyrics
-    val syllableRelative: Boolean = false,
+    val syllableRelative: Boolean = true,
     val syllableHighlight: Boolean = false,
     val syllableLineDisplay: Boolean = false,
-    val wordMotionEnabled: Boolean = true,
+    val wordMotionEnabled: Boolean = false,
     val wordMotionLatinByCharacter: Boolean = false,
-    val wordMotionCjkLift: Float = 0.055f,
+    val wordMotionCjkLift: Float = 0.05f,
     val wordMotionCjkWave: Float = 2.8f,
     val wordMotionLatinLift: Float = 0.08f,
     val wordMotionLatinWave: Float = 2.0f,
@@ -307,20 +317,12 @@ data class LyricIslandConfig(
         lyricMode == 1 ||
             contentLeft == IslandContentMode.LYRIC || contentRight == IslandContentMode.LYRIC
 
+    /** Resolves the visible mode for one physical native island slot. */
+    fun contentModeForSlot(leftSlot: Boolean): IslandContentMode =
+        if (lyricMode == 1) IslandContentMode.LYRIC
+        else if (leftSlot) contentLeft else contentRight
+
     fun normalized(): LyricIslandConfig {
-        // HyperLyric's ordinary-mode default is metadata on the left and lyric on the right.
-        // Older Super Island builds accidentally persisted LYRIC in both slots; converge that
-        // stale state before it reaches either the Focus fallback or the native renderer.
-        val ordinaryMode = lyricMode.coerceIn(0, 1) == 0
-        val migratedContentLeft = if (
-            ordinaryMode &&
-                contentLeft == IslandContentMode.LYRIC &&
-                contentRight == IslandContentMode.LYRIC
-        ) {
-            IslandContentMode.MUSIC_INFO
-        } else {
-            contentLeft
-        }
         val normalizedAlbumCoverStyle = albumCoverStyle.coerceIn(0, 4)
         val normalizedMusicWaveStyle = musicWaveStyle.coerceIn(0, 3)
         val showAlbum = LyricIslandWidthPolicy.isAlbumCoverVisible(normalizedAlbumCoverStyle)
@@ -337,7 +339,8 @@ data class LyricIslandConfig(
                 .filter { it.key.isNotBlank() }
                 .take(64)
                 .associate { it.key.trim().take(128) to it.value.coerceIn(-5000, 5000) },
-            contentLeft = migratedContentLeft,
+            // HyperLyric binds left/right independently. Do not rewrite an explicit slot choice.
+            contentLeft = contentLeft,
             contentRight = contentRight,
             musicInfoFirstLine = LyricMusicInfoLayout.normalizeFields(musicInfoFirstLine, LyricMusicInfoLayout.FIELD_TITLE)
                 .take(64),
@@ -357,27 +360,29 @@ data class LyricIslandConfig(
             albumCoverStyle = normalizedAlbumCoverStyle,
             musicWaveStyle = normalizedMusicWaveStyle,
             textSizeSp = textSizeSp.takeIf { it.isFinite() }?.coerceIn(8f, 16f) ?: 12f,
-            textSizeRatio = textSizeRatio.takeIf { it.isFinite() }?.coerceIn(0.1f, 1f) ?: 0.85f,
+            textSizeRatio = textSizeRatio.takeIf { it.isFinite() }?.coerceIn(0.1f, 1f) ?: 0.7f,
             textColorStyle = textColorStyle.coerceIn(0, 3),
             secondaryTextSizeSp = secondaryTextSizeSp.takeIf { it.isFinite() }?.coerceIn(6f, 16f) ?: 10f,
             fontWeight = fontWeight.coerceIn(100, 900),
             fadingEdgeLengthDp = fadingEdgeLengthDp.coerceIn(0, 100),
             marqueeSpeed = marqueeSpeed.coerceIn(5, 100),
-            marqueeDelay = marqueeDelay.coerceIn(0, 10_000),
-            marqueeLoopDelay = marqueeLoopDelay.coerceIn(0, 10_000),
+            marqueeDelay = marqueeDelay.coerceIn(0, 5_000),
+            marqueeLoopDelay = marqueeLoopDelay.coerceIn(0, 5_000),
             metadataMarqueeSpeed = metadataMarqueeSpeed.coerceIn(5, 100),
             metadataMarqueeDelay = metadataMarqueeDelay.coerceIn(0, 10_000),
             metadataMarqueeLoopDelay = metadataMarqueeLoopDelay.coerceIn(0, 10_000),
-            // `syllableLineDisplay` is an old local compatibility value. It has no public
-            // control, but configurations that already contain it must keep their behavior.
-            syllableHighlight = syllableHighlight && syllableRelative,
+            // Match HyperLyric's SyllablePreferencePolicy: simulated line display owns the
+            // line timeline and therefore disables generated relative progress, while keeping
+            // the relative-highlight preference intact for when the mode is switched back.
+            syllableRelative = if (syllableLineDisplay) false else syllableRelative,
+            syllableHighlight = syllableHighlight,
             // The former `displayTranslation` field is not user-facing. Keep it as a wire
             // mirror so an old false value cannot override the public translation switch.
             displayTranslation = !disableTranslation,
             // Song-level automatic translation switching is deliberately outside the basic
             // Super Island lyric scope. Retire a persisted legacy value without rejecting it.
             autoSwitchTranslation = false,
-            wordMotionCjkLift = wordMotionCjkLift.takeIf { it.isFinite() }?.coerceIn(0f, 0.2f) ?: 0.055f,
+            wordMotionCjkLift = wordMotionCjkLift.takeIf { it.isFinite() }?.coerceIn(0f, 0.2f) ?: 0.05f,
             wordMotionCjkWave = wordMotionCjkWave.takeIf { it.isFinite() }?.coerceIn(0f, 8f) ?: 2.8f,
             wordMotionLatinLift = wordMotionLatinLift.takeIf { it.isFinite() }?.coerceIn(0f, 0.2f) ?: 0.08f,
             wordMotionLatinWave = wordMotionLatinWave.takeIf { it.isFinite() }?.coerceIn(0f, 8f) ?: 2.0f,

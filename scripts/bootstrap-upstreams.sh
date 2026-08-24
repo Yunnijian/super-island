@@ -36,6 +36,10 @@ verify_build_pin() {
             build_file="$repo_root/modules/hook-systemui/build.gradle.kts"
             pin_declaration="val hyperIslandCommit = \"$commit\""
             ;;
+        HyperLyric)
+            build_file="$repo_root/modules/hyperlyric-port/build.gradle.kts"
+            pin_declaration="val hyperLyricReferenceCommit = \"$commit\""
+            ;;
         *)
             fail "unsupported upstream name in lock file: $name"
             ;;
@@ -65,6 +69,10 @@ validate_lock_entry() {
         HyperIsland)
             expected_checkout="HyperIsland"
             hyper_island_entries=$((hyper_island_entries + 1))
+            ;;
+        HyperLyric)
+            expected_checkout="HyperLyric"
+            hyper_lyric_entries=$((hyper_lyric_entries + 1))
             ;;
         *)
             fail "unsupported upstream name in lock file: $name"
@@ -145,6 +153,7 @@ bootstrap_checkout() {
 entry_count=0
 kernel_su_entries=0
 hyper_island_entries=0
+hyper_lyric_entries=0
 names=()
 repositories=()
 commits=()
@@ -163,11 +172,13 @@ while IFS='|' read -r name repository commit relative_checkout extra; do
     entry_count=$((entry_count + 1))
 done < "$lock_file"
 
-[[ "$entry_count" -eq 2 ]] || fail "expected exactly 2 upstream entries, found $entry_count"
+[[ "$entry_count" -eq 3 ]] || fail "expected exactly 3 upstream entries, found $entry_count"
 [[ "$kernel_su_entries" -eq 1 ]] ||
     fail "expected exactly one KernelSU entry, found $kernel_su_entries"
 [[ "$hyper_island_entries" -eq 1 ]] ||
     fail "expected exactly one HyperIsland entry, found $hyper_island_entries"
+[[ "$hyper_lyric_entries" -eq 1 ]] ||
+    fail "expected exactly one HyperLyric entry, found $hyper_lyric_entries"
 
 prepare_upstream_root
 for ((index = 0; index < entry_count; index++)); do

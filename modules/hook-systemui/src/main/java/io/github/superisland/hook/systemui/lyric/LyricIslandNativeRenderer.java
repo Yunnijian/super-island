@@ -12,12 +12,14 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.view.ViewOutlineProvider;
 import android.view.animation.LinearInterpolator;
+import android.view.Gravity;
+import android.widget.FrameLayout;
 import android.widget.ImageView;
-import android.widget.TextView;
 import io.github.superisland.source.lyric.LyricCanvasView;
 import io.github.superisland.source.lyric.LyricIslandConfig;
 import io.github.superisland.source.lyric.LyricSnapshot;
 import io.github.superisland.source.lyric.IslandContentMode;
+import io.github.superisland.source.lyric.hyperlyric.island.view.MaxWidthFrameLayout;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
@@ -42,6 +44,10 @@ final class LyricIslandNativeRenderer {
     private static final String LEFT_PARENT_NAME = "island_container_module_image_text_1";
     private static final String RIGHT_PARENT_NAME = "island_container_module_image_text_2";
     private static final String TEXT_CONTAINER_NAME = "island_container_module_text";
+    private static final String LEFT_VIEW_TAG = "HYPERLYRIC_LEFT_VIEW";
+    private static final String RIGHT_VIEW_TAG = "HYPERLYRIC_RIGHT_VIEW";
+    private static final String LEFT_WRAPPER_TAG = "HYPERLYRIC_LEFT_VIEW_WRAPPER";
+    private static final String RIGHT_WRAPPER_TAG = "HYPERLYRIC_RIGHT_VIEW_WRAPPER";
     /**
      * Audited on the supported OS3/OS4 MIUI SystemUI plugin builds. The OEM Lottie callback reads
      * these static fields for every frame, which is the only native path that preserves a two-stop
@@ -57,6 +63,10 @@ final class LyricIslandNativeRenderer {
     private static final Object LOCK = new Object();
     private static final Map<ViewGroup, RootState> ROOTS = new WeakHashMap<>();
     private static final WaveGradientController WAVE_GRADIENTS = new WaveGradientController();
+    // Copied from HyperLyric's IslandViewHelper. The OEM width method is itself hooked below,
+    // so a per-thread guard is required while the injected wrapper requests a real relayout.
+    private static final ThreadLocal<Boolean> IS_RELAYOUTING = ThreadLocal.withInitial(() -> false);
+    private static String lastEligibilityTrace = "";
 
     private LyricIslandNativeRenderer() {}
 
@@ -76,30 +86,32 @@ final class LyricIslandNativeRenderer {
         }
         RotationController.setPlaybackActive(LyricIslandSystemUiHost.nativeIsPlaying());
 
+        boolean relayoutRequested = false;
         synchronized (LOCK) {
             int[] desiredSlots = desiredSlots(config);
             if (desiredSlots.length == 0) {
                 // No lyric content is enabled for this native island. The caller may still own a
                 // Focus fallback, so restore any stale native state and leave the OEM tree alone.
-                clearLocked(root);
-                return;
+                relayoutRequested = clearLocked(root);
+            } else {
+                RootState state = ROOTS.get(root);
+                if (state == null) {
+                    state = new RootState(root);
+                    ROOTS.put(root, state);
+                }
+                if (!state.reconcile(desiredSlots, snapshot, config, true)) {
+                    // Layout variants without the audited resource contract are left untouched. A
+                    // partial split binding is also unsafe because it would hide only half the
+                    // player's native lyric surface, so fail closed and use the Focus fallback.
+                    relayoutRequested = clearLocked(root);
+                } else {
+                    relayoutRequested = state.consumeRelayoutRequest();
+                    refreshWaveGradientsLocked();
+                    LyricIslandSystemUiHost.suppressFallbackNotification();
+                }
             }
-
-            RootState state = ROOTS.get(root);
-            if (state == null) {
-                state = new RootState(root);
-                ROOTS.put(root, state);
-            }
-            if (!state.reconcile(desiredSlots, snapshot, config, true)) {
-                // Layout variants without the audited resource contract are left untouched. A
-                // partial split binding is also unsafe because it would hide only half the
-                // player's native lyric surface, so fail closed and use the Focus fallback.
-                clearLocked(root);
-                return;
-            }
-            refreshWaveGradientsLocked();
-            LyricIslandSystemUiHost.suppressFallbackNotification();
         }
+        if (relayoutRequested) triggerSystemRelayout(root);
     }
 
     static void refreshAll() {
@@ -176,8 +188,49 @@ final class LyricIslandNativeRenderer {
 
     static boolean clearRoot(ViewGroup root) {
         if (root == null) return false;
+        boolean changed;
         synchronized (LOCK) {
-            return clearLocked(root);
+            changed = clearLocked(root);
+        }
+        if (changed) triggerSystemRelayout(root);
+        return changed;
+    }
+
+    static boolean isSystemRelayoutInProgress() {
+        return Boolean.TRUE.equals(IS_RELAYOUTING.get());
+    }
+
+    /**
+     * Re-enters the OEM Dynamic Island width calculation after the injected wrapper changes.
+     * This is HyperLyric's IslandViewHelper.triggerSystemRelayout implementation, including its
+     * updateBigIslandViewWidth -> calculateBigIslandWidth fallback order.
+     */
+    private static void triggerSystemRelayout(ViewGroup islandView) {
+        if (islandView == null || isSystemRelayoutInProgress()) return;
+        IS_RELAYOUTING.set(true);
+        try {
+            Class<?> viewClass = islandView.getClass();
+            Method updateWidthMethod = null;
+            Method calculateWidthMethod = null;
+            for (Method method : viewClass.getMethods()) {
+                if (method.getParameterTypes().length != 0) continue;
+                if ("updateBigIslandViewWidth".equals(method.getName())) {
+                    updateWidthMethod = method;
+                    break;
+                }
+                if ("calculateBigIslandWidth".equals(method.getName())) {
+                    calculateWidthMethod = method;
+                }
+            }
+            Method target = updateWidthMethod != null ? updateWidthMethod : calculateWidthMethod;
+            if (target != null) {
+                target.setAccessible(true);
+                target.invoke(islandView);
+            }
+        } catch (Throwable error) {
+            android.util.Log.w("SuperIslandLyricNative", "system_relayout_failed", error);
+        } finally {
+            IS_RELAYOUTING.remove();
         }
     }
 
@@ -223,14 +276,38 @@ final class LyricIslandNativeRenderer {
 
     /** Implements HyperLyric's media-island gate without depending on hidden OEM types. */
     private static boolean isEligibleMediaIsland(ViewGroup root, Object data) {
-        Object candidate = data != null ? data : invokeNoArg(root, "getCurrentIslandData");
+        // HyperLyric treats the callback argument as a hint only. On the suspend API the
+        // continuation/resume argument is non-null but is not the island payload, so always fall
+        // back to the content view's current data when the first carrier is not a media payload.
+        Object candidate = data;
         Bundle extras = extractExtras(candidate);
-        if (extras == null) return false;
+        if (extras == null) {
+            candidate = invokeNoArg(root, "getCurrentIslandData");
+            extras = extractExtras(candidate);
+        }
+        if (extras == null) {
+            traceEligibility("no_extras");
+            return false;
+        }
         String mediaPackage = packagePart(extras.getString("miui.pkg.name"));
-        if (mediaPackage == null || mediaPackage.isBlank()) return false;
-        if (!hasPendingIntent(extras)) return false;
+        if (mediaPackage == null || mediaPackage.isBlank()) {
+            traceEligibility("no_package");
+            return false;
+        }
+        if (!hasPendingIntent(extras)) {
+            traceEligibility("no_pending|" + mediaPackage);
+            return false;
+        }
         String publisher = packagePart(LyricIslandSystemUiHost.nativePublisher());
-        return publisher != null && !publisher.isBlank() && mediaPackage.equals(publisher);
+        boolean matches = publisher != null && !publisher.isBlank() && mediaPackage.equals(publisher);
+        traceEligibility((matches ? "eligible|" : "publisher_mismatch|") + mediaPackage + "|" + publisher);
+        return matches;
+    }
+
+    private static void traceEligibility(String state) {
+        if (state.equals(lastEligibilityTrace)) return;
+        lastEligibilityTrace = state;
+        android.util.Log.i("SuperIslandLyricNative", "media_gate=" + state);
     }
 
     /** OEM data may carry a component/class suffix while MediaSession uses the bare package. */
@@ -255,14 +332,6 @@ final class LyricIslandNativeRenderer {
 
         boolean leftEnabled = config.getContentLeft() != IslandContentMode.NONE;
         boolean rightEnabled = config.getContentRight() != IslandContentMode.NONE;
-        // Without HyperLyric's separated mode there is one lyric line. If stale or hand-edited
-        // settings put LYRIC in both content slots, keep only the configured lyric side and do
-        // not let the native host split the same line across both sides.
-        if (config.getContentLeft() == IslandContentMode.LYRIC
-                && config.getContentRight() == IslandContentMode.LYRIC) {
-            return config.getSlot() == io.github.superisland.source.lyric.LyricSlot.RIGHT
-                    ? new int[] {1} : new int[] {0};
-        }
         if (leftEnabled && rightEnabled) return new int[] {0, 1};
         if (leftEnabled) return new int[] {0};
         if (rightEnabled) return new int[] {1};
@@ -408,6 +477,22 @@ final class LyricIslandNativeRenderer {
         return 31 * result + config.hashCode();
     }
 
+    /**
+     * Mirrors HyperLyric's metadata content signature: lyric-line changes must not recreate a
+     * separately bound music-information slot. Playback progress remains exclusively owned by
+     * SlotState.updatePosition.
+     */
+    private static int metadataContentSignature(LyricSnapshot snapshot, LyricIslandConfig config) {
+        if (snapshot == null || config == null) return 0;
+        int result = 17;
+        result = 31 * result + (snapshot.getTitle() == null ? 0 : snapshot.getTitle().hashCode());
+        result = 31 * result + (snapshot.getArtist() == null ? 0 : snapshot.getArtist().hashCode());
+        result = 31 * result + (snapshot.getAlbum() == null ? 0 : snapshot.getAlbum().hashCode());
+        result = 31 * result + Long.hashCode(snapshot.getPlayback().getDurationMs());
+        result = 31 * result + (snapshot.getArtworkColors() == null ? 0 : snapshot.getArtworkColors().hashCode());
+        return 31 * result + config.hashCode();
+    }
+
     private static int resolveId(View root, String name) {
         try {
             for (String packageName : RESOURCE_PACKAGES) {
@@ -437,6 +522,7 @@ final class LyricIslandNativeRenderer {
         private LyricIslandConfig signatureConfig;
         private String desiredSlotKey = "";
         private boolean hasRendered;
+        private boolean relayoutRequested;
         private WaveGradientSpec waveGradient;
 
         RootState(ViewGroup root) {
@@ -470,6 +556,7 @@ final class LyricIslandNativeRenderer {
                 // expansion compete with the lyric animation on the same main looper.
                 return true;
             }
+            relayoutRequested = false;
             // The OEM may have replaced descendants without changing the root identity. Make the
             // next wave reconciliation walk the rebuilt tree instead of trusting its old holder
             // cache. This is also used when a content/config signature changes.
@@ -477,18 +564,42 @@ final class LyricIslandNativeRenderer {
             Map<Integer, ViewGroup> containers = new HashMap<>();
             for (int slot : desiredSlots) {
                 ViewGroup container = findTextContainer(root, slot);
-                if (container == null) return false;
+                if (container == null) {
+                    android.util.Log.w("SuperIslandLyricNative",
+                            "bind_failed slot=" + slot + " reason=text_container_missing");
+                    // HyperLyric binds each module area independently. During an OEM
+                    // suspend/resume rebuild one side can be absent for a frame; keep the side
+                    // that is present instead of restoring the entire root and exposing stale
+                    // OEM lyrics again.
+                    continue;
+                }
                 containers.put(slot, container);
             }
-
             // Restore slots which are no longer lyric-owned before attaching the new layout. This
             // is important when switching from split lyrics back to a music-info/lyric layout.
             List<Integer> stale = new ArrayList<>(slots.keySet());
             for (Integer slot : stale) {
                 if (!containers.containsKey(slot)) {
-                    restore(slots.remove(slot));
+                    SlotState existing = slots.get(slot);
+                    // Keep a still-attached container when resource lookup briefly misses during
+                    // the OEM coroutine rebuild. Removing it here exposes the OEM text for one
+                    // frame and makes the configured title/lyric route appear to revert.
+                    if (existing != null && isDescendant(root, existing.container)) {
+                        containers.put(slot, existing.container);
+                        existing.hideNativeChildren();
+                    } else {
+                        restore(slots.remove(slot));
+                    }
                 }
             }
+
+            if (containers.isEmpty()) return false;
+            int[] resolvedSlots = new int[containers.size()];
+            int resolvedIndex = 0;
+            for (int slot : desiredSlots) {
+                if (containers.containsKey(slot)) resolvedSlots[resolvedIndex++] = slot;
+            }
+            desiredSlots = resolvedSlots;
 
             for (int slot : desiredSlots) {
                 SlotState state = slots.get(slot);
@@ -501,14 +612,44 @@ final class LyricIslandNativeRenderer {
                     state = new SlotState(root, container, slot);
                     slots.put(slot, state);
                 }
-                state.ensureCanvas(snapshot, config, activate);
+                relayoutRequested |= state.ensureCanvas(snapshot, config, activate);
                 state.hideNativeChildren();
+            }
+            // HyperLyric coordinates both slots against one shared base width and writes the
+            // result to their outer wrappers. The OEM then measures those wrappers as the island
+            // geometry instead of compressing two independent lyric canvases into one width.
+            if (config.getWidthMode() != 0 && !slots.isEmpty()) {
+                float baseWidthDp = 0f;
+                boolean hasWidthBasis = false;
+                for (SlotState state : slots.values()) {
+                    if (state.canvas == null) continue;
+                    float slotWidthDp = state.canvas.dynamicBaseWidthDp(config);
+                    if (!Float.isFinite(slotWidthDp)) continue;
+                    hasWidthBasis = true;
+                    baseWidthDp = Math.max(baseWidthDp, slotWidthDp);
+                }
+                if (hasWidthBasis) {
+                    // HyperLyric clamps the shared island/right-coordinate base before applying the
+                    // left-side cover/rhythm adjustment. Without this clamp a short lyric can leave
+                    // one wrapper below the configured island minimum and overlap the other slot.
+                    baseWidthDp = Math.max(config.getDynamicMinWidth(),
+                            Math.min(config.getDynamicMaxWidth(), baseWidthDp));
+                    for (SlotState state : slots.values()) {
+                        relayoutRequested |= state.applyWrapperWidth(config, baseWidthDp);
+                    }
+                }
             }
             contentSignature = nextSignature;
             desiredSlotKey = nextSlotKey;
             hasRendered = !slots.isEmpty();
             waveGradient = WaveGradientSpec.from(config, snapshot.getArtworkColors());
             return !slots.isEmpty();
+        }
+
+        boolean consumeRelayoutRequest() {
+            boolean requested = relayoutRequested;
+            relayoutRequested = false;
+            return requested;
         }
 
         void contributeWaveGradient(
@@ -536,8 +677,10 @@ final class LyricIslandNativeRenderer {
             if (slots.isEmpty()) return false;
             for (SlotState state : slots.values()) {
                 if (state.container == null || state.canvas == null
-                        || state.canvas.getParent() != state.container
+                        || state.wrapper == null || state.wrapper.getParent() != state.container
+                        || state.canvas.getParent() != state.wrapper
                         || state.container.getVisibility() != View.VISIBLE
+                        || state.wrapper.getVisibility() != View.VISIBLE
                         || state.childStructureSignature != state.childStructureSignature()) {
                     return false;
                 }
@@ -554,6 +697,15 @@ final class LyricIslandNativeRenderer {
         }
     }
 
+    private static boolean isDescendant(ViewGroup root, View view) {
+        View current = view;
+        while (current != null && current != root) {
+            if (!(current.getParent() instanceof View)) return false;
+            current = (View) current.getParent();
+        }
+        return current == root;
+    }
+
     private static final class SlotState {
         final ViewGroup root;
         final ViewGroup container;
@@ -561,6 +713,7 @@ final class LyricIslandNativeRenderer {
         final Map<View, Integer> nativeVisibility = new IdentityHashMap<>();
         final int originalContainerVisibility;
         int childStructureSignature;
+        MaxWidthFrameLayout wrapper;
         LyricCanvasView canvas;
         boolean metadataMode;
         boolean frozen;
@@ -571,6 +724,8 @@ final class LyricIslandNativeRenderer {
         final Map<ImageView, ViewOutlineProvider> nativeOutlineProviders = new IdentityHashMap<>();
         final Map<ImageView, Boolean> nativeClipToOutlines = new IdentityHashMap<>();
         int lastStatusBarColor = Integer.MIN_VALUE;
+        int lastMetadataContentSignature;
+        boolean hasMetadataContentSignature;
         long lastPosition = Long.MIN_VALUE;
         float lastSpeed = Float.NaN;
         boolean lastPlaying;
@@ -583,99 +738,189 @@ final class LyricIslandNativeRenderer {
             this.originalContainerVisibility = container.getVisibility();
         }
 
-        void ensureCanvas(
+        boolean ensureCanvas(
                 LyricSnapshot snapshot, LyricIslandConfig config, boolean activate) {
             currentConfig = config;
-            boolean created = false;
-            if (canvas == null || canvas.getParent() != container) {
+            boolean layoutChanged = false;
+            if (wrapper == null || wrapper.getParent() != container) {
+                if (wrapper != null && wrapper.getParent() instanceof ViewGroup) {
+                    ((ViewGroup) wrapper.getParent()).removeView(wrapper);
+                }
+                removeIncompatibleTaggedWrapper();
+                wrapper = new MaxWidthFrameLayout(container.getContext());
+                wrapper.setTag(wrapperTag());
+                wrapper.setClipChildren(true);
+                wrapper.setKeepVisible(true);
+                container.addView(wrapper, new FrameLayout.LayoutParams(
+                        wrapperLayoutWidth(config),
+                        FrameLayout.LayoutParams.MATCH_PARENT,
+                        Gravity.CENTER_VERTICAL));
+                layoutChanged = true;
+            }
+            wrapper.setKeepVisible(true);
+            layoutChanged |= updateWrapperGeometry(config);
+            if (canvas == null || canvas.getParent() != wrapper) {
                 if (canvas != null && canvas.getParent() instanceof ViewGroup) {
                     ((ViewGroup) canvas.getParent()).removeView(canvas);
                 }
                 canvas = new LyricCanvasView(container.getContext());
                 canvas.setTag(slot == 1 ? "SUPER_ISLAND_LYRIC_RIGHT" : "SUPER_ISLAND_LYRIC_LEFT");
                 canvas.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
-                ViewGroup.LayoutParams params = new ViewGroup.LayoutParams(
-                        ViewGroup.LayoutParams.MATCH_PARENT,
-                        ViewGroup.LayoutParams.WRAP_CONTENT);
-                container.addView(canvas, params);
-                created = true;
+                wrapper.addView(canvas, new FrameLayout.LayoutParams(
+                        FrameLayout.LayoutParams.MATCH_PARENT,
+                        FrameLayout.LayoutParams.MATCH_PARENT));
+                layoutChanged = true;
                 lastStatusBarColor = Integer.MIN_VALUE;
                 hasPosition = false;
             }
-            if (config.getLyricMode() == 1 ||
-                    (slot == 0 && config.getContentLeft() == IslandContentMode.LYRIC) ||
-                    (slot == 1 && config.getContentRight() == IslandContentMode.LYRIC)) {
+            // A player module can append its own lyric view after the OEM update callback. Keep
+            // our slot canvas at the end so the configured metadata/lyric mode is the visible one.
+            wrapper.bringToFront();
+            canvas.bringToFront();
+            if (config.contentModeForSlot(slot == 0) == IslandContentMode.LYRIC) {
                 metadataMode = false;
+                hasMetadataContentSignature = false;
                 canvas.setSnapshot(snapshot, config, config.getLyricMode() == 1 ? slot : -1);
             } else {
                 metadataMode = true;
-                canvas.setMetadata(snapshot, config);
+                int nextMetadataSignature = metadataContentSignature(snapshot, config);
+                if (!hasMetadataContentSignature
+                        || lastMetadataContentSignature != nextMetadataSignature) {
+                    canvas.setMetadata(snapshot, config);
+                    lastMetadataContentSignature = nextMetadataSignature;
+                    hasMetadataContentSignature = true;
+                }
             }
-            applyCanvasWidth(config);
-            // HyperLyric measures the new line before committing dynamic island geometry. The
-            // copied renderer may finish its text measurement one frame after setSnapshot(), so
-            // re-evaluate once on the view queue instead of waiting for another OEM media event.
-            if (config.getWidthMode() != 0) {
-                canvas.post(() -> {
-                    if (canvas.getParent() == container && currentConfig == config) {
-                        applyCanvasWidth(config);
-                    }
-                });
-            }
+            layoutChanged |= applyWrapperWidth(config, null);
+            forceWrapperLayout();
             updateStatusBarTextColor();
             long position = LyricIslandSystemUiHost.nativePosition();
             float speed = LyricIslandSystemUiHost.nativePlaybackSpeed();
             boolean playing = frozen ? false : LyricIslandSystemUiHost.nativeIsPlaying();
-            canvas.setPosition(position, speed);
-            canvas.setPlaybackActive(playing);
-            lastPosition = position;
-            lastSpeed = speed;
-            lastPlaying = playing;
-            hasPosition = true;
-            if (created || activate) frozen = false;
+            if (metadataMode) {
+                // HyperLyric's metadata assembler owns its static content cache. Do not advance
+                // metadata here on a lyric refresh; POSITION_TICK is the only dynamic updater.
+                canvas.setPlaybackActive(playing);
+            } else {
+                canvas.setPosition(position, speed);
+                canvas.setPlaybackActive(playing);
+                lastPosition = position;
+                lastSpeed = speed;
+                lastPlaying = playing;
+                hasPosition = true;
+            }
+            if (layoutChanged || activate) frozen = false;
+            return layoutChanged;
         }
 
-        private void applyCanvasWidth(LyricIslandConfig config) {
-            if (canvas == null || canvas.getParent() != container) return;
-            ViewGroup.LayoutParams canvasParams = canvas.getLayoutParams();
-            int targetWidth = canvas.configuredWidthPx(config);
-            if (canvasParams != null && canvasParams.width != targetWidth) {
-                canvasParams.width = targetWidth;
-                canvas.setLayoutParams(canvasParams);
-                container.requestLayout();
+        private boolean applyWrapperWidth(LyricIslandConfig config, Float coordinatedBaseWidthDp) {
+            if (canvas == null || wrapper == null || canvas.getParent() != wrapper) return false;
+            Integer targetWidth = coordinatedBaseWidthDp == null
+                    ? canvas.configuredWidthPx(config)
+                    : canvas.coordinatedWrapperWidthPx(coordinatedBaseWidthDp, config);
+            if (targetWidth == null || targetWidth <= 0 || wrapper.getMaxWidthPx() == targetWidth) return false;
+            wrapper.setMaxWidthPx(targetWidth);
+            wrapper.requestLayout();
+            container.requestLayout();
+            root.requestLayout();
+            return true;
+        }
+
+        private boolean updateWrapperGeometry(LyricIslandConfig config) {
+            if (wrapper == null) return false;
+            boolean changed = false;
+            float density = wrapper.getResources().getDisplayMetrics().density;
+            int leftDp = slot == 0 ? config.getLeftPaddingLeft() : config.getRightPaddingLeft();
+            int rightDp = slot == 0 ? config.getLeftPaddingRight() : config.getRightPaddingRight();
+            int leftPx = Math.max(0, (int) (leftDp * density));
+            int rightPx = Math.max(0, (int) (rightDp * density));
+            if (wrapper.getPaddingLeft() != leftPx || wrapper.getPaddingRight() != rightPx) {
+                wrapper.setPadding(leftPx, wrapper.getPaddingTop(), rightPx, wrapper.getPaddingBottom());
+                changed = true;
             }
+            wrapper.setMinimumWidth(0);
+            ViewGroup.LayoutParams params = wrapper.getLayoutParams();
+            int expectedWidth = wrapperLayoutWidth(config);
+            if (params != null && (params.width != expectedWidth
+                    || params.height != FrameLayout.LayoutParams.MATCH_PARENT)) {
+                params.width = expectedWidth;
+                params.height = FrameLayout.LayoutParams.MATCH_PARENT;
+                wrapper.setLayoutParams(params);
+                changed = true;
+            }
+            return changed;
+        }
+
+        private void removeIncompatibleTaggedWrapper() {
+            View tagged = container.findViewWithTag(wrapperTag());
+            if (tagged != null && tagged.getParent() instanceof ViewGroup) {
+                ((ViewGroup) tagged.getParent()).removeView(tagged);
+            }
+        }
+
+        private String wrapperTag() {
+            return slot == 1 ? RIGHT_WRAPPER_TAG : LEFT_WRAPPER_TAG;
+        }
+
+        private int wrapperLayoutWidth(LyricIslandConfig config) {
+            return config.getLyricMode() == 1
+                    ? FrameLayout.LayoutParams.WRAP_CONTENT
+                    : FrameLayout.LayoutParams.MATCH_PARENT;
+        }
+
+        private void forceWrapperLayout() {
+            if (wrapper == null || (wrapper.getWidth() != 0 && wrapper.getMeasuredWidth() != 0)) return;
+            int heightPx = container.getHeight() > 0 ? container.getHeight() : container.getMeasuredHeight();
+            int widthPx = wrapper.getMaxWidthPx();
+            if (widthPx <= 0) return;
+            int widthSpec = View.MeasureSpec.makeMeasureSpec(widthPx, View.MeasureSpec.AT_MOST);
+            int heightSpec = heightPx > 0
+                    ? View.MeasureSpec.makeMeasureSpec(heightPx, View.MeasureSpec.EXACTLY)
+                    : View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED);
+            wrapper.measure(widthSpec, heightSpec);
+            wrapper.layout(0, 0, wrapper.getMeasuredWidth(),
+                    heightPx > 0 ? heightPx : wrapper.getMeasuredHeight());
         }
 
         void hideNativeChildren() {
             for (int i = 0; i < container.getChildCount(); i++) {
                 View child = container.getChildAt(i);
-                if (child == canvas) continue;
+                if (child == wrapper) continue;
                 reconcileNativeChild(child);
             }
             container.setVisibility(View.VISIBLE);
+            if (wrapper != null) {
+                wrapper.setKeepVisible(true);
+                wrapper.setVisibility(View.VISIBLE);
+            }
             if (canvas != null) canvas.setVisibility(View.VISIBLE);
             childStructureSignature = childStructureSignature();
         }
 
-        /** Hide OEM text nodes while leaving the player's cover/rhythm visuals in place. */
+        /**
+         * Hide every OEM child in the dedicated text container. HyperLyric may use a custom View
+         * rather than TextView for its lyric renderer, so class/name checks leave stale lyrics
+         * visible when the slot switches to music metadata. Cover and rhythm views live outside
+         * this container and are unaffected.
+         */
         private void reconcileNativeChild(View child) {
             if (child == null) return;
             String name = resourceEntryName(child);
-            boolean textNode = child instanceof TextView || name.contains("text") || name.contains("title");
-            if (textNode) {
-                rememberVisibility(child);
-                // HyperLyric removes the OEM text node from measurement while its injected
-                // wrapper owns the slot. Keep the original visibility for full restoration.
-                child.setVisibility(View.GONE);
-            } else {
-                applyMediaVisual(child, name);
-                if (child instanceof ViewGroup) {
-                    ViewGroup group = (ViewGroup) child;
-                    for (int i = 0; i < group.getChildCount(); i++) {
-                        reconcileNativeChild(group.getChildAt(i));
-                    }
-                }
+            applyMediaVisual(child, name);
+            if (isMediaVisual(child, name)) return;
+            rememberVisibility(child);
+            child.setVisibility(View.GONE);
+        }
+
+        private boolean isMediaVisual(View child, String name) {
+            if (!(child instanceof ImageView)) return false;
+            ImageView image = (ImageView) child;
+            boolean media = isCoverName(name) || isWaveName(name);
+            Object tag = image.getTag();
+            if (tag instanceof String) {
+                media |= isCoverName((String) tag) || isWaveName((String) tag);
             }
+            return media;
         }
 
         private void rememberVisibility(View child) {
@@ -703,7 +948,10 @@ final class LyricIslandNativeRenderer {
                 int style = currentConfig == null ? 0 : currentConfig.getAlbumCoverStyle();
                 if (style != 3) {
                     RotationController.detach(image);
-                    restoreRotation(image);
+                    // HyperLyric's rotation controller returns the cover to its neutral
+                    // orientation whenever rotating style is left. Do not restore the animated
+                    // angle (or a stale OEM angle) here.
+                    image.setRotation(0f);
                 }
                 if (style == 4) {
                     image.setVisibility(View.INVISIBLE);
@@ -798,7 +1046,7 @@ final class LyricIslandNativeRenderer {
         }
 
         void updatePosition(long position, float speed, boolean playing) {
-            if (canvas == null || canvas.getParent() != container) return;
+            if (canvas == null || wrapper == null || canvas.getParent() != wrapper) return;
             updateStatusBarTextColor();
             boolean effectivePlaying = frozen ? false : playing;
             if (hasPosition && lastPosition == position && lastSpeed == speed
@@ -833,7 +1081,7 @@ final class LyricIslandNativeRenderer {
         }
 
         void freeze(long position) {
-            if (canvas == null || canvas.getParent() != container) return;
+            if (canvas == null || wrapper == null || canvas.getParent() != wrapper) return;
             frozen = true;
             canvas.setPosition(position, 0f);
             canvas.setPlaybackActive(false);
@@ -855,7 +1103,10 @@ final class LyricIslandNativeRenderer {
     private static void restore(SlotState state) {
         if (state == null) return;
         try {
-            if (state.canvas != null && state.canvas.getParent() == state.container) {
+            if (state.wrapper != null && state.wrapper.getParent() == state.container) {
+                state.wrapper.setKeepVisible(false);
+                state.container.removeView(state.wrapper);
+            } else if (state.canvas != null && state.canvas.getParent() == state.container) {
                 state.container.removeView(state.canvas);
             }
             for (Map.Entry<View, Integer> entry : state.nativeVisibility.entrySet()) {
@@ -924,7 +1175,7 @@ final class LyricIslandNativeRenderer {
             runOnMain(() -> {
                 RotationState state = STATES.get(view);
                 if (state == null) {
-                    state = new RotationState(view.getRotation());
+                    state = new RotationState();
                     STATES.put(view, state);
                     view.addOnAttachStateChangeListener(ATTACH_LISTENER);
                 }
@@ -1003,7 +1254,7 @@ final class LyricIslandNativeRenderer {
                 state.animator.cancel();
                 state.animator = null;
             }
-            if (resetRotation) view.setRotation(state.originalRotation);
+            if (resetRotation) view.setRotation(0f);
         }
 
         private static void runOnMain(Runnable runnable) {
@@ -1012,12 +1263,7 @@ final class LyricIslandNativeRenderer {
         }
 
         private static final class RotationState {
-            final float originalRotation;
             ObjectAnimator animator;
-
-            RotationState(float originalRotation) {
-                this.originalRotation = originalRotation;
-            }
         }
     }
 }

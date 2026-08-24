@@ -56,6 +56,7 @@ android {
 
 dependencies {
     implementation(project(":core-model"))
+    implementation(project(":hyperlyric-port"))
     implementation(project(":publisher-focus"))
     implementation(project(":source-lyric"))
     implementation(libs.hyperisland.kit)

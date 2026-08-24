@@ -1,0 +1,12 @@
+# Relative to HyperLyric app/src/main/java/com/lidesheng/hyperlyric.
+# These are the only whole-file exclusions approved for this port.
+root/UnlockFocusWhitelist.kt
+service/LiveLyricService.kt
+service/NotificationPresenter.kt
+service/LyricTileService.kt
+service/source/AppLyricSink.kt
+service/utils/NotificationBuilder.kt
+service/utils/FocusNotificationBuilder.kt
+ui/anim/MediaAlbumArtModifiers.kt
+ui/page/DynamicIslandNotificationPage.kt
+ui/page/hooksettings/media/preview/MediaPreviewCard.kt

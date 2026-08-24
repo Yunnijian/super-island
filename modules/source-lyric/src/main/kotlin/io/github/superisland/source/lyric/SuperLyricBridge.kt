@@ -1,6 +1,7 @@
 package io.github.superisland.source.lyric
 
 import android.os.Bundle
+import android.media.MediaMetadata
 import com.hchen.superlyricapi.ISuperLyricReceiver
 import com.hchen.superlyricapi.SuperLyricData
 import com.hchen.superlyricapi.SuperLyricHelper
@@ -127,12 +128,23 @@ object SuperLyricBridge {
         // SystemUI host resolve the public MediaSession state when available.
         val publisherId = normalizePublisher(publisher)
         val previous = synchronized(stateLock) { currentSnapshot?.takeIf { it.publisher == publisherId } }
+        val lyricText = data.lyric?.text?.trim()
+        val mediaMetadata = data.mediaMetadataCompat()
         val metadata = synchronized(stateLock) {
             val prior = metadataByPublisher[publisherId]
             LyricMetadata(
-                title = data.title ?: prior?.title,
-                artist = data.artist ?: prior?.artist,
-                album = data.album ?: prior?.album,
+                title = mediaMetadata?.getString(MediaMetadata.METADATA_KEY_TITLE)
+                    ?.takeIf { !it.isBlank() && it.trim() != lyricText }
+                    ?: data.title?.takeIf { !it.isBlank() && it.trim() != lyricText }
+                    ?: prior?.title,
+                artist = mediaMetadata?.getString(MediaMetadata.METADATA_KEY_ARTIST)
+                    ?.takeIf(String::isNotBlank)
+                    ?: data.artist?.takeIf(String::isNotBlank)
+                    ?: prior?.artist,
+                album = mediaMetadata?.getString(MediaMetadata.METADATA_KEY_ALBUM)
+                    ?.takeIf(String::isNotBlank)
+                    ?: data.album?.takeIf(String::isNotBlank)
+                    ?: prior?.album,
             ).also {
                 metadataByPublisher[publisherId] = it
                 while (metadataByPublisher.size > MAX_METADATA_ENTRIES) {
@@ -154,6 +166,12 @@ object SuperLyricBridge {
             playback = playback,
         )
     }
+
+    /** SuperLyricApi exposes this field in the parcel but omits a public getter. */
+    private fun SuperLyricData.mediaMetadataCompat(): MediaMetadata? = runCatching {
+        javaClass.getDeclaredField("mediaMetadata").apply { isAccessible = true }
+            .get(this) as? MediaMetadata
+    }.getOrNull()
 
     private fun normalizePublisher(value: String?): String =
         value.orEmpty().trim().take(MAX_PUBLISHER_LENGTH)

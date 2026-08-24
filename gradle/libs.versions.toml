@@ -21,6 +21,17 @@ kotlinx-serialization = "1.9.0"
 daimajia-animations = "2.4"
 daimajia-easing = "2.4"
 androidx-interpolator = "1.0.0"
+appcompat = "1.7.1"
+palette = "1.0.0"
+constraintlayout = "2.2.1"
+constraintlayout-compose = "1.1.0"
+coroutines = "1.9.0"
+retrofit = "2.11.0"
+okhttp = "4.12.0"
+retrofit-serialization = "1.0.0"
+shizuku = "13.1.5"
+reorderable = "3.1.0"
+miuix-nav = "0.9.4-rc01"
 superlyric-api = "3.4"
 lyricon-subscriber = "0.1.70"
 
@@ -54,6 +65,23 @@ kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serializa
 daimajia-animations = { group = "com.daimajia.androidanimations", name = "library", version.ref = "daimajia-animations" }
 daimajia-easing = { group = "com.daimajia.easing", name = "library", version.ref = "daimajia-easing" }
 androidx-interpolator = { module = "androidx.interpolator:interpolator", version.ref = "androidx-interpolator" }
+androidx-appcompat = { module = "androidx.appcompat:appcompat", version.ref = "appcompat" }
+androidx-palette-ktx = { module = "androidx.palette:palette-ktx", version.ref = "palette" }
+androidx-constraintlayout = { module = "androidx.constraintlayout:constraintlayout", version.ref = "constraintlayout" }
+androidx-constraintlayout-compose = { module = "androidx.constraintlayout:constraintlayout-compose", version.ref = "constraintlayout-compose" }
+androidx-compose-ui = { module = "androidx.compose.ui:ui" }
+androidx-compose-ui-graphics = { module = "androidx.compose.ui:ui-graphics" }
+androidx-compose-ui-tooling-preview = { module = "androidx.compose.ui:ui-tooling-preview" }
+androidx-compose-animation-graphics = { module = "androidx.compose.animation:animation-graphics" }
+kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "coroutines" }
+kotlinx-coroutines-android = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-android", version.ref = "coroutines" }
+retrofit = { module = "com.squareup.retrofit2:retrofit", version.ref = "retrofit" }
+okhttp = { module = "com.squareup.okhttp3:okhttp", version.ref = "okhttp" }
+retrofit-kotlinx-serialization-converter = { module = "com.jakewharton.retrofit:retrofit2-kotlinx-serialization-converter", version.ref = "retrofit-serialization" }
+shizuku-api = { module = "dev.rikka.shizuku:api", version.ref = "shizuku" }
+shizuku-provider = { module = "dev.rikka.shizuku:provider", version.ref = "shizuku" }
+reorderable = { module = "sh.calvin.reorderable:reorderable", version.ref = "reorderable" }
+miuix-nav = { module = "top.yukonga.miuix.kmp:miuix-nav-android", version.ref = "miuix-nav" }
 superlyric-api = { module = "com.github.HChenX:SuperLyricApi", version.ref = "superlyric-api" }
 lyricon-subscriber = { module = "io.github.proify.lyricon:subscriber", version.ref = "lyricon-subscriber" }
 
@@ -63,3 +91,4 @@ android-library = { id = "com.android.library", version.ref = "agp" }
 compose-compiler = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
 kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
 kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
+kotlin-parcelize = { id = "org.jetbrains.kotlin.plugin.parcelize", version.ref = "kotlin" }

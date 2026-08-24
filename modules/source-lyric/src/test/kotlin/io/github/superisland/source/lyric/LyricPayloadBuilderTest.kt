@@ -90,6 +90,29 @@ class LyricPayloadBuilderTest {
     }
 
     @Test
+    fun selectedMetadataTitleStaysMetadataWhenTheOtherSlotShowsLyric() {
+        val snapshot = LyricSnapshot(
+            publisher = "player",
+            line = LyricLine("歌词原文", 0L, 5_000L),
+            title = "歌曲标题",
+            artist = "歌手",
+        )
+        val payload = LyricPayloadBuilder.buildFocusLyricJson(
+            snapshot,
+            LyricIslandConfig(
+                contentLeft = IslandContentMode.MUSIC_INFO,
+                contentRight = IslandContentMode.LYRIC,
+                musicInfoFirstLine = LyricMusicInfoLayout.FIELD_TITLE,
+                placeholder = LyricPlaceholder.NONE,
+                showProgress = false,
+            ),
+        )
+
+        assertEquals("歌曲标题", slotTitle(payload, "imageTextInfoLeft"))
+        assertEquals("歌词原文", slotTitle(payload, "imageTextInfoRight"))
+    }
+
+    @Test
     fun noneSlotsStayEmptyInsteadOfFallingBackToLyric() {
         val snapshot = LyricSnapshot(
             publisher = "player",
@@ -120,7 +143,7 @@ class LyricPayloadBuilderTest {
     }
 
     @Test
-    fun ordinaryModeMigratesStaleDuplicateLyricSlotsToMetadataAndLyric() {
+    fun ordinaryModeKeepsIndependentDuplicateLyricSlots() {
         val snapshot = LyricSnapshot(
             publisher = "player",
             line = LyricLine("原词", 0L, 1_000L),
@@ -138,19 +161,19 @@ class LyricPayloadBuilderTest {
                 showProgress = false,
             ),
         )
-        assertEquals("歌曲", slotTitle(payload, "imageTextInfoLeft"))
+        assertEquals("原词", slotTitle(payload, "imageTextInfoLeft"))
         assertEquals("原词", slotTitle(payload, "imageTextInfoRight"))
     }
 
     @Test
-    fun ordinaryModeNormalizationUsesHyperLyricDefaultSlots() {
+    fun ordinaryModeNormalizationKeepsExplicitSlots() {
         val normalized = LyricIslandConfig(
             lyricMode = 0,
             contentLeft = IslandContentMode.LYRIC,
             contentRight = IslandContentMode.LYRIC,
         ).normalized()
 
-        assertEquals(IslandContentMode.MUSIC_INFO, normalized.contentLeft)
+        assertEquals(IslandContentMode.LYRIC, normalized.contentLeft)
         assertEquals(IslandContentMode.LYRIC, normalized.contentRight)
     }
 

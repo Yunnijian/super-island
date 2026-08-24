@@ -8,17 +8,20 @@ import android.util.AttributeSet
 import android.widget.FrameLayout
 import io.github.superisland.source.lyric.hyperlyric.model.RichLyricLine
 import io.github.superisland.source.lyric.hyperlyric.model.LyricWord as RichLyricWord
+import io.github.superisland.source.lyric.hyperlyric.model.lyricMetadataOf
 import io.github.superisland.source.lyric.hyperlyric.view.Highlight
 import io.github.superisland.source.lyric.hyperlyric.view.Marquee
 import io.github.superisland.source.lyric.hyperlyric.view.LyricViewStyle
-import io.github.superisland.source.lyric.hyperlyric.view.RichLyricLineView
-import io.github.superisland.source.lyric.hyperlyric.view.TextLook
-import io.github.superisland.source.lyric.hyperlyric.view.WordMotion
-import io.github.superisland.source.lyric.hyperlyric.model.lyricMetadataOf
-import io.github.superisland.source.lyric.hyperlyric.common.lyric.RichLyricLineSplitter
 import io.github.superisland.source.lyric.hyperlyric.view.METADATA_COUNTDOWN_LINE
 import io.github.superisland.source.lyric.hyperlyric.view.METADATA_NEXT_LINE_PREVIEW
 import io.github.superisland.source.lyric.hyperlyric.view.METADATA_TITLE_LINE
+import io.github.superisland.source.lyric.hyperlyric.view.RichLyricLineView
+import io.github.superisland.source.lyric.hyperlyric.view.TextLook
+import io.github.superisland.source.lyric.hyperlyric.view.WordMotion
+import io.github.superisland.source.lyric.hyperlyric.common.lyric.RichLyricLineSplitter
+import io.github.superisland.source.lyric.hyperlyric.common.SuperIslandWidthPolicy
+import io.github.superisland.source.lyric.hyperlyric.island.sizing.IslandLyricWidthCalculator
+import io.github.superisland.source.lyric.hyperlyric.island.sizing.IslandLyricWidthSpec
 import io.github.superisland.source.lyric.hyperlyric.view.yoyo.YoYoPresets
 import io.github.superisland.source.lyric.hyperlyric.view.yoyo.animateUpdate
 
@@ -41,6 +44,8 @@ class LyricCanvasView @JvmOverloads constructor(
     private var lastMetadataSourceSignature: Int = 0
     private var lastMetadataPositionSignature: Long = Long.MIN_VALUE
     private var metadataPlaybackActive: Boolean? = null
+    private var measuredMainContentWidthPx = 0f
+    private var measuredSecondaryContentWidthPx = 0f
 
     init {
         clipChildren = false
@@ -73,9 +78,6 @@ class LyricCanvasView @JvmOverloads constructor(
         splitSlot: Int = -1,
     ) {
         val normalizedConfig = config.normalized()
-        // The native host tags a canvas after construction. Refresh geometry on every snapshot
-        // so the first frame also receives the configured side padding.
-        applySlotPadding(normalizedConfig)
         if (
             normalizedConfig != currentConfig ||
             snapshot.artworkColors != currentArtworkColors ||
@@ -94,29 +96,15 @@ class LyricCanvasView @JvmOverloads constructor(
                 candidate
             }
         }
+        rememberMeasuredContentWidths(renderedLine)
         val signature = lineSignature(renderedLine)
-        val onWidthPreflight: ((Float) -> Boolean)? = if (normalizedConfig.widthMode != 0) {
-            { candidateWidth ->
-                applyDynamicWidthFromContent(candidateWidth, normalizedConfig)
-            }
-        } else {
-            null
-        }
         val apply = {
             metadataSnapshot = null
             lastMetadataSourceSignature = 0
             lastMetadataPositionSignature = Long.MIN_VALUE
             metadataPlaybackActive = null
-            if (onWidthPreflight == null) {
-                richView.line = renderedLine
-            } else {
-                richView.setLineWithCallbacks(
-                    renderedLine,
-                    onMainLineWillApply = onWidthPreflight,
-                )
-            }
+            richView.setLineWithCallbacks(renderedLine)
             richView.setPlaybackActive(snapshot.playback.isPlaying)
-            richView.setPosition(snapshot.playback.positionMs, snapshot.playback.speed)
             if (normalizedConfig.marqueeMode) richView.post { richView.requestStartMarquee() }
         }
         val animate = currentConfig.animEnabled || currentConfig.animation == LyricAnimation.SMOOTH
@@ -163,34 +151,105 @@ class LyricCanvasView @JvmOverloads constructor(
     /** Returns the configured side width for the native slot wrapper. */
     fun configuredWidthPx(config: LyricIslandConfig = currentConfig): Int {
         val density = resources.displayMetrics.density
-        val minWidth = LyricIslandWidthPolicy.minIslandWidth(
-            LyricIslandWidthPolicy.isAlbumCoverVisible(config.albumCoverStyle),
-            LyricIslandWidthPolicy.isMusicWaveVisible(config.musicWaveStyle),
-        )
-        val maxWidth = LyricIslandWidthPolicy.maxIslandWidth(
-            LyricIslandWidthPolicy.isMusicWaveVisible(config.musicWaveStyle),
-            config.disableWidthLimit,
-        ).coerceAtLeast(minWidth)
-        val targetDp = if (config.widthMode == 0) {
-            config.rightContentMaxWidth
-        } else {
-            // "仅歌词" follows the primary lyric line; translation/preview rows must not
-            // widen the native island in that mode. The combined width remains HyperLyric's
-            // default basis.
-            val measured = if (config.dynamicWidthBasis == 1) {
-                richView.main.lineWidth
+        val showAlbum = LyricIslandWidthPolicy.isAlbumCoverVisible(config.albumCoverStyle)
+        val showRhythm = LyricIslandWidthPolicy.isMusicWaveVisible(config.musicWaveStyle)
+        val isLeft = tag != "SUPER_ISLAND_LYRIC_RIGHT"
+        val targetDp: Float = if (config.widthMode == 0) {
+            val islandWidth = SuperIslandWidthPolicy.normalizeIslandWidth(
+                islandWidth = config.rightContentMaxWidth,
+                showAlbum = showAlbum,
+                showRhythm = showRhythm,
+                disableWidthLimit = config.disableWidthLimit,
+            )
+            if (isLeft) {
+                SuperIslandWidthPolicy.leftContentWidth(
+                    islandWidth = islandWidth,
+                    showAlbum = showAlbum,
+                    showRhythm = showRhythm,
+                    disableWidthLimit = config.disableWidthLimit,
+                ).toFloat()
             } else {
-                maxOf(richView.main.lineWidth, richView.secondary.lineWidth)
+                islandWidth.toFloat()
             }
-            ((measured / density) +
-                if (tag == "SUPER_ISLAND_LYRIC_RIGHT") {
-                    config.rightPaddingLeft + config.rightPaddingRight
-                } else {
-                    config.leftPaddingLeft + config.leftPaddingRight
-                }).toInt()
-                .coerceIn(config.dynamicMinWidth, config.dynamicMaxWidth)
+        } else {
+            val baseWidthDp = dynamicTargetWidthDp(config).toFloat()
+            IslandLyricWidthCalculator.targetWidthDp(
+                baseWidthDp = baseWidthDp,
+                spec = islandWidthSpec(config, isLeft),
+            ) ?: baseWidthDp
         }
-        return (targetDp.coerceIn(minWidth, maxWidth) * density).toInt().coerceAtLeast(1)
+        return kotlin.math.ceil(targetDp * density).toInt().coerceAtLeast(1)
+    }
+
+    /** Returns the shared-width coordinator's base width in the right-slot coordinate system. */
+    fun dynamicBaseWidthDp(config: LyricIslandConfig = currentConfig): Float {
+        val density = resources.displayMetrics.density
+        if (density <= 0f) return 0f
+        val mode = config.contentModeForSlot(tag != "SUPER_ISLAND_LYRIC_RIGHT")
+        if (config.dynamicWidthBasis == 1 && mode == IslandContentMode.MUSIC_INFO) return Float.NaN
+        val measured = if (config.dynamicWidthBasis == 1) {
+            maxOf(measuredMainContentWidthPx, richView.main.lineWidth)
+        } else {
+            maxOf(
+                measuredMainContentWidthPx,
+                measuredSecondaryContentWidthPx,
+                richView.main.lineWidth,
+                richView.secondary.lineWidth,
+            )
+        }
+        return IslandLyricWidthCalculator.baseWidthDp(
+            contentWidthPx = measured,
+            spec = islandWidthSpec(config, tag != "SUPER_ISLAND_LYRIC_RIGHT"),
+        ) ?: 0f
+    }
+
+    /**
+     * HyperLyric calculates the coordinated target before writing it to the slot wrapper. The
+     * renderer owns that wrapper, so this view exposes only the copied geometry calculation.
+     */
+    fun coordinatedWrapperWidthPx(
+        baseWidthDp: Float,
+        config: LyricIslandConfig = currentConfig,
+    ): Int? {
+        if (config.widthMode == 0 || !baseWidthDp.isFinite()) return null
+        val sharedBaseDp = baseWidthDp.coerceIn(
+            config.dynamicMinWidth.toFloat(),
+            config.dynamicMaxWidth.toFloat(),
+        )
+        return IslandLyricWidthCalculator.targetWidthPx(
+            baseWidthDp = sharedBaseDp,
+            spec = islandWidthSpec(config, tag != "SUPER_ISLAND_LYRIC_RIGHT"),
+        )
+    }
+
+    /** Minimal host adapter for HyperLyric's [IslandLyricWidthSpec]. */
+    private fun islandWidthSpec(config: LyricIslandConfig, isLeft: Boolean): IslandLyricWidthSpec {
+        val showAlbum = LyricIslandWidthPolicy.isAlbumCoverVisible(config.albumCoverStyle)
+        val showRhythm = LyricIslandWidthPolicy.isMusicWaveVisible(config.musicWaveStyle)
+        val offset = if (isLeft) {
+            SuperIslandWidthPolicy.leftContentWidthOffsetDp(showAlbum, showRhythm)
+        } else {
+            0
+        }
+        val leftPadding = if (isLeft) config.leftPaddingLeft else config.rightPaddingLeft
+        val rightPadding = if (isLeft) config.leftPaddingRight else config.rightPaddingRight
+        return IslandLyricWidthSpec(
+            density = resources.displayMetrics.density,
+            paddingLeftPx = (leftPadding.coerceAtLeast(0) * resources.displayMetrics.density).toInt(),
+            paddingRightPx = (rightPadding.coerceAtLeast(0) * resources.displayMetrics.density).toInt(),
+            minWidthDp = config.dynamicMinWidth + offset,
+            maxWidthDp = config.dynamicMaxWidth + offset,
+            isLeft = isLeft,
+            showAlbum = showAlbum,
+            showRhythm = showRhythm,
+        )
+    }
+
+    private fun dynamicTargetWidthDp(config: LyricIslandConfig): Int {
+        val base = dynamicBaseWidthDp(config)
+        if (!base.isFinite()) return config.rightContentMaxWidth
+        return kotlin.math.ceil(base).toInt()
+            .coerceIn(config.dynamicMinWidth, config.dynamicMaxWidth)
     }
 
     /** Renders HyperLyric's configurable two-row music metadata in a native island slot. */
@@ -198,7 +257,10 @@ class LyricCanvasView @JvmOverloads constructor(
         val normalizedConfig = config.normalized()
         val hadMetadataLine = metadataSnapshot != null
         val previousMetadataSnapshot = metadataSnapshot
-        applySlotPadding(normalizedConfig)
+        // A slot is reused across lyric/metadata mode changes. Clear HyperLyric's previous
+        // marquee override only on that boundary; doing it on every metadata position tick would
+        // restart the renderer on the SystemUI main looper.
+        if (!hadMetadataLine) richView.clearMetadataMarqueeConfig()
         if (normalizedConfig != currentConfig || snapshot.artworkColors != currentArtworkColors) {
             currentConfig = normalizedConfig
             currentArtworkColors = snapshot.artworkColors
@@ -250,18 +312,11 @@ class LyricCanvasView @JvmOverloads constructor(
                 end = Long.MAX_VALUE,
                 text = primary,
                 secondary = second.takeIf { first.isNotBlank() && it.isNotBlank() },
-                metadata = lyricMetadataOf(METADATA_TITLE_LINE to "true"),
             )
         }
+        rememberMeasuredContentWidths(metadataLine)
         metadataSnapshot = snapshot
         val signature = lineSignature(metadataLine)
-        val onWidthPreflight: ((Float) -> Boolean)? = if (normalizedConfig.widthMode != 0) {
-            { candidateWidth ->
-                applyDynamicWidthFromContent(candidateWidth, normalizedConfig)
-            }
-        } else {
-            null
-        }
         if (hadMetadataLine && signature == lastContentSignature) {
             lastMetadataSourceSignature = sourceSignature
             lastMetadataPositionSignature = positionSignature
@@ -280,13 +335,8 @@ class LyricCanvasView @JvmOverloads constructor(
         val applyMetadata = {
             if (hadMetadataLine) {
                 richView.updateMetadataLine(metadataLine)
-            } else if (onWidthPreflight == null) {
-                richView.line = metadataLine
             } else {
-                richView.setLineWithCallbacks(
-                    metadataLine,
-                    onMainLineWillApply = onWidthPreflight,
-                )
+                richView.line = metadataLine
             }
             richView.setPlaybackActive(snapshot.playback.isPlaying)
             richView.setPosition(snapshot.playback.positionMs, snapshot.playback.speed)
@@ -336,7 +386,6 @@ class LyricCanvasView @JvmOverloads constructor(
         centerOverride: Boolean? = null,
         metadataMode: Boolean = false,
     ) {
-        applySlotPadding(config)
         richView.displayTranslation = !config.disableTranslation && config.displayTranslation
         richView.displayRoma = false
         val density = resources.displayMetrics.density
@@ -450,52 +499,19 @@ class LyricCanvasView @JvmOverloads constructor(
         }
     }
 
-    /** Applies HyperLyric's per-slot wrapper padding in dp, with its runtime non-negative clamp. */
-    private fun applySlotPadding(config: LyricIslandConfig) {
-        val isRight = tag == "SUPER_ISLAND_LYRIC_RIGHT"
-        val density = resources.displayMetrics.density
-        val leftDp = if (isRight) config.rightPaddingLeft else config.leftPaddingLeft
-        val rightDp = if (isRight) config.rightPaddingRight else config.leftPaddingRight
-        val leftPx = (leftDp * density).toInt().coerceAtLeast(0)
-        val rightPx = (rightDp * density).toInt().coerceAtLeast(0)
-        if (paddingLeft != leftPx || paddingRight != rightPx) {
-            setPadding(leftPx, paddingTop, rightPx, paddingBottom)
-            requestLayout()
+    private fun rememberMeasuredContentWidths(line: io.github.superisland.source.lyric.hyperlyric.model.interfaces.IRichLyricLine?) {
+        if (line == null) {
+            measuredMainContentWidthPx = 0f
+            measuredSecondaryContentWidthPx = 0f
+            return
         }
-    }
-
-    /**
-     * Commits a measured HyperLyric width before the OEM island width pass. Returning true lets
-     * RichLyricLineView defer its line commit by one frame when the parent needs a new measure;
-     * this removes the old post-render race where the OEM had already cached the previous width.
-     */
-    private fun applyDynamicWidthFromContent(contentWidthPx: Float, config: LyricIslandConfig): Boolean {
-        if (config.widthMode == 0 || !contentWidthPx.isFinite()) return false
-        val density = resources.displayMetrics.density
-        val isRight = tag == "SUPER_ISLAND_LYRIC_RIGHT"
-        val paddingDp = if (isRight) {
-            config.rightPaddingLeft.coerceAtLeast(0) + config.rightPaddingRight.coerceAtLeast(0)
-        } else {
-            config.leftPaddingLeft.coerceAtLeast(0) + config.leftPaddingRight.coerceAtLeast(0)
+        runCatching {
+            val widths = richView.measureLineWidths(line)
+            measuredMainContentWidthPx = widths.getOrNull(0)?.takeIf { it.isFinite() } ?: 0f
+            measuredSecondaryContentWidthPx = widths.getOrNull(1)?.takeIf { it.isFinite() } ?: 0f
+        }.onFailure {
+            // Keep the last valid preflight values; the committed line widths remain a fallback.
         }
-        val targetDp = ((contentWidthPx / density) + paddingDp)
-            .coerceIn(config.dynamicMinWidth.toFloat(), config.dynamicMaxWidth.toFloat())
-        val minWidth = LyricIslandWidthPolicy.minIslandWidth(
-            LyricIslandWidthPolicy.isAlbumCoverVisible(config.albumCoverStyle),
-            LyricIslandWidthPolicy.isMusicWaveVisible(config.musicWaveStyle),
-        )
-        val maxWidth = LyricIslandWidthPolicy.maxIslandWidth(
-            LyricIslandWidthPolicy.isMusicWaveVisible(config.musicWaveStyle),
-            config.disableWidthLimit,
-        ).coerceAtLeast(minWidth)
-        val targetPx = (targetDp.toInt().coerceIn(minWidth, maxWidth) * density)
-            .toInt().coerceAtLeast(1)
-        val params = layoutParams ?: return false
-        if (params.width == targetPx) return false
-        params.width = targetPx
-        setLayoutParams(params)
-        parent?.requestLayout()
-        return true
     }
 
     private fun lineSignature(line: RichLyricLine?): Int = line?.let {

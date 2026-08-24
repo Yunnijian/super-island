@@ -511,17 +511,29 @@ private fun LyricMaterialDetail(
                 SegmentedColumn(Modifier.fillMaxWidth(), title = "滚动显示", content = listOf(
                     { switch("歌词滚动", "针对没有时间轴的歌词", config.marqueeMode, true) { set(config.copy(marqueeMode = it)) } },
                     { MaterialInlineSliderItem("滚动速度", config.marqueeSpeed.toFloat(), 5f..100f, 18, config.enabled && config.marqueeMode, config.marqueeSpeed.toString(), { set(config.copy(marqueeSpeed = it.toInt())) }) },
-                    { MaterialInlineSliderItem("初始滚动延迟", config.marqueeDelay.toFloat(), 0f..10000f, 9, config.enabled && config.marqueeMode, "${config.marqueeDelay}ms", { set(config.copy(marqueeDelay = it.toInt())) }) },
+                    { MaterialInlineSliderItem("初始滚动延迟", config.marqueeDelay.toFloat(), 0f..5000f, 4, config.enabled && config.marqueeMode, "${config.marqueeDelay}ms", { set(config.copy(marqueeDelay = it.toInt())) }) },
                     { switch("无限循环", "", config.marqueeInfinite, config.marqueeMode) { set(config.copy(marqueeInfinite = it)) } },
-                    { MaterialInlineSliderItem("循环间隔", config.marqueeLoopDelay.toFloat(), 0f..10000f, 9, config.enabled && config.marqueeMode, "${config.marqueeLoopDelay}ms", { set(config.copy(marqueeLoopDelay = it.toInt())) }) },
+                    { MaterialInlineSliderItem("循环间隔", config.marqueeLoopDelay.toFloat(), 0f..5000f, 4, config.enabled && config.marqueeMode, "${config.marqueeLoopDelay}ms", { set(config.copy(marqueeLoopDelay = it.toInt())) }) },
                     { switch("结束时在末尾停止", "", config.marqueeStopEnd, config.marqueeMode) { set(config.copy(marqueeStopEnd = it)) } },
                 ))
+            }
+            if (config.lyricMode == 0) {
+                item {
+                    SegmentedColumn(Modifier.fillMaxWidth(), title = "歌曲信息滚动", content = listOf(
+                        { switch("歌曲信息滚动", "针对歌曲信息", config.metadataMarqueeMode, true) { set(config.copy(metadataMarqueeMode = it)) } },
+                        { MaterialInlineSliderItem("滚动速度", config.metadataMarqueeSpeed.toFloat(), 5f..100f, 18, config.enabled && config.metadataMarqueeMode, config.metadataMarqueeSpeed.toString(), { set(config.copy(metadataMarqueeSpeed = it.toInt())) }) },
+                        { MaterialInlineSliderItem("初始滚动延迟", config.metadataMarqueeDelay.toFloat(), 0f..10000f, 9, config.enabled && config.metadataMarqueeMode, "${config.metadataMarqueeDelay}ms", { set(config.copy(metadataMarqueeDelay = it.toInt())) }) },
+                        { switch("无限循环", "", config.metadataMarqueeInfinite, config.metadataMarqueeMode) { set(config.copy(metadataMarqueeInfinite = it)) } },
+                        { MaterialInlineSliderItem("循环间隔", config.metadataMarqueeLoopDelay.toFloat(), 0f..10000f, 9, config.enabled && config.metadataMarqueeMode, "${config.metadataMarqueeLoopDelay}ms", { set(config.copy(metadataMarqueeLoopDelay = it.toInt())) }) },
+                    ))
+                }
             }
             }
             if (section == LyricConfigSection.VERBATIM) {
             item {
                 SegmentedColumn(Modifier.fillMaxWidth(), title = "逐字歌词", content = listOf(
-                    { switch("相对进度歌词", "当歌词缺少字词时间轴时，将整行作为一个进度单元", config.syllableRelative, true) { set(config.copy(syllableRelative = it)) } },
+                    { switch("模拟逐行歌词", "将带有字词时间轴的歌词降级为整行时间轴显示", config.syllableLineDisplay, true) { enabled -> set(config.copy(syllableLineDisplay = enabled, syllableRelative = if (enabled) false else config.syllableRelative)) } },
+                    { switch("相对进度歌词", "当歌词缺少字词时间轴时，将整行作为一个进度单元", config.syllableRelative, true) { enabled -> set(config.copy(syllableRelative = enabled, syllableLineDisplay = false)) } },
                     { switch("相对进度歌词高亮显示", "", config.syllableHighlight, config.syllableRelative) { set(config.copy(syllableHighlight = it)) } },
                 ))
             }

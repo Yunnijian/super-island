@@ -82,6 +82,7 @@ dependencies {
     implementation(platform(libs.androidx.compose.bom))
     implementation(project(":core-model"))
     implementation(project(":hook-systemui"))
+    implementation(project(":hyperlyric-port"))
     implementation(project(":publisher-focus"))
     implementation(project(":source-lyric"))
     implementation(project(":source-notification"))

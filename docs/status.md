@@ -1,18 +1,62 @@
 # 当前状态
 
-更新时间：2026-08-23
+更新时间：2026-08-24
+
+## 2026-08-24 HyperLyric 源码运行时接管
+
+- 固定上游 `5176e38834fbf712532a6db288ce6b0f0ba589fa` 的源码已作为
+  `:hyperlyric-port` 构建输入，包含 `root/island`、歌词源、插件 API/实现、服务和媒体卡片
+  运行时；不生成 HyperLyric 的设置页、导航、`MainActivity`、`RootApplication` 或任何 App UI
+  源码。超级岛歌词继续使用本项目既有的 Miuix/Material 设置页，并写入上游原始 key。也不打包
+  上游应用图标、示例封面、预览图、贡献者头像或上游 App 页面动画素材。只排除 Live Update 的
+  通知发布链及其入口、`UnlockFocusWhitelist` 和上游 App UI。
+- SystemUI 当前实际安装 HyperLyric 的 `SystemUIHookRegistry`，并用既有 LSPosed 模块与
+  RemotePreferences 绑定上游 `HookEntry`。上游的 `SourceManager`、`RootLyricSink`、
+  `BaseIslandRenderer`、动态宽度、内容布局、封面、律动、辉光与过渡链路成为运行时 owner；
+  原自写 native renderer 不再由任何生产 Hook 安装。`MEDIA_FALLBACK` 仅保留为显式选择的
+  Focus 回退源，不会因原生槽缺失自动启用。
+- App 保存配置时同时写入上游的原始 `RootConstants` key；新安装的默认值已修正为上游默认：
+  `textSizeRatio=0.7`、15dp 羽化、倒计时圆点占位、歌词滚动 `30/1500/1000`、音乐信息滚动
+  `10/4000/5000`、相对进度开启、逐字上浮关闭。
+- 本轮完整 `./scripts/check.sh` 已完成，benchmark APK SHA-256：
+  `24daaa0dfaf60269a5b63d72c1f0c23820193a6453404f02760342a63949fb5b`。
+  该 APK 已于 2026-08-24 08:31:55 覆盖安装到 `songyuan` / `1e7b9e0b`，设备 base APK
+  SHA-256 一致；SystemUI `25039 -> 1029`、XMSF `25408 -> 1921` 已重载。新 SystemUI
+  日志确认 `io.github.superisland` 绑定的上游 `HookEntry`、`SourceManager(SuperLyric)` 和
+  `SystemUIHookRegistry` 已装载，未发现本模块相关的 `FATAL EXCEPTION`、
+  `NoSuchMethodError` 或 `AbstractMethodError`。同一新进程还记录到
+  `com.lidesheng.hyperlyric` 的 `SystemUIHookRegistry` 装载，故歌词岛视觉验收仍须排除
+  该外部模块的并行 Hook 影响。
+- 上游 App 页面不在迁移范围，不会建立 `PrefsBridge`、`RootApplication` 或页面导航宿主化。
+  动态长度、标题、封面、律动、滚动、歌词分离与下拉状态栏性能仍待真机手动验收。
 
 ## 2026-08-23 歌词配置与渲染回归
 
-- 本轮修复普通歌词槽位与 fallback 语义：普通模式历史的左右双 `LYRIC` 配置会按 HyperLyric 默认收敛为左 `MUSIC_INFO(8)`、右 `LYRIC(7)`；Focus fallback 仅在显式 `MEDIA_FALLBACK` 源模式发布，LYRICON/SUPER_LYRIC/LYRIC_INFO 缺少原生槽时不再自动降级。歌曲信息滚动入口已从 Miuix/Material 删除，旧字段仅保留 codec 兼容且运行时静态显示。
+- HyperLyric 已由用户关闭后继续修正：动态宽度公式、像素 padding 换算、综合判断的
+  元数据参与、左右槽共享基准裁剪均已按最新 HyperLyric 上游实现对齐；新增
+  `IslandIconViewHolder.setFixIcon` 封面样式生命周期 Hook，并为 Lyricon/SuperLyric
+  补齐独立的 MediaSession 标题/艺术家/专辑解析。自定义音乐信息行不再错误标记为
+  `TitleLine`。本次 `./scripts/check.sh` 通过 683 actionable tasks，benchmark SHA-256：
+  `35561cbc27572b397f5a8d58a76a05d4da8c70cd90cd6290733d456077a1907f`。随后已在
+  `songyuan` / `1e7b9e0b` 覆盖安装同一 APK，设备端 SHA-256 一致；SystemUI 主 PID
+  `30359→14245`、XMSF `23947/31923→14465` 已重载，安装后日志未发现模块异常。
+  标题、动态长度和封面仍待用户在设备上完成视觉点击验收。
+
+- 本轮修复普通歌词槽位与 fallback 语义：普通模式左右槽按 HyperLyric 独立配置；Focus fallback 仅在显式 `MEDIA_FALLBACK` 源模式发布，LYRICON/SUPER_LYRIC/LYRIC_INFO 缺少原生槽时不再自动降级。歌曲信息滚动入口已从 Miuix/Material 删除，旧字段仅保留 codec 兼容且运行时静态显示。
+
+- 追加回归修复：移除普通模式对左右槽的强制迁移和重复歌词单侧裁剪，左右 `LYRIC/MUSIC_INFO/NONE` 现在按 HyperLyric 独立绑定；Canvas 从歌词切换到歌曲信息时清理旧跑马灯状态。
+- 动态宽度改为 HyperLyric 的左右槽共享最大基准、左侧封面/律动补偿和 `ceil` 取整，并限制宽度预检只在内容签名变化时触发，避免播放进度 tick 造成布局反馈。
+- 追加动态宽度首帧修复：共享基准现在使用文字提交前的双行预检测量值，不再读取上一句歌词的旧宽度；左右槽通过统一 `contentModeForSlot` 分发，歌曲信息选中标题/专辑等字段时不会回退到歌词。专用文字容器会隐藏 OEM/HyperLyric 残留歌词视图并把本模块 Canvas 提到最前。
+- 新增 `IslandIconViewHolder.setLottieColor(Bitmap)` / `registerLottieCallback()` 生命周期 Hook，按封面 palette 和 `musicWaveStyle` 写入律动渐变，holder 重建后补写并支持恢复 OEM 颜色。
 
 - `d73b18a`：原生 Kotlin 岛载体兼容与动态长度预检，宽度在歌词测量前提交。
-- `c06fd27`：普通模式只渲染一条主歌词；仅分离模式分配主句/副句到两侧；历史双歌词槽位按配置单侧收敛。
+- `c06fd27`：普通模式只渲染一条主歌词；仅分离模式分配主句/副句到两侧。
 - Miuix/Material 滑块统一为“标题/数值一行、滑块下一行”，保留 HyperLyric 关键点，不再把滑块挤在功能项右侧。
 - 音乐信息第二行改用复制实现的 `SecondaryTextConfig` 10sp，避免二行内容缩成一团。
-- 新配置默认值对齐复制的 HyperLyric 常量：滚动 40/300/700、无限循环、10dp 羽化、歌名-歌手占位符、逐字动效参数和 `textSizeRatio=0.85`；旧 schema 迁移值保持兼容。
-- `./scripts/check.sh`：683 actionable tasks，通过；本次 benchmark SHA-256：`810d724bf29b6864c1c1cd916973d724da9be283b35aef90edc489e24bea5f30`。
-- `songyuan`（OS3.0.306.0.WGNCNXM）已安装同一 benchmark 并重载 SystemUI，SystemUI PID `23092`；安装后异常日志扫描为空。普通/分离视觉切换、音乐信息字号和双皮肤滑块仍待设备手动点击验收。
+- 历史本地配置曾使用非上游的滚动、羽化、占位和逐字默认值；2026-08-24 已改为以上游
+  `RootConstants` 为准，旧 schema 迁移值仍保持兼容。
+- `./scripts/check.sh`：683 actionable tasks，通过；本次 benchmark SHA-256：`80b1a94abb5bbf5f726d0109f3f82f2baf9fd8b2049a761b82f1460f90cab20c`。
+- `warsaw`（设备 `1e7b9e0b`）已安装同一 benchmark 并重载 SystemUI（`18427→30359`，XMSF PID 未变）；设备 base APK SHA-256 与本地一致，模块 Hook 装载日志正常，未发现模块进程的 `FATAL EXCEPTION`、`NoSuchMethodError` 或 `AbstractMethodError`。原生歌词槽位、律动和动态宽度仍待关闭设备上的 HyperLyric 同类 Hook 后进行用户手动视觉点击验收。
 
 | 项目 | 当前值 |
 | --- | --- |

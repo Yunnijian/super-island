@@ -73,6 +73,29 @@ class RichLyricLineView(
         setLineInternal(value, onMainLineWillApply, onMainLineApplied, onMainLineCancelled)
     }
 
+    /**
+     * Measures both assembled rows before they are committed to the view tree.
+     *
+     * HyperLyric uses this preflight result when calculating the shared Dynamic Island width. A
+     * caller may need the values while [setLineWithCallbacks] is waiting for the next frame, so
+     * reading [main.lineWidth] alone would return the previous line.
+     */
+    fun measureLineWidths(value: IRichLyricLine?): FloatArray {
+        assembler.updateFlags(
+            displayTranslation,
+            displayRoma,
+            enableRelativeProgress,
+            enableRelativeProgressHighlight,
+            displayLineByLine,
+        )
+        val mainResult = assembler.buildMain(value)
+        val secondaryResult = assembler.buildSecondary(value)
+        return floatArrayOf(
+            main.measureLineWidth(mainResult.line),
+            secondary.measureLineWidth(secondaryResult.line),
+        )
+    }
+
     fun updateMetadataLine(value: IRichLyricLine?) {
         setLineInternal(value, null, null, null, preserveMarquee = true)
     }

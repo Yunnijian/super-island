@@ -581,10 +581,26 @@ fun LyricConfigurationMiuix(
         Card {
             SwitchPreference(title = "歌词滚动", summary = "针对没有时间轴的歌词", checked = config.marqueeMode, enabled = enabled, onCheckedChange = { set(config.copy(marqueeMode = it)) })
             LyricInlineSliderRow("滚动速度", config.marqueeSpeed.toFloat(), 5f..100f, 18, enabled && config.marqueeMode, config.marqueeSpeed.toString()) { set(config.copy(marqueeSpeed = it.toInt())) }
-            LyricInlineSliderRow("初始滚动延迟", config.marqueeDelay.toFloat(), 0f..10000f, 9, enabled && config.marqueeMode, "${config.marqueeDelay}ms") { set(config.copy(marqueeDelay = it.toInt())) }
+            LyricInlineSliderRow("初始滚动延迟", config.marqueeDelay.toFloat(), 0f..5000f, 4, enabled && config.marqueeMode, "${config.marqueeDelay}ms") { set(config.copy(marqueeDelay = it.toInt())) }
             SwitchPreference(title = "无限循环", enabled = enabled && config.marqueeMode, checked = config.marqueeInfinite, onCheckedChange = { set(config.copy(marqueeInfinite = it)) })
-            LyricInlineSliderRow("循环间隔", config.marqueeLoopDelay.toFloat(), 0f..10000f, 9, enabled && config.marqueeMode, "${config.marqueeLoopDelay}ms") { set(config.copy(marqueeLoopDelay = it.toInt())) }
+            LyricInlineSliderRow("循环间隔", config.marqueeLoopDelay.toFloat(), 0f..5000f, 4, enabled && config.marqueeMode, "${config.marqueeLoopDelay}ms") { set(config.copy(marqueeLoopDelay = it.toInt())) }
             SwitchPreference(title = "结束时在末尾停止", enabled = enabled && config.marqueeMode, checked = config.marqueeStopEnd, onCheckedChange = { set(config.copy(marqueeStopEnd = it)) })
+        }
+        if (config.lyricMode == 0) {
+            SmallTitle(text = "歌曲信息滚动")
+            Card {
+                SwitchPreference(
+                    title = "歌曲信息滚动",
+                    summary = "针对歌曲信息",
+                    checked = config.metadataMarqueeMode,
+                    enabled = enabled,
+                    onCheckedChange = { set(config.copy(metadataMarqueeMode = it)) },
+                )
+                LyricInlineSliderRow("滚动速度", config.metadataMarqueeSpeed.toFloat(), 5f..100f, 18, enabled && config.metadataMarqueeMode, config.metadataMarqueeSpeed.toString()) { set(config.copy(metadataMarqueeSpeed = it.toInt())) }
+                LyricInlineSliderRow("初始滚动延迟", config.metadataMarqueeDelay.toFloat(), 0f..10000f, 9, enabled && config.metadataMarqueeMode, "${config.metadataMarqueeDelay}ms") { set(config.copy(metadataMarqueeDelay = it.toInt())) }
+                SwitchPreference(title = "无限循环", enabled = enabled && config.metadataMarqueeMode, checked = config.metadataMarqueeInfinite, onCheckedChange = { set(config.copy(metadataMarqueeInfinite = it)) })
+                LyricInlineSliderRow("循环间隔", config.metadataMarqueeLoopDelay.toFloat(), 0f..10000f, 9, enabled && config.metadataMarqueeMode, "${config.metadataMarqueeLoopDelay}ms") { set(config.copy(metadataMarqueeLoopDelay = it.toInt())) }
+            }
         }
         }
 
@@ -592,11 +608,23 @@ fun LyricConfigurationMiuix(
         SmallTitle(text = "逐字歌词")
         Card {
             SwitchPreference(
+                title = "模拟逐行歌词",
+                summary = "将带有字词时间轴的歌词降级为整行时间轴显示",
+                checked = config.syllableLineDisplay,
+                enabled = enabled,
+                onCheckedChange = {
+                    set(config.copy(
+                        syllableLineDisplay = it,
+                        syllableRelative = if (it) false else config.syllableRelative,
+                    ))
+                },
+            )
+            SwitchPreference(
                 title = "相对进度歌词",
                 summary = "当歌词缺少字词时间轴时，将整行作为一个进度单元",
                 checked = config.syllableRelative,
                 enabled = enabled,
-                onCheckedChange = { set(config.copy(syllableRelative = it)) },
+                onCheckedChange = { set(config.copy(syllableRelative = it, syllableLineDisplay = false)) },
             )
             SwitchPreference(title = "相对进度歌词高亮显示", enabled = enabled && config.syllableRelative, checked = config.syllableHighlight, onCheckedChange = { set(config.copy(syllableHighlight = it)) })
         }

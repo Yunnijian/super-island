@@ -161,24 +161,26 @@ class LyricIslandConfigCodecTest {
     fun freshConfigUsesHyperLyricMarqueeAndWordMotionDefaults() {
         val config = LyricIslandConfig()
 
-        assertEquals(0.85f, config.textSizeRatio)
-        assertEquals(10, config.fadingEdgeLengthDp)
-        assertEquals(LyricPlaceholder.NAME_ARTIST, config.placeholder)
-        assertEquals(40, config.marqueeSpeed)
-        assertEquals(300, config.marqueeDelay)
-        assertEquals(700, config.marqueeLoopDelay)
-        assertTrue(config.marqueeInfinite)
-        assertFalse(config.marqueeStopEnd)
-        assertEquals(40, config.metadataMarqueeSpeed)
-        assertEquals(300, config.metadataMarqueeDelay)
-        assertEquals(700, config.metadataMarqueeLoopDelay)
+        assertEquals(0.7f, config.textSizeRatio)
+        assertEquals(15, config.fadingEdgeLengthDp)
+        assertEquals(LyricPlaceholder.COUNTDOWN, config.placeholder)
+        assertEquals(30, config.marqueeSpeed)
+        assertEquals(1500, config.marqueeDelay)
+        assertEquals(1000, config.marqueeLoopDelay)
+        assertFalse(config.marqueeInfinite)
+        assertTrue(config.marqueeStopEnd)
+        assertEquals(10, config.metadataMarqueeSpeed)
+        assertEquals(4000, config.metadataMarqueeDelay)
+        assertEquals(5000, config.metadataMarqueeLoopDelay)
         assertTrue(config.metadataMarqueeInfinite)
+        assertTrue(config.syllableRelative)
+        assertFalse(config.wordMotionEnabled)
         assertEquals(0.08f, config.wordMotionLatinLift)
         assertEquals(2.0f, config.wordMotionLatinWave)
     }
 
     @Test
-    fun preservesHiddenLineDisplayAndNormalizesRetiredCompatibilityFields() {
+    fun normalizesSimulatedLineDisplayWithUpstreamSyllablePolicy() {
         val normalized = LyricIslandConfig(
             syllableRelative = true,
             syllableHighlight = true,
@@ -188,7 +190,7 @@ class LyricIslandConfigCodecTest {
             autoSwitchTranslation = true,
         ).normalized()
 
-        assertTrue(normalized.syllableRelative)
+        assertFalse(normalized.syllableRelative)
         assertTrue(normalized.syllableHighlight)
         assertTrue(normalized.syllableLineDisplay)
         assertTrue(normalized.displayTranslation)
@@ -243,5 +245,18 @@ class LyricIslandConfigCodecTest {
         assertEquals(22, normalized.dynamicMinWidth)
         assertEquals(92, normalized.dynamicMaxWidth)
         assertEquals(170, LyricIslandWidthPolicy.maxIslandWidth(showRhythm = false, disableWidthLimit = true))
+    }
+
+    @Test
+    fun dynamicWidthUsesHyperLyricLeftCompensation() {
+        assertEquals(-22, LyricIslandWidthPolicy.leftContentWidthOffsetDp(
+            showAlbum = true,
+            showRhythm = false,
+        ))
+        assertEquals(122f, LyricIslandWidthPolicy.baseWidthFromLeftContentWidth(
+            leftContentWidthDp = 100f,
+            showAlbum = true,
+            showRhythm = false,
+        ))
     }
 }

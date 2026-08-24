@@ -9,6 +9,9 @@ import io.github.superisland.source.lyric.hyperlyric.common.color.ColorExtractor
 
 /** Public MediaSession fallback used because SuperLyricApi no longer exposes playback fields. */
 object LyricPlaybackResolver {
+    // QQ Music's car-lyric session overwrites TITLE/DISPLAY_TITLE with each lyric line but
+    // retains the real track title in this public MediaMetadata entry.
+    private const val CUSTOM_FIELD_TITLE = "android.media.metadata.CUSTOM_FIELD_TITLE"
     fun resolve(context: Context, publisher: String, fallback: LyricPlayback): LyricPlayback {
         return resolveWithMetadata(context, publisher, fallback).playback
     }
@@ -40,7 +43,8 @@ object LyricPlaybackResolver {
                     durationMs = metadata?.getLong(MediaMetadata.METADATA_KEY_DURATION)
                         ?.takeIf { it > 0L } ?: fallback.durationMs,
                 ).normalized(),
-                title = metadata?.getString(MediaMetadata.METADATA_KEY_TITLE),
+                title = metadata?.getString(CUSTOM_FIELD_TITLE)?.takeIf(String::isNotBlank)
+                    ?: metadata?.getString(MediaMetadata.METADATA_KEY_TITLE),
                 artist = metadata?.getString(MediaMetadata.METADATA_KEY_ARTIST),
                 album = metadata?.getString(MediaMetadata.METADATA_KEY_ALBUM),
             )

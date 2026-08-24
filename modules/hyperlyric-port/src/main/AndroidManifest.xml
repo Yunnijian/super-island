@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" />
+
+    <application>
+        <provider
+            android:name="com.lidesheng.hyperlyric.plugin.app.PluginCacheResultProvider"
+            android:authorities="${applicationId}.hyperlyric-plugin-cache-result"
+            android:exported="true" />
+    </application>
+</manifest>

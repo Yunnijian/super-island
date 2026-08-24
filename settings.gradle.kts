@@ -24,6 +24,7 @@ include(":app")
 mapOf(
     ":core-model" to "modules/core-model",
     ":hook-systemui" to "modules/hook-systemui",
+    ":hyperlyric-port" to "modules/hyperlyric-port",
     ":publisher-focus" to "modules/publisher-focus",
     ":source-lyric" to "modules/source-lyric",
     ":source-notification" to "modules/source-notification",
