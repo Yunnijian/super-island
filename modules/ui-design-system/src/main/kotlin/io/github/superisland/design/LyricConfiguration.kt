@@ -686,7 +686,6 @@ fun LyricConfigurationMiuix(
         }
 
         if (section == null || section == LyricConfigSection.TEXT_STYLE) {
-        LyricSettingsTitle(text = "文字样式")
         LyricSettingsTitle(text = "基础样式")
         LyricSettingsCard {
             LyricInlineSliderRow("大小", config.textSizeSp, 8f..16f, enabled, config.textSizeSp.toInt().toString()) { set(config.copy(textSizeSp = it.roundToInt().toFloat())) }
@@ -713,7 +712,6 @@ fun LyricConfigurationMiuix(
         }
 
         if (section == null || section == LyricConfigSection.SCROLL) {
-        LyricSettingsTitle(text = "滚动显示")
         LyricSettingsTitle(text = "歌词滚动")
         LyricSettingsCard {
             SwitchPreference(title = "歌词滚动", summary = "针对没有时间轴的歌词", checked = config.marqueeMode, enabled = enabled, onCheckedChange = { set(config.copy(marqueeMode = it)) })
@@ -780,7 +778,6 @@ fun LyricConfigurationMiuix(
         }
 
         if (section == null || section == LyricConfigSection.TRANSLATION) {
-        LyricSettingsTitle(text = "双行内容")
         val nextSupported = config.sourceMode == LyricSourceMode.LYRICON ||
             config.sourceMode == LyricSourceMode.LYRIC_INFO
         if (nextSupported) {
