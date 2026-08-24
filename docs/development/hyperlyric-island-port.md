@@ -3,7 +3,7 @@
 ## Source Of Truth
 
 - Upstream: `https://github.com/limczhh/HyperLyric.git`
-- Checkout: `03ca5f4e92e78ec0924ac13ecee4a36640fa933a`
+- Checkout: `618e500b6661ad5232092cd4599f5d47f2365d9c` (GitHub Release `1937-7.2`)
 - Source root: `app/src/main/java/com/lidesheng/hyperlyric/root/island/`
 
 When a file in this table is migrated, its upstream source remains the behavioral authority.
@@ -12,8 +12,8 @@ Only package, import, build dependency, and SystemUI-host API adaptations are pe
 ## In Scope
 
 HyperLyric's Super Island runtime functionality is in scope except the explicit exclusions below.
-This includes media cards, plugin runtime, services and their reusable dependencies, and Super
-Island runtime lyric animation and visual effects. HyperLyric's complete App settings/pages,
+This includes media cards, services and their reusable dependencies, and Super Island runtime
+lyric animation and visual effects. HyperLyric's complete App settings/pages,
 navigation, UI/UX and page-transition animation are excluded: Super Island's existing Miuix and
 Material settings surfaces remain the only configuration UI. The Super Island lyric chain remains
 the first migration batch; no listed runtime capability is optional merely because it is not part
@@ -44,8 +44,6 @@ lyric runtime source or asset is excluded by this rule.
 | `structure/` | 1 | Native slot structure injection |
 | `view/` | 1 | Width-constrained wrapper |
 | `app/src/online/java/` | 15 | HyperLyric's default online lyric-provider source set |
-| `Plugins/api/` | 1 | Plugin host API |
-| `Plugins/modules/` | 16 | Direct plugin implementations (AI translation and demo logger) |
 
 ## Explicitly Excluded
 
@@ -69,8 +67,8 @@ The generated source is now the active SystemUI owner. `SuperIslandXposedModule`
 `SystemUIHookRegistry` from the fixed upstream and binds its `HookEntry` to the existing LSPosed
 module instance plus the Super Island RemotePreferences document. The app mirrors its typed
 configuration into HyperLyric's original `RootConstants` keys, so the upstream source manager,
-slot reader, dynamic-width coordinator, renderer, album-cover, music-wave, glow, fake-transition,
-and plugin runtime all read their native preference contract.
+slot reader, dynamic-width coordinator, renderer, album-cover, music-wave, glow and
+fake-transition all read their native preference contract.
 
 HyperLyric App pages are intentionally absent. The existing two-skin Super Island lyric settings
 route owns configuration and mirrors it into HyperLyric's original `RootConstants` keys. There is
@@ -79,8 +77,9 @@ no `PrefsBridge`/`RootApplication` page host and no pending upstream-page integr
 The source generator rejects every `ui/**` path and the upstream-only `RootApplication`,
 `PrefsBridge`, notification-whitelist `ConfigRepository`, backup manager, and provider-page manager.
 `LogManager` keeps its original runtime log-write path but excludes the App log-page read model.
-The only local adapter is `PortXposedServiceBridge`, which supplies the existing LSPosed service to
-the upstream `PluginRepository`; it does not create a second preferences owner or an upstream UI.
+The only local adaptations bind the existing LSPosed module and RemotePreferences to the upstream
+`HookEntry` runtime and replace its type-specific preference lookup where the host module differs.
+They do not create a second preferences owner or an upstream UI.
 
 `MEDIA_FALLBACK` stays a separate legacy source mode only. It retains the existing Focus transport
 boundary and submits its resolved snapshot through the upstream renderer; it is not an automatic

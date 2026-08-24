@@ -77,7 +77,6 @@ object HyperLyricIslandRuntime {
                 title = snapshot.title?.takeUnless { it == snapshot.line?.text },
                 artist = snapshot.artist,
                 album = snapshot.album,
-                duration = snapshot.playback.durationMs.takeIf { it > 0L },
             ),
         )
         if (primary != null) {

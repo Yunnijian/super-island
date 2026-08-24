@@ -87,7 +87,7 @@ dependencies {
     compileOnly(libs.libxposed.api)
 }
 
-val hyperLyricReferenceCommit = "03ca5f4e92e78ec0924ac13ecee4a36640fa933a"
+val hyperLyricReferenceCommit = "618e500b6661ad5232092cd4599f5d47f2365d9c"
 val superIslandUpstreamsDir =
     providers.gradleProperty("superIslandUpstreamsDir")
         .orElse(providers.environmentVariable("SUPER_ISLAND_UPSTREAMS_DIR"))
@@ -97,16 +97,6 @@ val hyperLyricCheckout = superIslandUpstreamsDir.get().resolve("HyperLyric")
 val hyperLyricMainRoot = hyperLyricCheckout.resolve("app/src/main")
 val hyperLyricSourceRoot = hyperLyricMainRoot.resolve("java")
 val hyperLyricOnlineSourceRoot = hyperLyricCheckout.resolve("app/src/online/java")
-val hyperLyricPluginApiRoot = hyperLyricCheckout.resolve("Plugins/api/src/main/kotlin")
-val hyperLyricPluginApiPackageRoot =
-    hyperLyricPluginApiRoot.resolve("com/lidesheng/hyperlyric")
-val hyperLyricPluginModuleRoots =
-    hyperLyricCheckout.resolve("Plugins/modules")
-        .listFiles()
-        ?.map { it.resolve("src/main/java") }
-        ?.filter { it.isDirectory }
-        ?.sortedBy { it.invariantSeparatorsPath }
-        .orEmpty()
 val hyperLyricExcludesFile = layout.projectDirectory.file("hyperlyric-excludes.txt")
 val hyperLyricExcludedSources =
     hyperLyricExcludesFile.asFile.readLines()
@@ -125,7 +115,6 @@ val hyperLyricApplicationOnlySources = setOf(
 // Every generated upstream source must remain byte-for-byte identical unless this small,
 // audited set needs the current module's LSPosed service or preferences owner.
 val hyperLyricPortAdaptedSources = setOf(
-    "plugin/app/PluginRepository.kt",
     "root/HookEntry.kt",
     "root/UnlockIslandWhitelist.kt",
     "root/island/effects/album/IslandAlbumCoverStyleHooker.kt",
@@ -190,15 +179,6 @@ val generateHyperLyricPortSource = tasks.register<GeneratedHyperLyricSync>("gene
     from(hyperLyricOnlineSourceRoot) {
         include("**/*.kt")
     }
-    from(hyperLyricPluginApiPackageRoot) {
-        include("**/*.kt")
-        into("com/lidesheng/hyperlyric")
-    }
-    hyperLyricPluginModuleRoots.forEach { pluginModuleRoot ->
-        from(pluginModuleRoot) {
-            include("**/*.kt")
-        }
-    }
     doLast {
         val generatedRoot = hyperLyricGeneratedSourceDir.get().asFile
         val sourceRoot = hyperLyricSourceRoot.resolve("com/lidesheng/hyperlyric")
@@ -213,63 +193,7 @@ val generateHyperLyricPortSource = tasks.register<GeneratedHyperLyricSync>("gene
                         .filter { it.isFile && it.extension == "kt" }
                         .map { it.relativeTo(hyperLyricOnlineSourceRoot.resolve("com/lidesheng/hyperlyric")).invariantSeparatorsPath },
                 )
-                addAll(
-                    hyperLyricPluginApiPackageRoot.walkTopDown()
-                        .filter { it.isFile && it.extension == "kt" }
-                        .map { it.relativeTo(hyperLyricPluginApiPackageRoot).invariantSeparatorsPath },
-                )
-                hyperLyricPluginModuleRoots.forEach { pluginModuleRoot ->
-                    val packageRoot = pluginModuleRoot.resolve("com/lidesheng/hyperlyric")
-                    addAll(
-                        packageRoot.walkTopDown()
-                            .filter { it.isFile && it.extension == "kt" }
-                            .map { it.relativeTo(packageRoot).invariantSeparatorsPath },
-                    )
-                }
-                // The only local source in this module is the narrow LSPosed-service adapter used
-                // by the directly imported PluginRepository. It replaces RootApplication's app
-                // lifecycle binding without importing any upstream App settings or navigation.
-                add("root/PortXposedServiceBridge.kt")
             }
-        generatedRoot.resolve("com/lidesheng/hyperlyric/root/PortXposedServiceBridge.kt").apply {
-            parentFile.mkdirs()
-            writeText(
-                """package com.lidesheng.hyperlyric.root
-
-import io.github.libxposed.service.XposedService
-import io.github.libxposed.service.XposedServiceHelper
-import java.util.concurrent.CopyOnWriteArraySet
-
-/** Minimal replacement for RootApplication's App-process service holder. */
-object PortXposedServiceBridge {
-    private val services = CopyOnWriteArraySet<XposedService>()
-
-    @Volatile
-    private var started = false
-
-    fun serviceOrNull(): XposedService? {
-        if (!started) synchronized(this) {
-            if (!started) {
-                XposedServiceHelper.registerListener(
-                    object : XposedServiceHelper.OnServiceListener {
-                        override fun onServiceBind(service: XposedService) {
-                            services += service
-                        }
-
-                        override fun onServiceDied(service: XposedService) {
-                            services -= service
-                        }
-                    },
-                )
-                started = true
-            }
-        }
-        return services.firstOrNull()
-    }
-}
-""",
-            )
-        }
         val generatedSources = generatedRoot.resolve("com/lidesheng/hyperlyric").walkTopDown()
             .filter { it.isFile && it.extension == "kt" }
             .map { it.relativeTo(generatedRoot.resolve("com/lidesheng/hyperlyric")).invariantSeparatorsPath }
@@ -427,14 +351,6 @@ object PortXposedServiceBridge {
             .replace(runtimeField, runtimeField + portRuntimeField)
             .replace(companionClose, portBinding)
             .replace(
-                """            pluginRuntime = runCatching {
-                PluginRuntime(this, app).also { it.loadEnabledPlugins() }
-""",
-                """            pluginRuntime = runCatching {
-                PluginRuntime(portHostModule ?: this, app).also { it.loadEnabledPlugins() }
-""",
-            )
-            .replace(
                 """                SystemUIHookRegistry.hook(this@HookEntry, cl, lyricsOnly = lyricsOnly)
 """,
                 """                SystemUIHookRegistry.hook(portHostModule ?: this@HookEntry, cl, lyricsOnly = lyricsOnly)
@@ -499,9 +415,6 @@ object PortXposedServiceBridge {
         check(withPortRuntime.contains("preparePortRuntime(")) {
             "HyperLyric HookEntry port binding was not generated"
         }
-        check(withPortRuntime.contains("PluginRuntime(portHostModule ?: this, app)")) {
-            "HyperLyric PluginRuntime host binding changed"
-        }
         check(withPortRuntime.contains("SystemUIHookRegistry.hook(portHostModule ?: this@HookEntry")) {
             "HyperLyric ClassLoader hook host binding changed"
         }
@@ -547,22 +460,6 @@ object PortXposedServiceBridge {
             relativePath = "root/UnlockIslandWhitelist.kt",
             original = "val prefs = (module as? HookEntry)?.prefs ?: return",
             replacement = "val prefs = HookEntry.instance?.prefs ?: return",
-        )
-
-        val pluginRepository = generatedRoot.resolve(
-            "com/lidesheng/hyperlyric/plugin/app/PluginRepository.kt",
-        )
-        val originalPluginRepository = pluginRepository.readText()
-        val rootApplicationService =
-            "com.lidesheng.hyperlyric.root.RootApplication.xposedService"
-        check(originalPluginRepository.contains(rootApplicationService)) {
-            "HyperLyric PluginRepository service bridge changed"
-        }
-        pluginRepository.writeText(
-            originalPluginRepository.replace(
-                rootApplicationService,
-                "com.lidesheng.hyperlyric.root.PortXposedServiceBridge.serviceOrNull()",
-            ),
         )
 
         val logManager = generatedRoot.resolve("com/lidesheng/hyperlyric/utils/LogManager.kt")

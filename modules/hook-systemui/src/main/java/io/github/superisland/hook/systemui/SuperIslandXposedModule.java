@@ -1060,6 +1060,11 @@ public final class SuperIslandXposedModule extends XposedModule {
             Context pluginContext = getPluginContext(focusPlugin, pluginInstance);
             Context systemUiContext = getSystemUiContext(focusPlugin);
             ClassLoader pluginClassLoader = pluginContext.getClassLoader();
+            // HyperLyric owns island-slot injection. The Focus plugin is the real MIUI plugin
+            // loader on this HyperOS branch, so pass it through the upstream registry directly.
+            // Its own per-ClassLoader guard keeps this compatible with HookEntry's loader hook.
+            com.lidesheng.hyperlyric.root.island.hooks.SystemUIHookRegistry.INSTANCE.hook(
+                    this, pluginClassLoader, false);
             installFocusHooksIfPresent(pluginClassLoader, "MIUI SystemUI plugin loader");
             SystemUiFocusSupportBridge bridge =
                     installFocusSupportBridge(pluginClassLoader, systemUiContext);

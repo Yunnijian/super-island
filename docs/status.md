@@ -4,8 +4,8 @@
 
 ## 2026-08-24 HyperLyric 源码运行时接管
 
-- 固定上游 `5176e38834fbf712532a6db288ce6b0f0ba589fa` 的源码已作为
-  `:hyperlyric-port` 构建输入，包含 `root/island`、歌词源、插件 API/实现、服务和媒体卡片
+- 固定上游 GitHub Release `1937-7.2`（`618e500b6661ad5232092cd4599f5d47f2365d9c`）的源码已作为
+  `:hyperlyric-port` 构建输入，包含 `root/island`、歌词源、服务和媒体卡片
   运行时；不生成 HyperLyric 的设置页、导航、`MainActivity`、`RootApplication` 或任何 App UI
   源码。超级岛歌词继续使用本项目既有的 Miuix/Material 设置页，并写入上游原始 key。也不打包
   上游应用图标、示例封面、预览图、贡献者头像或上游 App 页面动画素材。只排除 Live Update 的
@@ -27,8 +27,14 @@
   `NoSuchMethodError` 或 `AbstractMethodError`。同一新进程还记录到
   `com.lidesheng.hyperlyric` 的 `SystemUIHookRegistry` 装载，故歌词岛视觉验收仍须排除
   该外部模块的并行 Hook 影响。
-- 上游 App 页面不在迁移范围，不会建立 `PrefsBridge`、`RootApplication` 或页面导航宿主化。
-  动态长度、标题、封面、律动、滚动、歌词分离与下拉状态栏性能仍待真机手动验收。
+- Release 后主线新增的插件 API/实现和 `PluginCacheResultProvider` 不属于该正式版，已不再生成或
+  注册。上游 App 页面不在迁移范围，不会建立 `PrefsBridge`、`RootApplication` 或页面导航宿主化。
+- 歌曲信息两行已在 `songyuan` 真机复验：Release 原始 `CurrentMediaInfoResolver` 将 SuperLyric
+  的包名事件用同包 MediaSession 补全；左槽 `title` 与 `remaining,progress_percent` 均由原始
+  `IslandMetadataContentAssembler` 提交并可见。`./scripts/check.sh` 通过（766 actionable tasks），
+  benchmark SHA-256 为 `706a284dcc673220e1ca01af10f9dcf84aa903e65e578501578b15b5c01c595f`；同一 APK
+  已覆盖安装，设备 base APK 哈希一致，SystemUI `16113 -> 25458`、XMSF `16390 -> 25883` 已重载，
+  重载后模块异常扫描为空。动态长度、封面、律动、滚动、歌词分离与下拉状态栏性能仍待真机手动验收。
 
 ## 2026-08-23 歌词配置与渲染回归
 

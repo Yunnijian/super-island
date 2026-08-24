@@ -5,6 +5,9 @@
 
 ## 当前证据入口
 
+- `artifacts/hyperlyric_release_song_info_20260824/`：HyperLyric GitHub Release `1937-7.2`
+  固定源码、完整 benchmark 门禁、设备 APK 身份核验、SystemUI/XMSF 重载、歌曲信息两行的
+  截图和脱敏异常扫描。
 - `artifacts/repository_restructure_2026-07-28/`：目录、模块、文档、PATH 收敛后的最终门禁
   与设备只读复核。
 - `artifacts/repository_cleanup_2026-07-28/`：整理前完整门禁与真机回归。
