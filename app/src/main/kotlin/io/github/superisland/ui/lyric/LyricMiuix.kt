@@ -25,6 +25,7 @@ import io.github.superisland.design.AppScaffold
 import io.github.superisland.design.LyricConfigurationMiuix
 import io.github.superisland.design.LyricConfigSection
 import io.github.superisland.design.LyricSectionEntryPageMiuix
+import io.github.superisland.design.MediaCardConfigurationPage
 import io.github.superisland.source.lyric.LyricIslandConfig
 import androidx.compose.foundation.verticalScroll
 
@@ -35,15 +36,24 @@ fun LyricMiuix(
     onBack: () -> Unit,
 ) {
     var section by remember { mutableStateOf<LyricConfigSection?>(null) }
-    val selected = section
-    BackHandler(enabled = selected != null) {
-        section = null
+    var mediaCardPage by remember { mutableStateOf(MediaCardConfigurationPage.DIRECTORY) }
+    val selected = LyricMiuixDestination(section, mediaCardPage)
+    fun returnFromCurrentPage() {
+        if (selected.section == LyricConfigSection.MEDIA_CARD &&
+            selected.mediaCardPage != MediaCardConfigurationPage.DIRECTORY
+        ) {
+            mediaCardPage = MediaCardConfigurationPage.DIRECTORY
+        } else {
+            section = null
+            mediaCardPage = MediaCardConfigurationPage.DIRECTORY
+        }
     }
+    BackHandler(enabled = selected.section != null) { returnFromCurrentPage() }
     AppScaffold(
-        title = selected?.title ?: "超级岛歌词",
-        largeTitle = selected?.title ?: "超级岛歌词",
+        title = selected.title,
+        largeTitle = selected.title,
         subtitle = "",
-        onBack = { if (selected == null) onBack() else section = null },
+        onBack = { if (selected.section == null) onBack() else returnFromCurrentPage() },
     ) { paddingValues ->
         AnimatedContent(
             targetState = selected,
@@ -53,7 +63,7 @@ fun LyricMiuix(
             },
             label = "歌词配置页面切换",
         ) { page ->
-        if (page == null) {
+        if (page.section == null) {
             Column(
                 modifier = Modifier
                     .fillMaxSize()
@@ -71,7 +81,12 @@ fun LyricMiuix(
                 LyricSectionEntryPageMiuix(
                     config = config,
                     enabled = config.enabled,
-                    onSectionSelected = { section = it },
+                    onSectionSelected = {
+                        section = it
+                        if (it == LyricConfigSection.MEDIA_CARD) {
+                            mediaCardPage = MediaCardConfigurationPage.DIRECTORY
+                        }
+                    },
                 )
             }
         } else {
@@ -79,19 +94,31 @@ fun LyricMiuix(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(paddingValues)
-                    .padding(horizontal = if (page == LyricConfigSection.SOURCE) 0.dp else 18.dp, vertical = 12.dp)
-                    .alpha(if (config.enabled) 1f else 0.55f),
+                    .padding(horizontal = if (page.section == LyricConfigSection.SOURCE) 0.dp else 18.dp, vertical = 12.dp)
+                    .alpha(if (config.enabled || page.section == LyricConfigSection.MEDIA_CARD) 1f else 0.55f),
             ) {
                 LyricConfigurationMiuix(
                     config = config,
                     onConfigChange = onConfigChange,
-                    section = page,
-                    enabled = config.enabled,
+                    section = page.section,
+                    enabled = config.enabled || page.section == LyricConfigSection.MEDIA_CARD,
+                    mediaCardPage = page.mediaCardPage,
+                    onMediaCardPageChange = { mediaCardPage = it },
                 )
             }
         }
         }
     }
+}
+
+private data class LyricMiuixDestination(
+    val section: LyricConfigSection?,
+    val mediaCardPage: MediaCardConfigurationPage = MediaCardConfigurationPage.DIRECTORY,
+) {
+    val title: String
+        get() =
+            if (section == LyricConfigSection.MEDIA_CARD) mediaCardPage.title
+            else section?.title ?: "超级岛歌词"
 }
 
 /** Compatibility overload for callers compiled before the rich config screen. */

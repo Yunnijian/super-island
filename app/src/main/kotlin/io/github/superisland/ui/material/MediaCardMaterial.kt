@@ -1,15 +1,10 @@
 package io.github.superisland.ui.material
 
-import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material3.Icon
@@ -25,13 +20,12 @@ import io.github.superisland.source.lyric.IslandExpandedMediaCardConfig
 import io.github.superisland.source.lyric.LyricIslandConfig
 import io.github.superisland.source.lyric.MediaCardConstants
 import io.github.superisland.source.lyric.NotificationMediaCardConfig
+import io.github.superisland.design.MediaCardConfigurationPage
 import kotlin.math.roundToInt
 import me.weishu.kernelsu.ui.component.material.SegmentedColumn
 import me.weishu.kernelsu.ui.component.material.SegmentedDropdownItem
 import me.weishu.kernelsu.ui.component.material.SegmentedListItem
 import me.weishu.kernelsu.ui.component.material.SegmentedSwitchItem
-
-private enum class MediaCardMaterialGroup { NOTIFICATION, ISLAND_EXPANDED, AOD }
 
 private val mediaLayoutLabels = listOf(
     "系统默认",
@@ -81,46 +75,51 @@ private val mediaActionOrderValues = listOf(
 @Composable
 internal fun MediaCardConfigurationMaterial(
     config: LyricIslandConfig,
-    enabled: Boolean,
+    page: MediaCardConfigurationPage,
+    onPageChange: (MediaCardConfigurationPage) -> Unit,
     onConfigChange: (LyricIslandConfig) -> Unit,
 ) {
-    var group by remember { mutableStateOf<MediaCardMaterialGroup?>(null) }
-    BackHandler(enabled = group != null) { group = null }
-    val set: (LyricIslandConfig) -> Unit = { if (enabled) onConfigChange(it.normalized()) }
+    val set: (LyricIslandConfig) -> Unit = { onConfigChange(it.normalized()) }
     Column(
         modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        when (group) {
-            null -> MediaCardDirectoryMaterial(config, enabled, set, onOpenGroup = { group = it })
-            MediaCardMaterialGroup.NOTIFICATION -> {
+        when (page) {
+            MediaCardConfigurationPage.DIRECTORY ->
+                MediaCardDirectoryMaterial(
+                    config = config,
+                    enabled = true,
+                    onConfigChange = set,
+                    onOpenGroup = onPageChange,
+                )
+            MediaCardConfigurationPage.NOTIFICATION -> {
                 MediaNotificationPreview(config.mediaCard.notification)
                 MediaNotificationMaterial(
                     value = config.mediaCard.notification,
-                    enabled = enabled,
+                    enabled = true,
                     onChange = { value ->
                         set(config.copy(mediaCard = config.mediaCard.copy(notification = value)))
                     },
                 )
             }
-            MediaCardMaterialGroup.ISLAND_EXPANDED -> {
+            MediaCardConfigurationPage.ISLAND_EXPANDED -> {
                 MediaIslandPreview(config.mediaCard.islandExpanded)
                 MediaIslandMaterial(
                     value = config.mediaCard.islandExpanded,
-                    enabled = enabled,
+                    enabled = true,
                     onChange = { value ->
                         set(config.copy(mediaCard = config.mediaCard.copy(islandExpanded = value)))
                     },
                 )
             }
-            MediaCardMaterialGroup.AOD -> SegmentedColumn(
+            MediaCardConfigurationPage.AOD -> SegmentedColumn(
                 modifier = Modifier.fillMaxWidth(),
                 content = listOf(
                     {
                         MediaCardSwitch(
                             title = "禁用媒体卡片折叠",
                             checked = config.mediaCard.alwaysOnDisplay.disableMediaCardCollapsing,
-                            enabled = enabled,
+                            enabled = true,
                         ) { value ->
                             set(
                                 config.copy(
@@ -199,15 +198,15 @@ private fun MediaCardDirectoryMaterial(
     config: LyricIslandConfig,
     enabled: Boolean,
     onConfigChange: (LyricIslandConfig) -> Unit,
-    onOpenGroup: (MediaCardMaterialGroup) -> Unit,
+    onOpenGroup: (MediaCardConfigurationPage) -> Unit,
 ) {
     val notification = config.mediaCard.notification
     SegmentedColumn(
         modifier = Modifier.fillMaxWidth(),
         content = listOf(
-            { MediaCardEntry("通知中心", enabled) { onOpenGroup(MediaCardMaterialGroup.NOTIFICATION) } },
-            { MediaCardEntry("超级岛", enabled) { onOpenGroup(MediaCardMaterialGroup.ISLAND_EXPANDED) } },
-            { MediaCardEntry("息屏显示", enabled) { onOpenGroup(MediaCardMaterialGroup.AOD) } },
+            { MediaCardEntry("通知中心", enabled) { onOpenGroup(MediaCardConfigurationPage.NOTIFICATION) } },
+            { MediaCardEntry("超级岛", enabled) { onOpenGroup(MediaCardConfigurationPage.ISLAND_EXPANDED) } },
+            { MediaCardEntry("息屏显示", enabled) { onOpenGroup(MediaCardConfigurationPage.AOD) } },
         ),
     )
     SegmentedColumn(

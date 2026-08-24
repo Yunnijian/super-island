@@ -323,14 +323,14 @@ fun LyricSectionEntryPageMiuix(
             if (summary == null) {
                 ArrowPreference(
                     title = section.title,
-                    enabled = enabled,
+                    enabled = enabled || section == LyricConfigSection.MEDIA_CARD,
                     onClick = { onSectionSelected(section) },
                 )
             } else {
                 ArrowPreference(
                     title = section.title,
                     summary = summary,
-                    enabled = enabled,
+                    enabled = enabled || section == LyricConfigSection.MEDIA_CARD,
                     onClick = { onSectionSelected(section) },
                 )
             }
@@ -367,6 +367,8 @@ fun LyricConfigurationMiuix(
     onConfigChange: (LyricIslandConfig) -> Unit,
     section: LyricConfigSection? = null,
     enabled: Boolean = true,
+    mediaCardPage: MediaCardConfigurationPage = MediaCardConfigurationPage.DIRECTORY,
+    onMediaCardPageChange: (MediaCardConfigurationPage) -> Unit = {},
 ) {
     // Keep the detail page readable while making every mutation obey the feature master switch.
     // The caller still owns persistence/rollback; this guard prevents disabled edits from reaching
@@ -453,7 +455,8 @@ fun LyricConfigurationMiuix(
         if (section == LyricConfigSection.MEDIA_CARD) {
             MediaCardConfigurationMiuix(
                 config = config,
-                enabled = enabled,
+                page = mediaCardPage,
+                onPageChange = onMediaCardPageChange,
                 onConfigChange = set,
             )
         }

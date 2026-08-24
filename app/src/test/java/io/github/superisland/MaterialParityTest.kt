@@ -321,6 +321,56 @@ class MaterialParityTest {
                 )
             }
         }
+
+        assertTrue(
+            "Miuix resident settings must become unavailable with the resident master switch",
+            Regex("""enabled\s*=\s*featureEnabled""").findAll(miuixBlock).count() >= 6,
+        )
+        assertTrue(
+            "Material resident settings must become unavailable with the resident master switch",
+            Regex("""enabled\s*=\s*featureEnabled""").findAll(materialBlock).count() >= 3 &&
+                "featureEnabled && leftIconOptions.isNotEmpty()" in materialBlock &&
+                "featureEnabled && rightIconOptions.isNotEmpty()" in materialBlock,
+        )
+    }
+
+    @Test
+    fun mediaCardsAreIndependentFromLyricPublishingAndOwnNestedBackNavigation() {
+        val miuix = sourceFile("app/src/main/kotlin/io/github/superisland/ui/lyric/LyricMiuix.kt").readText()
+        val material = sourceFile("app/src/main/kotlin/io/github/superisland/ui/material/LyricMaterial.kt").readText()
+        val miuixDirectory = sourceFile("modules/ui-design-system/src/main/kotlin/io/github/superisland/design/LyricConfiguration.kt").readText()
+        val miuixMedia = sourceFile("modules/ui-design-system/src/main/kotlin/io/github/superisland/design/MediaCardConfigurationMiuix.kt").readText()
+        val materialMedia = sourceFile("app/src/main/kotlin/io/github/superisland/ui/material/MediaCardMaterial.kt").readText()
+
+        listOf("Miuix" to miuix, "Material" to material).forEach { (skin, source) ->
+            assertTrue(
+                "$skin must route a media-card child page through the lyric page transition",
+                "mediaCardPage" in source && "AnimatedContent(" in source,
+            )
+            assertTrue(
+                "$skin back navigation must return a media-card child to its directory first",
+                "mediaCardPage != MediaCardConfigurationPage.DIRECTORY" in source &&
+                    "mediaCardPage = MediaCardConfigurationPage.DIRECTORY" in source,
+            )
+        }
+        assertTrue(
+            "Miuix media-card entry must stay enabled while lyric publishing is disabled",
+            "enabled = enabled || section == LyricConfigSection.MEDIA_CARD" in miuixDirectory,
+        )
+        assertTrue(
+            "Material media-card entry must stay enabled while lyric publishing is disabled",
+            "enabled = enabled || section == LyricConfigSection.MEDIA_CARD" in material,
+        )
+        listOf("Miuix" to miuixMedia, "Material" to materialMedia).forEach { (skin, source) ->
+            assertFalse(
+                "$skin media-card configuration must not keep a local child-page back stack",
+                "BackHandler(enabled = group != null)" in source,
+            )
+            assertTrue(
+                "$skin media-card configuration must receive the lyric-owned child page",
+                "MediaCardConfigurationPage" in source,
+            )
+        }
     }
 
     @Test

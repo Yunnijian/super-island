@@ -2,6 +2,24 @@
 
 更新时间：2026-08-24
 
+## 2026-08-24 媒体卡片设置页导航与独立开关
+
+- 媒体卡片的通知中心、超级岛和息屏显示子页现在由超级岛歌词页面统一持有路由状态。
+  两套皮肤均复用现有歌词设置页的淡入/水平位移动画；顶栏返回和系统手势会先回到
+  “媒体卡片”目录，再离开该功能，不会直接回到“超级岛歌词”目录。
+- 媒体卡片入口及其全部配置不再依赖“启用超级岛歌词”。歌词发布关闭时，媒体卡片仍可
+  进入、编辑并持久化。常驻超级岛配置页则以 `ResidentMonitorConfig.enabled` 作为唯一总
+  开关：关闭时两套皮肤的图标、内容、刷新间隔与展开内容控件均灰显且不可操作。
+- 本轮 `./scripts/check.sh` 通过（767 actionable tasks），固定上游校验、单元测试、lint、
+  Debug 与 benchmark 构建均完成。benchmark APK SHA-256：
+  `0fb5f648411d30f292fb780cb8a66389d0c5e50b88d9ee7c8ab02c2182b52b96`。该 APK 已于
+  2026-08-24 20:37:09 CST 覆盖安装至 `songyuan` / `1e7b9e0b`，设备 base APK 哈希一致；
+  SystemUI `20231 -> 5701` 已重载，XMSF 保持 `20776/20890`。新 SystemUI 日志确认本模块
+  的上游 `HookEntry`、`SystemUIHookRegistry` 和 `SuperLyric` source 已装载，未发现本模块
+  关联的 `FATAL EXCEPTION`、`NoSuchMethodError` 或 `AbstractMethodError`。媒体卡片子页
+  转场、顶栏/手势逐级返回、歌词关闭后的独立入口，以及常驻配置禁用态仍须按双皮肤真机
+  点击验收。
+
 ## 2026-08-24 HyperLyric 源码运行时接管
 
 - 固定上游 GitHub Release `1937-7.2`（`618e500b6661ad5232092cd4599f5d47f2365d9c`）的源码已作为

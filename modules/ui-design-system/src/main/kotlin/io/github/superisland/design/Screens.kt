@@ -168,6 +168,7 @@ fun ResidentMonitorConfigurationScreen(
                     summary = "默认图标随左侧岛标题变化",
                     items = leftIconOptions.map(ResidentSlotOptionUi::title),
                     selectedIndex = leftIconOptions.indexOfFirst { it.selected }.coerceAtLeast(0),
+                    enabled = featureEnabled,
                     onSelectedIndexChange = { index -> onSelectLeftIcon(leftIconOptions[index].id) },
                 )
                 OverlayDropdownPreference(
@@ -175,6 +176,7 @@ fun ResidentMonitorConfigurationScreen(
                     summary = "默认图标随右侧岛标题变化",
                     items = rightIconOptions.map(ResidentSlotOptionUi::title),
                     selectedIndex = rightIconOptions.indexOfFirst { it.selected }.coerceAtLeast(0),
+                    enabled = featureEnabled,
                     onSelectedIndexChange = { index -> onSelectRightIcon(rightIconOptions[index].id) },
                 )
             }
@@ -188,6 +190,7 @@ fun ResidentMonitorConfigurationScreen(
                     summary = "设置超级岛左侧显示的实时指标",
                     items = leftTitleOptions.map(ResidentMetricOptionUi::title),
                     selectedIndex = leftTitleOptions.indexOfFirst { it.selected }.coerceAtLeast(0),
+                    enabled = featureEnabled,
                     onSelectedIndexChange = { index -> onSelectLeftTitle(leftTitleOptions[index].id) },
                 )
                 OverlayDropdownPreference(
@@ -195,6 +198,7 @@ fun ResidentMonitorConfigurationScreen(
                     summary = "设置超级岛右侧显示的实时指标",
                     items = rightTitleOptions.map(ResidentMetricOptionUi::title),
                     selectedIndex = rightTitleOptions.indexOfFirst { it.selected }.coerceAtLeast(0),
+                    enabled = featureEnabled,
                     onSelectedIndexChange = { index -> onSelectRightTitle(rightTitleOptions[index].id) },
                 )
                 SliderPreference(
@@ -209,10 +213,12 @@ fun ResidentMonitorConfigurationScreen(
                     summary = "$refreshIntervalDraft 秒；间隔越短耗电越高",
                     valueRange = 1f..60f,
                     steps = 58,
+                    enabled = featureEnabled,
                 )
                 ArrowPreference(
                     title = "展开内容",
                     summary = "设置常驻胶囊展开后显示的详细信息",
+                    enabled = featureEnabled,
                     onClick = onOpenExpandedContent,
                 )
             }

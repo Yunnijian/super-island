@@ -670,7 +670,7 @@ fun MaterialResidentMonitorConfigurationScreen(
                             summary = "默认图标随左侧岛标题变化",
                             items = leftIconOptions.map(ResidentSlotOptionUi::title),
                             selectedIndex = leftIconOptions.indexOfFirst { it.selected }.coerceAtLeast(0),
-                            enabled = leftIconOptions.isNotEmpty(),
+                            enabled = featureEnabled && leftIconOptions.isNotEmpty(),
                             onItemSelected = { index ->
                                 leftIconOptions.getOrNull(index)?.let { onSelectLeftIcon(it.id) }
                             },
@@ -682,7 +682,7 @@ fun MaterialResidentMonitorConfigurationScreen(
                             summary = "默认图标随右侧岛标题变化",
                             items = rightIconOptions.map(ResidentSlotOptionUi::title),
                             selectedIndex = rightIconOptions.indexOfFirst { it.selected }.coerceAtLeast(0),
-                            enabled = rightIconOptions.isNotEmpty(),
+                            enabled = featureEnabled && rightIconOptions.isNotEmpty(),
                             onItemSelected = { index ->
                                 rightIconOptions.getOrNull(index)?.let { onSelectRightIcon(it.id) }
                             },
@@ -701,7 +701,7 @@ fun MaterialResidentMonitorConfigurationScreen(
                             summary = "设置超级岛左侧显示的实时指标",
                             items = leftTitleOptions.map(ResidentMetricOptionUi::title),
                             selectedIndex = leftTitleOptions.indexOfFirst { it.selected }.coerceAtLeast(0),
-                            enabled = leftTitleOptions.isNotEmpty(),
+                            enabled = featureEnabled && leftTitleOptions.isNotEmpty(),
                             onItemSelected = { index ->
                                 leftTitleOptions.getOrNull(index)?.let { onSelectLeftTitle(it.id) }
                             },
@@ -713,7 +713,7 @@ fun MaterialResidentMonitorConfigurationScreen(
                             summary = "设置超级岛右侧显示的实时指标",
                             items = rightTitleOptions.map(ResidentMetricOptionUi::title),
                             selectedIndex = rightTitleOptions.indexOfFirst { it.selected }.coerceAtLeast(0),
-                            enabled = rightTitleOptions.isNotEmpty(),
+                            enabled = featureEnabled && rightTitleOptions.isNotEmpty(),
                             onItemSelected = { index ->
                                 rightTitleOptions.getOrNull(index)?.let { onSelectRightTitle(it.id) }
                             },
@@ -721,6 +721,7 @@ fun MaterialResidentMonitorConfigurationScreen(
                     },
                     {
                         SegmentedListItem(
+                            enabled = featureEnabled,
                             headlineContent = { Text("标题刷新间隔") },
                             supportingContent = {
                                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -735,6 +736,7 @@ fun MaterialResidentMonitorConfigurationScreen(
                                         },
                                         valueRange = 1f..60f,
                                         steps = 58,
+                                        enabled = featureEnabled,
                                         modifier = Modifier.fillMaxWidth(),
                                     )
                                 }
@@ -744,6 +746,7 @@ fun MaterialResidentMonitorConfigurationScreen(
                     {
                         SegmentedListItem(
                             onClick = onOpenExpandedContent,
+                            enabled = featureEnabled,
                             headlineContent = { Text("展开内容") },
                             supportingContent = { Text("设置常驻胶囊展开后显示的详细信息") },
                             trailingContent = {

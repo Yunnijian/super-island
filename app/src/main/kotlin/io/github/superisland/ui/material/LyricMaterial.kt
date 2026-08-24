@@ -76,6 +76,7 @@ import io.github.superisland.source.lyric.LyricSourceMode
 import io.github.superisland.design.displaySummary
 import io.github.superisland.design.LyricSupportApp
 import io.github.superisland.design.LyricConfigSection
+import io.github.superisland.design.MediaCardConfigurationPage
 import io.github.superisland.design.rememberLyricSupportSnapshot
 import io.github.superisland.design.rememberLyricSupportAppIcon
 import io.github.superisland.design.sourcePromptSummary
@@ -284,10 +285,19 @@ private fun contentModeAt(index: Int, fallback: IslandContentMode): IslandConten
 @Composable
 fun LyricMaterial(config: LyricIslandConfig, onConfigChange: (LyricIslandConfig) -> Unit, onBack: () -> Unit) {
     var section by remember { mutableStateOf<LyricConfigSection?>(null) }
-    val selected = section
-    BackHandler(enabled = selected != null) {
-        section = null
+    var mediaCardPage by remember { mutableStateOf(MediaCardConfigurationPage.DIRECTORY) }
+    val selected = LyricMaterialDestination(section, mediaCardPage)
+    fun returnFromCurrentPage() {
+        if (selected.section == LyricConfigSection.MEDIA_CARD &&
+            selected.mediaCardPage != MediaCardConfigurationPage.DIRECTORY
+        ) {
+            mediaCardPage = MediaCardConfigurationPage.DIRECTORY
+        } else {
+            section = null
+            mediaCardPage = MediaCardConfigurationPage.DIRECTORY
+        }
     }
+    BackHandler(enabled = selected.section != null) { returnFromCurrentPage() }
     AnimatedContent(
         targetState = selected,
         transitionSpec = {
@@ -296,21 +306,28 @@ fun LyricMaterial(config: LyricIslandConfig, onConfigChange: (LyricIslandConfig)
         },
         label = "歌词配置页面切换",
     ) { page ->
-    if (page == null) {
+    if (page.section == null) {
         LyricMaterialDirectory(
             config = config,
             enabled = config.enabled,
             onEnabledChange = { onConfigChange(config.withEnabled(it)) },
             onConfigChange = onConfigChange,
-            onOpenSection = { section = it },
+            onOpenSection = {
+                section = it
+                if (it == LyricConfigSection.MEDIA_CARD) {
+                    mediaCardPage = MediaCardConfigurationPage.DIRECTORY
+                }
+            },
             onBack = onBack,
         )
     } else {
         LyricMaterialDetail(
             config = config,
             onConfigChange = onConfigChange,
-            section = page,
-            onBack = { section = null },
+            section = page.section,
+            mediaCardPage = page.mediaCardPage,
+            onMediaCardPageChange = { mediaCardPage = it },
+            onBack = ::returnFromCurrentPage,
         )
     }
     }
@@ -322,10 +339,13 @@ private fun LyricMaterialDetail(
     config: LyricIslandConfig,
     onConfigChange: (LyricIslandConfig) -> Unit,
     section: LyricConfigSection,
+    mediaCardPage: MediaCardConfigurationPage,
+    onMediaCardPageChange: (MediaCardConfigurationPage) -> Unit,
     onBack: () -> Unit,
 ) {
     val behavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
-    val set: (LyricIslandConfig) -> Unit = { if (config.enabled) onConfigChange(it.normalized()) }
+    val controlsEnabled = config.enabled || section == LyricConfigSection.MEDIA_CARD
+    val set: (LyricIslandConfig) -> Unit = { if (controlsEnabled) onConfigChange(it.normalized()) }
     val support = rememberLyricSupportSnapshot()
     var showFontDialog by remember { mutableStateOf(false) }
     var fontPath by remember(config.customFontPath) { mutableStateOf(config.customFontPath) }
@@ -396,7 +416,11 @@ private fun LyricMaterialDetail(
     ExpressiveScaffold(
         topBar = {
             LargeFlexibleTopAppBar(
-                title = { Text(section.title) },
+                title = {
+                    Text(
+                        if (section == LyricConfigSection.MEDIA_CARD) mediaCardPage.title else section.title,
+                    )
+                },
                 navigationIcon = {
                     TopBarBackButton(onClick = onBack, contentDescription = "返回")
                 },
@@ -407,7 +431,7 @@ private fun LyricMaterialDetail(
         },
         contentWindowInsets = WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal),
     ) { padding ->
-        CompositionLocalProvider(LocalLyricControlsEnabled provides config.enabled) {
+        CompositionLocalProvider(LocalLyricControlsEnabled provides controlsEnabled) {
         LazyColumn(
             Modifier
                 .fillMaxSize()
@@ -421,8 +445,9 @@ private fun LyricMaterialDetail(
                 item {
                     MediaCardConfigurationMaterial(
                         config = config,
-                        enabled = config.enabled,
-                        onConfigChange = set,
+                        page = mediaCardPage,
+                        onPageChange = onMediaCardPageChange,
+                        onConfigChange = onConfigChange,
                     )
                 }
             }
@@ -799,6 +824,11 @@ private fun LyricMaterialDetail(
     }
 }
 
+private data class LyricMaterialDestination(
+    val section: LyricConfigSection?,
+    val mediaCardPage: MediaCardConfigurationPage = MediaCardConfigurationPage.DIRECTORY,
+)
+
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun LyricMaterialDirectory(
@@ -858,7 +888,7 @@ private fun LyricMaterialDirectory(
                     {
                         SegmentedListItem(
                             onClick = { onOpenSection(section) },
-                            enabled = enabled,
+                            enabled = enabled || section == LyricConfigSection.MEDIA_CARD,
                             headlineContent = { Text(section.title) },
                             supportingContent = lyricSectionSummary(section, config)?.let { summary ->
                                 { Text(summary) }

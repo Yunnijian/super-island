@@ -1446,7 +1446,7 @@ private fun ResidentMonitorSettings(
                     )
                 }
             ResidentMonitorConfigurationScreen(
-                featureEnabled = dashboardState.monitoringActive,
+                featureEnabled = residentConfig.enabled,
                 leftIconOptions = iconOptions(residentConfig.leftIcon, "左"),
                 rightIconOptions = iconOptions(residentConfig.rightIcon, "右"),
                 leftTitleOptions = titleOptions(residentConfig.leftTitleMetric),
@@ -1959,7 +1959,7 @@ private fun BatteryMonitor(
                     )
                 }
             ResidentMonitorConfigurationScreen(
-                featureEnabled = monitoringActive,
+                featureEnabled = residentConfig.enabled,
                 leftIconOptions = iconOptions(residentConfig.leftIcon, "左"),
                 rightIconOptions = iconOptions(residentConfig.rightIcon, "右"),
                 leftTitleOptions = titleOptions(residentConfig.leftTitleMetric),
