@@ -509,6 +509,7 @@ private fun SuperIslandMainPager(
                                 onOpenSmartCapsule = { onOpenDestination(AppDestination.SMART_CAPSULE_APPS) },
                                 onOpenBatteryMonitor = { onOpenDestination(AppDestination.BATTERY_CONFIGURATION) },
                                 onOpenCapsuleAppearance = { onOpenDestination(AppDestination.CAPSULE_APPEARANCE) },
+                                onOpenLyric = { onOpenDestination(AppDestination.LYRIC) },
                                 showBottomBar = false,
                                 bottomInnerPadding = bottomInnerPadding,
                             )

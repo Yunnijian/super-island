@@ -15,7 +15,7 @@ fun superIslandDirectoryGroups(): List<DirectoryGroupUi> =
                     DirectoryEntryUi("smart_capsule", "超级岛通知", "将你允许的应用通知显示到超级岛", DirectoryIcon.NOTIFICATION, showChevron = false),
                     DirectoryEntryUi(
                         "lyric",
-                        "小米超级岛歌词",
+                        "超级岛歌词",
                         "仅支持已安装LSPosed v2.0的HyperOS 3设备",
                         DirectoryIcon.MEDIA,
                         showChevron = false,

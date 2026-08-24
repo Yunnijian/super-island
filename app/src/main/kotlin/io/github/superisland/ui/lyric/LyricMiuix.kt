@@ -1,6 +1,7 @@
 package io.github.superisland.ui.lyric
 
 import androidx.compose.foundation.layout.Column
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -34,9 +35,12 @@ fun LyricMiuix(
 ) {
     var section by remember { mutableStateOf<LyricConfigSection?>(null) }
     val selected = section
+    BackHandler(enabled = selected != null) {
+        section = null
+    }
     AppScaffold(
-        title = selected?.title ?: "小米超级岛歌词",
-        largeTitle = selected?.title ?: "小米超级岛歌词",
+        title = selected?.title ?: "超级岛歌词",
+        largeTitle = selected?.title ?: "超级岛歌词",
         subtitle = "",
         onBack = { if (selected == null) onBack() else section = null },
     ) { paddingValues ->

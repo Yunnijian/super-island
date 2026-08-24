@@ -3,16 +3,16 @@ package io.github.superisland.source.lyric.hyperlyric.common
 object SuperIslandWidthPolicy {
     const val SIDE_COMPONENT_WIDTH_DP = 22
     const val MIN_ISLAND_WIDTH_DP = 22
-    const val MAX_SIDE_WIDTH_DP = 170
-    const val SYSTEM_LIMITED_MAX_SIDE_WIDTH_DP = 114
+    const val MAX_SIDE_WIDTH_DP = 120
 
     fun minIslandWidth(showAlbum: Boolean, showRhythm: Boolean): Int =
         (componentWidth(showAlbum) - componentWidth(showRhythm))
             .coerceAtLeast(MIN_ISLAND_WIDTH_DP)
 
-    fun maxIslandWidth(showRhythm: Boolean, disableWidthLimit: Boolean): Int =
-        (if (disableWidthLimit) MAX_SIDE_WIDTH_DP else SYSTEM_LIMITED_MAX_SIDE_WIDTH_DP) -
-                componentWidth(showRhythm)
+    fun maxIslandWidth(
+        showRhythm: Boolean,
+        @Suppress("UNUSED_PARAMETER") disableWidthLimit: Boolean,
+    ): Int = MAX_SIDE_WIDTH_DP - componentWidth(showRhythm)
 
     fun normalizeIslandWidth(
         islandWidth: Int,

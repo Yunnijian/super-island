@@ -241,10 +241,22 @@ class LyricIslandConfigCodecTest {
         ).normalized()
 
         assertEquals(2, normalized.albumCoverStyle)
-        assertEquals(92, normalized.rightContentMaxWidth)
+        assertEquals(98, normalized.rightContentMaxWidth)
         assertEquals(22, normalized.dynamicMinWidth)
-        assertEquals(92, normalized.dynamicMaxWidth)
-        assertEquals(170, LyricIslandWidthPolicy.maxIslandWidth(showRhythm = false, disableWidthLimit = true))
+        assertEquals(98, normalized.dynamicMaxWidth)
+        assertEquals(120, LyricIslandWidthPolicy.maxIslandWidth(showRhythm = false, disableWidthLimit = true))
+        assertEquals(
+            120,
+            io.github.superisland.source.lyric.hyperlyric.common.SuperIslandWidthPolicy
+                .maxIslandWidth(showRhythm = false, disableWidthLimit = true),
+        )
+
+        val wordMotion = LyricIslandConfig(
+            wordMotionCjkWave = 20f,
+            wordMotionLatinWave = 20f,
+        ).normalized()
+        assertEquals(10f, wordMotion.wordMotionCjkWave)
+        assertEquals(10f, wordMotion.wordMotionLatinWave)
     }
 
     @Test

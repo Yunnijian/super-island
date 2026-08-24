@@ -150,8 +150,7 @@ object LyricMusicInfoLayout {
 object LyricIslandWidthPolicy {
     const val SIDE_COMPONENT_WIDTH_DP = 22
     const val MIN_ISLAND_WIDTH_DP = 22
-    const val MAX_SIDE_WIDTH_DP = 170
-    const val SYSTEM_LIMITED_MAX_SIDE_WIDTH_DP = 114
+    const val MAX_SIDE_WIDTH_DP = 120
 
     fun isAlbumCoverVisible(style: Int): Boolean = style != LyricAlbumCoverStyle.HIDDEN
 
@@ -161,9 +160,10 @@ object LyricIslandWidthPolicy {
         (componentWidth(showAlbum) - componentWidth(showRhythm))
             .coerceAtLeast(MIN_ISLAND_WIDTH_DP)
 
-    fun maxIslandWidth(showRhythm: Boolean, disableWidthLimit: Boolean): Int =
-        (if (disableWidthLimit) MAX_SIDE_WIDTH_DP else SYSTEM_LIMITED_MAX_SIDE_WIDTH_DP) -
-            componentWidth(showRhythm)
+    fun maxIslandWidth(
+        showRhythm: Boolean,
+        @Suppress("UNUSED_PARAMETER") disableWidthLimit: Boolean,
+    ): Int = MAX_SIDE_WIDTH_DP - componentWidth(showRhythm)
 
     fun normalizeIslandWidth(
         width: Int,
@@ -383,9 +383,9 @@ data class LyricIslandConfig(
             // Super Island lyric scope. Retire a persisted legacy value without rejecting it.
             autoSwitchTranslation = false,
             wordMotionCjkLift = wordMotionCjkLift.takeIf { it.isFinite() }?.coerceIn(0f, 0.2f) ?: 0.05f,
-            wordMotionCjkWave = wordMotionCjkWave.takeIf { it.isFinite() }?.coerceIn(0f, 8f) ?: 2.8f,
+            wordMotionCjkWave = wordMotionCjkWave.takeIf { it.isFinite() }?.coerceIn(0f, 10f) ?: 2.8f,
             wordMotionLatinLift = wordMotionLatinLift.takeIf { it.isFinite() }?.coerceIn(0f, 0.2f) ?: 0.08f,
-            wordMotionLatinWave = wordMotionLatinWave.takeIf { it.isFinite() }?.coerceIn(0f, 8f) ?: 2.0f,
+            wordMotionLatinWave = wordMotionLatinWave.takeIf { it.isFinite() }?.coerceIn(0f, 10f) ?: 2.0f,
             customFontPath = customFontPath.take(512),
             animId = animId.takeIf { it.isNotBlank() }?.take(64) ?: "default",
             // HyperLyric accepts -50..100 in the editor; the SystemUI geometry layer clamps
