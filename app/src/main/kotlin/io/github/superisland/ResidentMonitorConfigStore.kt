@@ -2,6 +2,7 @@ package io.github.superisland
 
 import android.content.Context
 import android.content.SharedPreferences
+import android.util.Log
 import androidx.core.content.edit
 import io.github.superisland.model.ResidentExpandedContentMode
 import io.github.superisland.model.ResidentExpandedContentTemplate
@@ -97,9 +98,35 @@ class ResidentMonitorConfigStore(context: Context) {
     }
 
     fun save(config: ResidentMonitorConfig): Result<Unit> {
-        if (!config.hasValidCustomContent()) {
-            return Result.failure(IllegalArgumentException("Custom expanded content must be non-blank and valid"))
+        val normalized =
+            prepareForPersistence(config)
+                ?: return Result.failure(IllegalArgumentException("Custom expanded content must be non-blank and valid"))
+        persist(normalized)
+        // This repository is the single owner of the cross-process mirror. Callers that need an
+        // activation result can consume it; ordinary edits may rely on the reconnect retry path.
+        return ResidentIslandHostConfigSync.sync(normalized)
+    }
+
+    /**
+     * Persists [config] locally and offloads the cross-process SystemUI mirror sync to the
+     * background work queue, so interactive setting toggles never block the UI thread on the
+     * RemotePreferences commit or the host reload Binder round-trip. Returns true when the local
+     * write was accepted; the remote mirror is applied asynchronously and retried through the
+     * LSPosed reconnect path if it fails.
+     */
+    fun saveAsync(config: ResidentMonitorConfig): Boolean {
+        val normalized = prepareForPersistence(config) ?: return false
+        persist(normalized)
+        AppBackgroundWork.execute {
+            ResidentIslandHostConfigSync.sync(normalized).onFailure { error ->
+                Log.w(TAG, "Resident-island settings will retry when the LSPosed service reconnects", error)
+            }
         }
+        return true
+    }
+
+    private fun prepareForPersistence(config: ResidentMonitorConfig): ResidentMonitorConfig? {
+        if (!config.hasValidCustomContent()) return null
         val durableCandidate =
             if (config.hasValidExpandedContentTemplate()) {
                 config
@@ -108,11 +135,7 @@ class ResidentMonitorConfigStore(context: Context) {
                 // must not overwrite the last valid custom template when another setting saves.
                 config.copy(expandedContentTemplate = load().expandedContentTemplate)
             }
-        val normalized = durableCandidate.normalized()
-        persist(normalized)
-        // This repository is the single owner of the cross-process mirror. Callers that need an
-        // activation result can consume it; ordinary edits may rely on the reconnect retry path.
-        return ResidentIslandHostConfigSync.sync(normalized)
+        return durableCandidate.normalized()
     }
 
     /** Keeps retained Navigation3 entries aligned when another detail route saves the config. */
@@ -218,6 +241,7 @@ class ResidentMonitorConfigStore(context: Context) {
             ?: LegacyResidentSlotKind.APP_ICON
 
     private companion object {
+        const val TAG = "ResidentConfigStore"
         const val FILE_NAME = "resident-monitor-config"
         const val KEY_SCHEMA_VERSION = "schema-version"
         const val LEGACY_SCHEMA_VERSION = 1

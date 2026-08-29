@@ -31,23 +31,39 @@ class ScreenRecordingRuntimeStore(context: Context) {
                 preferences.getLong(KEY_ELAPSED_DURATION, 0L).coerceAtLeast(0L),
         )
 
+    /**
+     * Persists transient runtime state without blocking the caller on a disk fsync. The in-process
+     * hub is updated synchronously so Compose and the tile never depend on the prefs listener.
+     */
     fun save(state: ScreenRecordingRuntimeState): Boolean {
-        val ok =
-            preferences
-                .edit()
-                .putString(KEY_PHASE, state.phase.wireValue)
-                .putString(KEY_MESSAGE, state.message.take(MAX_MESSAGE_LENGTH))
-                .putString(KEY_OUTPUT_URI, state.outputUri.orEmpty())
-                .putLong(KEY_STARTED_AT_ELAPSED, state.startedAtElapsedRealtime.coerceAtLeast(0L))
-                .putLong(KEY_ELAPSED_DURATION, state.elapsedDurationMillis.coerceAtLeast(0L))
-                .commit()
+        writeEditor(state).apply()
+        ScreenRecordingRuntimeHub.publish(state)
+        ScreenRecordingTileService.requestRefresh(appContext)
+        return true
+    }
+
+    /**
+     * Synchronous variant for the completion state: the completion card must only be published once
+     * the output URI is confirmed on disk, because tapping the card re-reads it after the service
+     * has stopped.
+     */
+    fun saveBlocking(state: ScreenRecordingRuntimeState): Boolean {
+        val ok = writeEditor(state).commit()
         if (ok) {
-            // Always mirror to the in-process hub so Compose does not depend only on prefs listeners.
             ScreenRecordingRuntimeHub.publish(state)
             ScreenRecordingTileService.requestRefresh(appContext)
         }
         return ok
     }
+
+    private fun writeEditor(state: ScreenRecordingRuntimeState): SharedPreferences.Editor =
+        preferences
+            .edit()
+            .putString(KEY_PHASE, state.phase.wireValue)
+            .putString(KEY_MESSAGE, state.message.take(MAX_MESSAGE_LENGTH))
+            .putString(KEY_OUTPUT_URI, state.outputUri.orEmpty())
+            .putLong(KEY_STARTED_AT_ELAPSED, state.startedAtElapsedRealtime.coerceAtLeast(0L))
+            .putLong(KEY_ELAPSED_DURATION, state.elapsedDurationMillis.coerceAtLeast(0L))
 
     fun observe(listener: SharedPreferences.OnSharedPreferenceChangeListener) {
         preferences.registerOnSharedPreferenceChangeListener(listener)

@@ -187,7 +187,7 @@ internal fun MediaCardConfigurationMiuix(
                             title = "卡片显示数量上限",
                             value = notification.cardSwitcherMaxCount.toFloat(),
                             range = 2f..6f,
-                            label = notification.cardSwitcherMaxCount.toString(),
+                            formatValue = { v -> v.roundToInt().toString() },
                             enabled = mediaCardEnabled,
                         ) { maxCount ->
                             set(
@@ -389,7 +389,7 @@ private fun MediaCardBackground(
             }
             SwitchPreference(title = "背景切换动画", checked = backgroundColorAnimation, enabled = enabled, onCheckedChange = onColorAnimationChange)
             if (backgroundStyle == MediaCardConstants.BACKGROUND_BLURRED_COVER) {
-                MediaSlider("背景模糊强度", backgroundBlur.toFloat(), 1f..20f, backgroundBlur.toString(), enabled) { onBlurChange(it.roundToInt()) }
+                MediaSlider("背景模糊强度", backgroundBlur.toFloat(), 1f..20f, { v -> v.roundToInt().toString() }, enabled) { onBlurChange(it.roundToInt()) }
             }
             if (backgroundStyle == MediaCardConstants.BACKGROUND_LINEAR_GRADIENT) {
                 SwitchPreference(title = "亮色封面自动反色", checked = backgroundAutoInvert, enabled = enabled, onCheckedChange = onAutoInvertChange)
@@ -409,12 +409,12 @@ private fun MediaDropdown(title: String, items: List<String>, selected: Int, ena
 }
 
 @Composable
-private fun MediaSlider(title: String, value: Float, range: ClosedFloatingPointRange<Float>, label: String, enabled: Boolean, onFinished: (Float) -> Unit) {
+private fun MediaSlider(title: String, value: Float, range: ClosedFloatingPointRange<Float>, formatValue: (Float) -> String, enabled: Boolean, onFinished: (Float) -> Unit) {
     var sliderValue by remember(title, value) { mutableFloatStateOf(value.coerceIn(range.start, range.endInclusive)) }
     Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
             Text(title)
-            Text(label)
+            Text(formatValue(sliderValue))
         }
         Slider(
             value = sliderValue,

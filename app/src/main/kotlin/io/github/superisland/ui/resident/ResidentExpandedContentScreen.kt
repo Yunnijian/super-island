@@ -214,7 +214,7 @@ internal fun ResidentExpandedContentScreen(
             ),
         )
     }
-    var draftSaved by rememberSaveable { mutableStateOf(false) }
+    var draftSaved by rememberSaveable { mutableStateOf(true) }
     var draftDirty by rememberSaveable { mutableStateOf(false) }
     var draftSourceHash by rememberSaveable { mutableIntStateOf(initialConfig.hashCode()) }
     var baseConfig by remember { mutableStateOf(initialConfig) }
@@ -320,8 +320,8 @@ internal fun ResidentExpandedContentScreen(
         if (saved) {
             baseConfig = nextConfig
             draftSourceHash = nextConfig.hashCode()
-            markDraftChanged()
-            draftSaved = false
+            draftDirty = false
+            draftSaved = true
             saveStatus = "快捷按钮已保存"
         } else {
             saveStatus = "快捷按钮保存失败"

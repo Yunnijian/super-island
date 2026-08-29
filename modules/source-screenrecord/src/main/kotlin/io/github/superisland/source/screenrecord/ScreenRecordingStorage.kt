@@ -54,10 +54,7 @@ class ScreenRecordingStorage(private val context: Context) {
             requireNotNull(
                 context.contentResolver.insert(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, values),
             ) { "Unable to create MediaStore recording output" }
-        val descriptor =
-            requireNotNull(context.contentResolver.openFileDescriptor(uri, "w")) {
-                "Unable to open MediaStore recording output"
-            }
+        val descriptor = openDescriptorOrCleanup(uri, isDocumentUri = false)
         return ScreenRecordingOutput(uri, displayName, descriptor, isDocumentUri = false)
     }
 
@@ -81,11 +78,38 @@ class ScreenRecordingStorage(private val context: Context) {
                     displayName,
                 ),
             ) { "Unable to create recording document" }
-        val descriptor =
-            requireNotNull(context.contentResolver.openFileDescriptor(outputUri, "w")) {
-                "Unable to open recording document"
-            }
+        val descriptor = openDescriptorOrCleanup(outputUri, isDocumentUri = true)
         return ScreenRecordingOutput(outputUri, displayName, descriptor, isDocumentUri = true)
+    }
+
+    /**
+     * Opens the write descriptor for a freshly created output. If opening fails (null descriptor or
+     * exception), the already-created MediaStore row / SAF document is deleted so it is not left
+     * behind as an orphan pending record, then the original failure propagates.
+     */
+    private fun openDescriptorOrCleanup(uri: Uri, isDocumentUri: Boolean): ParcelFileDescriptor {
+        val descriptor =
+            try {
+                context.contentResolver.openFileDescriptor(uri, "w")
+            } catch (failure: Throwable) {
+                deleteCreatedOutput(uri, isDocumentUri)
+                throw failure
+            }
+        if (descriptor == null) {
+            deleteCreatedOutput(uri, isDocumentUri)
+            throw IllegalStateException("Unable to open recording output at $uri")
+        }
+        return descriptor
+    }
+
+    private fun deleteCreatedOutput(uri: Uri, isDocumentUri: Boolean) {
+        runCatching {
+            if (isDocumentUri) {
+                DocumentsContract.deleteDocument(context.contentResolver, uri)
+            } else {
+                context.contentResolver.delete(uri, null, null)
+            }
+        }
     }
 
     private fun recordingFileName(): String =

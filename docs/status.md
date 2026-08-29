@@ -1,6 +1,32 @@
 # 当前状态
 
-更新时间：2026-08-24
+更新时间：2026-08-30
+
+## 2026-08-30 审查报告修复批次
+
+- 复审 25 项审查发现后修复 8 项：录屏暂停期间停止麦克风采集并在恢复时重启（H1，
+  音频 worker 同线程 stop/start，暂停段不再进入成品音轨）；启动中途失败时停止尚未
+  交给编码器的 MediaProjection（M3）；输出创建后打开失败时清理 MediaStore/SAF 孤儿
+  记录（M4）；运行态常规写入改为 `apply` 非阻塞，完成态改用阻塞提交
+  `saveBlocking`，完成卡仅在 URI 确认落盘后发布（L5）；常驻岛设置经 `saveAsync`
+  在后台线程同步到 SystemUI，不再阻塞 UI 线程（M1）；快捷按钮保存后复位草稿标记
+  并显示“已保存”（M2）；歌词支持目录按已装包指纹缓存扫描结果（M10）；滑条数值
+  标签改为 `formatValue` 回调，拖动过程实时跟随（M9）。
+- 两处源码契约测试随结构同步更新：完成态钉扎 `saveBlocking`；CUSTOM 草稿
+  fail-closed 改为钉扎 `save`/`saveAsync` 双路径均先过 `prepareForPersistence`
+  校验再 `persist`。
+- 本轮 `./scripts/check.sh` 通过（767 actionable tasks，BUILD SUCCESSFUL in 2m 49s），
+  benchmark APK SHA-256：
+  `2dadbe0db37bf009ca900f118ce03b85bd3ab912690284cd0e94354734d81e5d`。该 APK 已于
+  2026-08-30 05:01:35 覆盖安装至 `songyuan` / `M098FE`，设备 base APK 哈希一致；
+  test-source `68357766…d48c` 与设备一致。SystemUI `5797 -> 19768` 已重载；新进程
+  日志确认规则重载、常驻岛宿主注册、RemotePreferences 装载与 resident Focus support
+  `epoch=1`。安装后扫描无 `FATAL EXCEPTION`，`ProtectiveHooker` 命中属于第三方模块，
+  本模块无关联异常。
+- 用户手动验收全部正常：常驻岛启用即经 `saveAsync` 链路显示温度+电流并在强停后
+  持续刷新（M1/smoke 第 1 项）；麦克风录屏暂停期间制造的声音未进入成品、音画同步
+  （H1）；完成卡查看/分享可用（L5）；歌词设置滑条标签拖动实时跟随（M9）；快捷按钮
+  保存状态正确（M2）；歌词支持列表二次打开命中缓存（M10）。
 
 ## 2026-08-24 媒体卡片设置页导航与独立开关
 

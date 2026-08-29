@@ -104,7 +104,7 @@ class ScreenRecordingFocusPresentationContractTest {
                 .substringBefore("mainHandler.removeCallbacks(focusRowReveal)")
         assertTrue(
             "Completion state must be committed before publication is considered",
-            "val completionStatePersisted = runtimeStore.save(completionState)" in completionFlow,
+            "val completionStatePersisted = runtimeStore.saveBlocking(completionState)" in completionFlow,
         )
         assertTrue(
             "The real persistence result must reach the tested completion policy",

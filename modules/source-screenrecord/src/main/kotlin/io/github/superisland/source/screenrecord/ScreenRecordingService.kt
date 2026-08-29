@@ -11,6 +11,7 @@ import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
 import android.hardware.display.DisplayManager
+import android.media.projection.MediaProjection
 import android.media.projection.MediaProjectionManager
 import android.os.Handler
 import android.os.IBinder
@@ -217,6 +218,11 @@ class ScreenRecordingService : Service() {
         projectionResultCode: Int,
         projectionData: Intent,
     ) {
+        // The encoder owns the MediaProjection once constructed and stops it in its own failure
+        // path. Track the session acquired before that point so a mid-startup failure (output
+        // creation, encoder construction, or a cancel check) still releases it instead of leaking
+        // the restricted projection session until process death.
+        var unownedProjection: MediaProjection? = null
         try {
             check(!stopRequested.get()) { "录屏已在启动前取消" }
             if (config.audioSource != ScreenRecordingAudioSource.NONE) {
@@ -232,6 +238,7 @@ class ScreenRecordingService : Service() {
             val projectionManager = getSystemService(MediaProjectionManager::class.java)
             val projection = projectionManager.getMediaProjection(projectionResultCode, projectionData)
             checkNotNull(projection) { "系统未返回可用的屏幕录制会话" }
+            unownedProjection = projection
 
             val createdOutput = storage.createOutput(config.storageTreeUri)
             output = createdOutput
@@ -246,6 +253,7 @@ class ScreenRecordingService : Service() {
                     onProjectionStopped = { handleStopRequest("系统已结束屏幕录制") },
                 )
             encoder = createdEncoder
+            unownedProjection = null
             createdEncoder.start()
             check(!stopRequested.get()) { "录屏已在启动后取消" }
             if (config.stopOnLockScreen) registerScreenOffReceiver()
@@ -266,6 +274,7 @@ class ScreenRecordingService : Service() {
                 ),
             )
         } catch (failure: Throwable) {
+            unownedProjection?.let { projection -> runCatching { projection.stop() } }
             finishRecording(failure)
         }
     }
@@ -578,7 +587,7 @@ class ScreenRecordingService : Service() {
                 successMessage = successMessage,
                 elapsedDurationMillis = currentElapsedMillis(),
             )
-        val completionStatePersisted = runtimeStore.save(completionState)
+        val completionStatePersisted = runtimeStore.saveBlocking(completionState)
         val shouldPublishCompletion =
             ScreenRecordingCompletionPolicy.shouldPublish(
                 recordingFailure = failure,

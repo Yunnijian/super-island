@@ -131,14 +131,14 @@ internal class ResidentMonitorDashboardStateOwner(context: Context) : AutoClosea
         }
     }
 
-    /** Explicit editor saves retain their existing applied/waiting result contract. */
+    /** Explicit editor saves persist locally and mirror to SystemUI asynchronously off the UI thread. */
     fun saveConfig(config: ResidentMonitorConfig): Boolean {
         val normalized = config.normalized()
         if (normalized == _state.value.config) return true
         configGeneration.incrementAndGet()
         _state.value = _state.value.copy(config = normalized)
         ResidentMonitorUiWarmCache.updateConfig(normalized)
-        val applied = configStore.save(normalized).isSuccess
+        val applied = configStore.saveAsync(normalized)
         BatteryMonitorService.onResidentMonitorConfigurationChanged(normalized)
         return applied
     }

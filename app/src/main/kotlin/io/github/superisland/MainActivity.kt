@@ -1655,7 +1655,7 @@ private fun BatteryMonitor(
         if (normalized == residentConfig) return true
         residentConfig = normalized
         ResidentMonitorUiWarmCache.updateConfig(normalized)
-        val applied = residentConfigStore.save(normalized).isSuccess
+        val applied = residentConfigStore.saveAsync(normalized)
         BatteryMonitorService.onResidentMonitorConfigurationChanged(normalized)
         return applied
     }

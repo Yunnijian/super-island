@@ -31,15 +31,28 @@ class ResidentExpandedContentSourceContractTest {
         assertTrue("The host mirror must use the strict shared codec", "ResidentExpandedActionCodec.encode(normalized.expandedActions)" in sync)
 
         val validation = store.indexOf("if (!config.hasValidCustomContent())")
-        val persistence = store.indexOf("persist(normalized)", startIndex = validation.coerceAtLeast(0))
+        val syncSave =
+            store
+                .substringAfter("fun save(config: ResidentMonitorConfig)")
+                .substringBefore("fun saveAsync(config: ResidentMonitorConfig)")
+        val asyncSave =
+            store
+                .substringAfter("fun saveAsync(config: ResidentMonitorConfig)")
+                .substringBefore("private fun prepareForPersistence(")
         assertTrue(
             "An invalid CUSTOM draft must be rejected before it can overwrite the last valid value",
-            validation >= 0 && persistence > validation,
+            validation >= 0 &&
+                listOf(syncSave, asyncSave).all { path ->
+                    val gate = path.indexOf("prepareForPersistence(config)")
+                    val persistence = path.indexOf("persist(normalized)")
+                    gate >= 0 && persistence > gate
+                },
         )
         assertTrue(
             "An invalid inactive PRESET draft must retain the last valid stored custom template",
             "config.copy(expandedContentTemplate = load().expandedContentTemplate)" in store &&
-                store.indexOf("config.copy(expandedContentTemplate = load().expandedContentTemplate)") < persistence,
+                store.indexOf("config.copy(expandedContentTemplate = load().expandedContentTemplate)") <
+                    store.indexOf("private fun persist("),
         )
     }
 

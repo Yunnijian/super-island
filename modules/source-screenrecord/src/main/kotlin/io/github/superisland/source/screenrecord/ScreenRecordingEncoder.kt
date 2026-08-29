@@ -503,8 +503,31 @@ class ScreenRecordingEncoder(
             val audio = requireNotNull(audioPipeline)
             val pcm = ByteArray(AUDIO_READ_BUFFER_BYTES)
             var inputFrames = 0L
+            // start() begins capture before submitting this worker. Because this thread is the sole
+            // reader, it also owns stopping/restarting the capture at the pause boundary, keeping the
+            // microphone (and playback capture) from sampling while the recording is paused.
+            var captureRunning = true
             try {
                 while (!stopRequested.get()) {
+                    if (pauseRequested.get()) {
+                        if (captureRunning) {
+                            audio.capture.stop()
+                            captureRunning = false
+                        }
+                        drainCodec(
+                            codec = audio.codec,
+                            kind = MuxerTrack.AUDIO,
+                            waitForEndOfStream = false,
+                        )
+                        // Park instead of read-and-discard: the capture hardware is stopped, so the
+                        // pause neither samples the microphone nor burns power draining it.
+                        waitForAudioInput()
+                        continue
+                    }
+                    if (!captureRunning) {
+                        audio.capture.start()
+                        captureRunning = true
+                    }
                     val byteCount = audio.capture.read(pcm)
                     if (byteCount < 0) {
                         if (stopRequested.get()) break
@@ -513,14 +536,6 @@ class ScreenRecordingEncoder(
                     val alignedByteCount = byteCount - (byteCount % AUDIO_BYTES_PER_FRAME)
                     if (alignedByteCount == 0) {
                         waitForAudioInput()
-                        continue
-                    }
-                    if (pauseRequested.get()) {
-                        drainCodec(
-                            codec = audio.codec,
-                            kind = MuxerTrack.AUDIO,
-                            waitForEndOfStream = false,
-                        )
                         continue
                     }
 
@@ -988,6 +1003,9 @@ class ScreenRecordingEncoder(
         private var microphoneBytes = 0
 
         override fun start() {
+            // Discard any PCM buffered before a pause so resume does not replay stale audio.
+            playbackBytes = 0
+            microphoneBytes = 0
             try {
                 playback.start()
                 microphone.start()

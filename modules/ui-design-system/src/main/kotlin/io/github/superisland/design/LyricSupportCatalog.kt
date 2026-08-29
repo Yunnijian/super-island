@@ -94,8 +94,18 @@ object LyricSupportCatalog {
         val code: String,
     )
 
+    private data class CachedScan(
+        val fingerprint: String,
+        val snapshot: LyricSupportSnapshot,
+    )
+
+    @Volatile
+    private var cachedScan: CachedScan? = null
+
     suspend fun scan(context: Context): LyricSupportSnapshot = withContext(Dispatchers.IO) {
         val pm = context.packageManager
+        val fingerprint = packagesFingerprint(pm)
+        cachedScan?.takeIf { it.fingerprint == fingerprint }?.let { return@withContext it.snapshot }
         @Suppress("DEPRECATION")
         val packages = pm.getInstalledPackages(PackageManager.GET_META_DATA)
         val providers = mutableListOf<LyricSupportApp>()
@@ -161,8 +171,15 @@ object LyricSupportCatalog {
             lyriconCentralInstalled = centralInstalled,
             superLyricInstalled = superLyricInstalled,
             loaded = true,
-        )
+        ).also { snapshot -> cachedScan = CachedScan(fingerprint, snapshot) }
     }
+
+    /** Cheap invalidation key for the scan cache: all installed packages by name + last update time. */
+    private fun packagesFingerprint(pm: PackageManager): String = runCatching {
+        @Suppress("DEPRECATION")
+        pm.getInstalledPackages(0)
+            .joinToString(separator = "|") { info -> "${info.packageName}:${info.lastUpdateTime}" }
+    }.getOrDefault("")
 
     private fun isLyriconProvider(appInfo: ApplicationInfo, metadata: Bundle?): Boolean {
         val system = (appInfo.flags and ApplicationInfo.FLAG_SYSTEM) != 0 ||

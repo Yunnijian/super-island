@@ -97,7 +97,7 @@ private fun LyricInlineSliderRow(
     value: Float,
     valueRange: ClosedFloatingPointRange<Float>,
     enabled: Boolean,
-    valueLabel: String,
+    formatValue: (Float) -> String,
     onValueChangeFinished: (Float) -> Unit,
 ) {
     var sliderValue by remember(title, value, valueRange.start, valueRange.endInclusive) {
@@ -112,7 +112,7 @@ private fun LyricInlineSliderRow(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(title)
-            Text(valueLabel)
+            Text(formatValue(sliderValue))
         }
         Slider(
             value = sliderValue,
@@ -517,7 +517,7 @@ fun LyricConfigurationMiuix(
                         title = provider.label,
                         summary = provider.displaySummary(),
                     )
-                    LyricInlineSliderRow("歌词时间偏移", delay.toFloat(), -5000f..5000f, enabled, "${delay}ms") { value ->
+                    LyricInlineSliderRow("歌词时间偏移", delay.toFloat(), -5000f..5000f, enabled, { v -> "${v.roundToInt()}ms" }) { value ->
                         val next = config.lyriconProviderDelays.toMutableMap()
                         next[provider.packageName] = (value / 50f).roundToInt()
                             .times(50)
@@ -702,9 +702,9 @@ fun LyricConfigurationMiuix(
         if (section == null || section == LyricConfigSection.TEXT_STYLE) {
         LyricSettingsTitle(text = "基础样式")
         LyricSettingsCard {
-            LyricInlineSliderRow("大小", config.textSizeSp, 8f..16f, enabled, config.textSizeSp.toInt().toString()) { set(config.copy(textSizeSp = it.roundToInt().toFloat())) }
-            LyricInlineSliderRow("多行模式下文字大小比例", config.textSizeRatio * 100f, 10f..100f, enabled, "${(config.textSizeRatio * 100).toInt()}%") { set(config.copy(textSizeRatio = it.roundToInt() / 100f)) }
-            LyricInlineSliderRow("羽化边缘长度", config.fadingEdgeLengthDp.toFloat(), 0f..100f, enabled, config.fadingEdgeLengthDp.toString()) { set(config.copy(fadingEdgeLengthDp = it.roundToInt())) }
+            LyricInlineSliderRow("大小", config.textSizeSp, 8f..16f, enabled, { v -> v.roundToInt().toString() }) { set(config.copy(textSizeSp = it.roundToInt().toFloat())) }
+            LyricInlineSliderRow("多行模式下文字大小比例", config.textSizeRatio * 100f, 10f..100f, enabled, { v -> "${v.roundToInt()}%" }) { set(config.copy(textSizeRatio = it.roundToInt() / 100f)) }
+            LyricInlineSliderRow("羽化边缘长度", config.fadingEdgeLengthDp.toFloat(), 0f..100f, enabled, { v -> v.roundToInt().toString() }) { set(config.copy(fadingEdgeLengthDp = it.roundToInt())) }
             OverlayDropdownPreference(title = "文字颜色", items = textColors, selectedIndex = config.textColorStyle.coerceIn(0, 3), enabled = enabled, onSelectedIndexChange = { set(config.copy(textColorStyle = it)) })
         }
         LyricSettingsTitle(text = "字体样式")
@@ -720,7 +720,7 @@ fun LyricConfigurationMiuix(
                 },
             )
             SwitchPreference(title = "英数窄字体", checked = config.narrowLatinFont, enabled = enabled, onCheckedChange = { set(config.copy(narrowLatinFont = it)) })
-            LyricInlineSliderRow("字重", config.fontWeight.toFloat(), 100f..900f, enabled, config.fontWeight.toString()) { set(config.copy(fontWeight = it.roundToInt())) }
+            LyricInlineSliderRow("字重", config.fontWeight.toFloat(), 100f..900f, enabled, { v -> v.roundToInt().toString() }) { set(config.copy(fontWeight = it.roundToInt())) }
             SwitchPreference(title = "斜体", checked = config.fontItalic, enabled = enabled, onCheckedChange = { set(config.copy(fontItalic = it)) })
         }
         }
@@ -729,10 +729,10 @@ fun LyricConfigurationMiuix(
         LyricSettingsTitle(text = "歌词滚动")
         LyricSettingsCard {
             SwitchPreference(title = "歌词滚动", summary = "针对没有时间轴的歌词", checked = config.marqueeMode, enabled = enabled, onCheckedChange = { set(config.copy(marqueeMode = it)) })
-            LyricInlineSliderRow("滚动速度", config.marqueeSpeed.toFloat(), 5f..100f, enabled && config.marqueeMode, config.marqueeSpeed.toString()) { set(config.copy(marqueeSpeed = it.roundToInt())) }
-            LyricInlineSliderRow("初始滚动延迟", config.marqueeDelay.toFloat(), 0f..5000f, enabled && config.marqueeMode, "${config.marqueeDelay}ms") { set(config.copy(marqueeDelay = it.roundToInt())) }
+            LyricInlineSliderRow("滚动速度", config.marqueeSpeed.toFloat(), 5f..100f, enabled && config.marqueeMode, { v -> v.roundToInt().toString() }) { set(config.copy(marqueeSpeed = it.roundToInt())) }
+            LyricInlineSliderRow("初始滚动延迟", config.marqueeDelay.toFloat(), 0f..5000f, enabled && config.marqueeMode, { v -> "${v.roundToInt()}ms" }) { set(config.copy(marqueeDelay = it.roundToInt())) }
             SwitchPreference(title = "无限循环", enabled = enabled && config.marqueeMode, checked = config.marqueeInfinite, onCheckedChange = { set(config.copy(marqueeInfinite = it)) })
-            LyricInlineSliderRow("循环间隔", config.marqueeLoopDelay.toFloat(), 0f..5000f, enabled && config.marqueeMode, "${config.marqueeLoopDelay}ms") { set(config.copy(marqueeLoopDelay = it.roundToInt())) }
+            LyricInlineSliderRow("循环间隔", config.marqueeLoopDelay.toFloat(), 0f..5000f, enabled && config.marqueeMode, { v -> "${v.roundToInt()}ms" }) { set(config.copy(marqueeLoopDelay = it.roundToInt())) }
             SwitchPreference(title = "结束时在末尾停止", enabled = enabled && config.marqueeMode, checked = config.marqueeStopEnd, onCheckedChange = { set(config.copy(marqueeStopEnd = it)) })
         }
         if (config.lyricMode == 0) {
@@ -745,10 +745,10 @@ fun LyricConfigurationMiuix(
                     enabled = enabled,
                     onCheckedChange = { set(config.copy(metadataMarqueeMode = it)) },
                 )
-                LyricInlineSliderRow("滚动速度", config.metadataMarqueeSpeed.toFloat(), 5f..100f, enabled && config.metadataMarqueeMode, config.metadataMarqueeSpeed.toString()) { set(config.copy(metadataMarqueeSpeed = it.roundToInt())) }
-                LyricInlineSliderRow("初始滚动延迟", config.metadataMarqueeDelay.toFloat(), 0f..10000f, enabled && config.metadataMarqueeMode, "${config.metadataMarqueeDelay}ms") { set(config.copy(metadataMarqueeDelay = it.roundToInt())) }
+                LyricInlineSliderRow("滚动速度", config.metadataMarqueeSpeed.toFloat(), 5f..100f, enabled && config.metadataMarqueeMode, { v -> v.roundToInt().toString() }) { set(config.copy(metadataMarqueeSpeed = it.roundToInt())) }
+                LyricInlineSliderRow("初始滚动延迟", config.metadataMarqueeDelay.toFloat(), 0f..10000f, enabled && config.metadataMarqueeMode, { v -> "${v.roundToInt()}ms" }) { set(config.copy(metadataMarqueeDelay = it.roundToInt())) }
                 SwitchPreference(title = "无限循环", enabled = enabled && config.metadataMarqueeMode, checked = config.metadataMarqueeInfinite, onCheckedChange = { set(config.copy(metadataMarqueeInfinite = it)) })
-                LyricInlineSliderRow("循环间隔", config.metadataMarqueeLoopDelay.toFloat(), 0f..10000f, enabled && config.metadataMarqueeMode, "${config.metadataMarqueeLoopDelay}ms") { set(config.copy(metadataMarqueeLoopDelay = it.roundToInt())) }
+                LyricInlineSliderRow("循环间隔", config.metadataMarqueeLoopDelay.toFloat(), 0f..10000f, enabled && config.metadataMarqueeMode, { v -> "${v.roundToInt()}ms" }) { set(config.copy(metadataMarqueeLoopDelay = it.roundToInt())) }
             }
         }
         }
@@ -785,10 +785,10 @@ fun LyricConfigurationMiuix(
             SwitchPreference(title = "逐字字词上浮动画", checked = config.wordMotionEnabled, enabled = enabled, onCheckedChange = { set(config.copy(wordMotionEnabled = it)) })
             if (config.wordMotionEnabled) {
                 SwitchPreference(title = "拉丁文字逐字母上浮", summary = "关闭时按整个单词上浮", checked = config.wordMotionLatinByCharacter, enabled = enabled, onCheckedChange = { set(config.copy(wordMotionLatinByCharacter = it)) })
-                LyricInlineSliderRow("中日韩上浮系数", config.wordMotionCjkLift, 0f..0.2f, enabled, "%.2f".format(java.util.Locale.ROOT, config.wordMotionCjkLift)) { set(config.copy(wordMotionCjkLift = it)) }
-                LyricInlineSliderRow("中日韩波长系数", config.wordMotionCjkWave, 0f..10f, enabled, "%.2f".format(java.util.Locale.ROOT, config.wordMotionCjkWave)) { set(config.copy(wordMotionCjkWave = it)) }
-                LyricInlineSliderRow("拉丁文字上浮系数", config.wordMotionLatinLift, 0f..0.2f, enabled, "%.2f".format(java.util.Locale.ROOT, config.wordMotionLatinLift)) { set(config.copy(wordMotionLatinLift = it)) }
-                LyricInlineSliderRow("拉丁文字波长系数", config.wordMotionLatinWave, 0f..10f, enabled, "%.2f".format(java.util.Locale.ROOT, config.wordMotionLatinWave)) { set(config.copy(wordMotionLatinWave = it)) }
+                LyricInlineSliderRow("中日韩上浮系数", config.wordMotionCjkLift, 0f..0.2f, enabled, { v -> "%.2f".format(java.util.Locale.ROOT, v) }) { set(config.copy(wordMotionCjkLift = it)) }
+                LyricInlineSliderRow("中日韩波长系数", config.wordMotionCjkWave, 0f..10f, enabled, { v -> "%.2f".format(java.util.Locale.ROOT, v) }) { set(config.copy(wordMotionCjkWave = it)) }
+                LyricInlineSliderRow("拉丁文字上浮系数", config.wordMotionLatinLift, 0f..0.2f, enabled, { v -> "%.2f".format(java.util.Locale.ROOT, v) }) { set(config.copy(wordMotionLatinLift = it)) }
+                LyricInlineSliderRow("拉丁文字波长系数", config.wordMotionLatinWave, 0f..10f, enabled, { v -> "%.2f".format(java.util.Locale.ROOT, v) }) { set(config.copy(wordMotionLatinWave = it)) }
             }
         }
         }

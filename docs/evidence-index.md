@@ -5,6 +5,9 @@
 
 ## 当前证据入口
 
+- `artifacts/review_fixes_2026-08-30/`：审查报告 8 项修复的完整门禁、同批
+  `2dadbe0d…e5d` benchmark 覆盖安装身份核验、SystemUI `5797→19768` 重载、
+  安装后脱敏异常扫描与通知 dump；用户手动验收清单全部正常。
 - `artifacts/qq_custom_title_2026-08-24/`：通用 `CUSTOM_FIELD_TITLE` 标题优先级的固定上游生成期
   适配、完整 benchmark 门禁、同包安装与进程重载、歌词更新前后的标题保持截图及脱敏异常扫描。
 - `artifacts/hyperlyric_release_song_info_20260824/`：HyperLyric GitHub Release `1937-7.2`
