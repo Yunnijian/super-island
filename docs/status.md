@@ -27,6 +27,17 @@
   持续刷新（M1/smoke 第 1 项）；麦克风录屏暂停期间制造的声音未进入成品、音画同步
   （H1）；完成卡查看/分享可用（L5）；歌词设置滑条标签拖动实时跟随（M9）；快捷按钮
   保存状态正确（M2）；歌词支持列表二次打开命中缓存（M10）。
+- 复审补充项收尾：迁入的 HyperLyric 源码未使用 Shizuku，但照搬的
+  `dev.rikka.shizuku` 依赖让合并清单带上 `moe.shizuku.manager.permission.API_V23`
+  权限和 `moe.shizuku.client.V3_SUPPORT` 客户端声明，违反“不提供 Shizuku 模式”的
+  产品边界。已把上游 `service/utils/shizuku/` 三个文件（`ShizukuManager`、
+  `ShizukuServiceConnection`、`PrivilegedServiceImpl`，迁入集内零调用方）加入审计
+  排除清单（8→11），移除两个依赖与版本目录条目。重跑门禁通过（767 tasks），两个
+  变体合并清单 Shizuku 归零，新 benchmark SHA-256：
+  `9ef924eab3e2c9e50ed71196c604db5a1a6dc3304959647993f1ce2a5052806d`，2026-08-30
+  05:32:10 覆盖安装 `songyuan`，设备哈希一致；SystemUI `28722 -> 17680` 重载，
+  模块全链注册（含歌词岛宿主），扫描无本模块异常。播放音乐时歌词岛显示正常即为
+  通过，留作用户快速确认。
 
 ## 2026-08-24 媒体卡片设置页导航与独立开关
 

@@ -78,8 +78,6 @@ dependencies {
     implementation(libs.reorderable)
     implementation(libs.retrofit)
     implementation(libs.retrofit.kotlinx.serialization.converter)
-    implementation(libs.shizuku.api)
-    implementation(libs.shizuku.provider)
     implementation(libs.superlyric.api)
     implementation(libs.lyricon.subscriber)
     implementation(libs.daimajia.animations) { artifact { type = "aar" } }
@@ -182,7 +180,7 @@ val verifyHyperLyricReference = tasks.register("verifyHyperLyricReference") {
         check(commit == hyperLyricReferenceCommit) {
             "HyperLyric reference mismatch: expected $hyperLyricReferenceCommit, got $commit"
         }
-        check(hyperLyricExcludedSources.size == 8) {
+        check(hyperLyricExcludedSources.size == 11) {
             "HyperLyric exclusions changed without review: $hyperLyricExcludedSources"
         }
         check(

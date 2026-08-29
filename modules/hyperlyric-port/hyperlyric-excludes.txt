@@ -7,4 +7,7 @@ service/LyricTileService.kt
 service/source/AppLyricSink.kt
 service/utils/NotificationBuilder.kt
 service/utils/FocusNotificationBuilder.kt
+service/utils/shizuku/ShizukuManager.kt
+service/utils/shizuku/ShizukuServiceConnection.kt
+service/utils/shizuku/PrivilegedServiceImpl.kt
 ui/page/DynamicIslandNotificationPage.kt
